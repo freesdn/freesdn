@@ -28,13 +28,18 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/comp
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { hypervisorApi } from '@/lib/api';
 import type { HypervisorNode, BulkActionResult } from '@/lib/api';
 import type { BulkTarget } from '../types';
+import { getApiErrorMessage } from '@/lib/api/errors';
+
+type PowerAction = 'start' | 'shutdown' | 'stop' | 'reboot';
 
 interface BulkActionBarProps {
   controllerId: string;
-  selectedTargets: BulkTarget[];
+  /** ``name`` is display-only: it labels the guest in the confirmation. */
+  selectedTargets: Array<BulkTarget & { name?: string }>;
   nodes: HypervisorNode[];
   onClear: () => void;
 }
@@ -48,6 +53,7 @@ interface MigrateFormValues {
 export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }: BulkActionBarProps) {
   const { t } = useTranslation('hypervisor');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const count = selectedTargets.length;
 
@@ -86,7 +92,7 @@ export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }:
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      toast({ title: t('BulkActionBar.toast.actionFailedTitle'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('BulkActionBar.toast.actionFailedTitle'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -126,6 +132,26 @@ export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }:
 
   const isPending = actionMutation.isPending || migrateMutation.isPending;
 
+  // Each request reaches the Proxmox host as soon as it is confirmed, so the
+  // dialog names every guest it touches.
+  const runPowerAction = async (action: PowerAction) => {
+    const kindOf = (vmType: string) =>
+      vmType === 'lxc' ? t('GuestDetailDrawer.header.ct') : t('GuestDetailDrawer.header.vm');
+    const ok = await confirm({
+      title: t(`BulkActionBar.confirm.${action}`, { count }),
+      description: t(`BulkActionBar.confirmDetail.${action}`),
+      count,
+      items: selectedTargets.map((target) => {
+        const id = `${kindOf(target.vm_type)} ${target.vmid}`;
+        return `${target.name ? `${target.name} (${id})` : id} · ${target.node}`;
+      }),
+      confirmLabel: t(`BulkActionBar.actions.${action === 'stop' ? 'forceStop' : action}`),
+      destructive: action !== 'start',
+    });
+    if (!ok) return;
+    actionMutation.mutate(action);
+  };
+
   return (
     <>
       {/* Floating bar */}
@@ -136,28 +162,16 @@ export function BulkActionBar({ controllerId, selectedTargets, nodes, onClear }:
 
         <div className="h-6 border-l" />
 
-        <Button size="sm" variant="outline" disabled={isPending} onClick={() => {
-          if (!confirm(t('BulkActionBar.confirm.start', { count }))) return;
-          actionMutation.mutate('start');
-        }}>
+        <Button size="sm" variant="outline" disabled={isPending} onClick={() => runPowerAction('start')}>
           <Play className="h-3.5 w-3.5 mr-1 text-green-500" /> {t('BulkActionBar.actions.start')}
         </Button>
-        <Button size="sm" variant="outline" disabled={isPending} onClick={() => {
-          if (!confirm(t('BulkActionBar.confirm.shutdown', { count }))) return;
-          actionMutation.mutate('shutdown');
-        }}>
+        <Button size="sm" variant="outline" disabled={isPending} onClick={() => runPowerAction('shutdown')}>
           <Power className="h-3.5 w-3.5 mr-1 text-amber-500" /> {t('BulkActionBar.actions.shutdown')}
         </Button>
-        <Button size="sm" variant="outline" disabled={isPending} onClick={() => {
-          if (!confirm(t('BulkActionBar.confirm.stop', { count }))) return;
-          actionMutation.mutate('stop');
-        }}>
+        <Button size="sm" variant="outline" disabled={isPending} onClick={() => runPowerAction('stop')}>
           <Square className="h-3.5 w-3.5 mr-1 text-red-500" /> {t('BulkActionBar.actions.forceStop')}
         </Button>
-        <Button size="sm" variant="outline" disabled={isPending} onClick={() => {
-          if (!confirm(t('BulkActionBar.confirm.reboot', { count }))) return;
-          actionMutation.mutate('reboot');
-        }}>
+        <Button size="sm" variant="outline" disabled={isPending} onClick={() => runPowerAction('reboot')}>
           <RotateCcw className="h-3.5 w-3.5 mr-1 text-blue-500" /> {t('BulkActionBar.actions.reboot')}
         </Button>
         <Button size="sm" variant="outline" disabled={isPending} onClick={() => { migrationIds.current.clear(); setMigrateOpen(true); }}>

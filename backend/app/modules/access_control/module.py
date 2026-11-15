@@ -344,16 +344,14 @@ class AccessControlModule(BaseModule):
                 provider_id="access_control",
             )
 
+        # Only what is actually published. The service stores an AccessEvent
+        # (and publishes it) solely for operator lock/unlock commands; nothing
+        # ingests controller-side door events yet, so granted / denied / forced /
+        # held_open / alarm were offered as Connection triggers that could never
+        # fire. Re-add each one with the ingest path that produces it.
         return [
-            _ev("access.door.granted", "Access granted", "A credential was granted at a door."),
-            _ev("access.door.denied", "Access denied", "A credential was denied at a door."),
-            _ev("access.door.forced", "Door forced", "A door was forced open (no valid access)."),
-            _ev(
-                "access.door.held_open", "Door held open", "A door was held open beyond its window."
-            ),
             _ev("access.door.unlocked", "Door unlocked", "A door was unlocked."),
             _ev("access.door.locked", "Door locked", "A door was locked."),
-            _ev("access.door.alarm", "Access alarm", "An access-control alarm was raised."),
         ]
 
     async def on_load(self) -> None:

@@ -33,5 +33,17 @@
     "positive": "必须为正数",
     "url": "请输入有效的 URL",
     "date": "请输入有效的日期"
+  },
+  "api": {
+    "generic": "发生错误",
+    "unreachable": "无法连接到 FreeSDN 服务器。请检查网络连接后重试。",
+    "timeout": "服务器响应超时，请重试。",
+    "cancelled": "请求已取消。",
+    "payloadTooLarge": "请求过大，服务器无法接受。",
+    "rateLimitedRetry": "请求过多，请在 {{seconds}} 秒后重试。",
+    "badGateway": "FreeSDN API 未响应 (HTTP 502)，可能正在重启，请稍后重试。",
+    "gatewayTimeout": "FreeSDN API 未能及时响应 (HTTP 504)。",
+    "status": "服务器返回错误 (HTTP {{status}})。",
+    "withRequestId": "{{message}}（请求 ID {{requestId}}）"
   }
 }

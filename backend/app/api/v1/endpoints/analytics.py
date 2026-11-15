@@ -335,13 +335,18 @@ async def get_sites_comparison(
     )
     ctrl_rows = {r.site_id: r for r in (await session.execute(ctrl_q)).all()}
 
-    # Firmware compliance — counts compliant vs total managed
+    # Firmware compliance — counts up-to-date vs total managed. The model's
+    # column is ``is_up_to_date``; this read ``.compliant``, which does not
+    # exist, so building the query raised AttributeError, the except below
+    # swallowed it, and every site's firmware figure was empty.
     try:
         fw_q = (
             sa_select(
                 DeviceFirmwareStatus.site_id,
                 func.count(DeviceFirmwareStatus.id).label("total"),
-                func.count(case((DeviceFirmwareStatus.compliant.is_(True), 1))).label("compliant"),
+                func.count(case((DeviceFirmwareStatus.is_up_to_date.is_(True), 1))).label(
+                    "compliant"
+                ),
             )
             .where(
                 DeviceFirmwareStatus.site_id.in_(site_ids),
@@ -350,9 +355,8 @@ async def get_sites_comparison(
         )
         fw_rows = {r.site_id: r for r in (await session.execute(fw_q)).all()}
     except Exception:
-        # If the firmware table doesn't have a ``compliant`` column on
-        # this schema version, just skip — don't blow up the whole
-        # comparison.
+        # A firmware query failure must not blow up the whole comparison.
+        logger.warning("Firmware compliance unavailable for the site comparison", exc_info=True)
         fw_rows = {}
 
     # ── 3. Stitch per-site rows. ──

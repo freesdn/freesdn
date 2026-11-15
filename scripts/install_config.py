@@ -109,9 +109,82 @@ def write_private(path: Path, content: str, previous: os.stat_result | None) -> 
         os.close(directory)
 
 
+def env_value(content: str, key: str) -> str | None:
+    """Last assignment wins, as with ``docker compose --env-file``."""
+    found = None
+    for line in content.splitlines():
+        item = line.strip()
+        if item.startswith(key + "="):
+            found = item.split("=", 1)[1].strip()
+    return found
+
+
+def ensure_backup_key_placeholder(root: Path, env_path: Path) -> str:
+    """Pre-create the pg-backup public-key file so Docker never makes it a directory.
+
+    The tier env files point BACKUP_GPG_PUBLIC_KEY_PATH at a file no install
+    ships. Compose short-syntax binds create a MISSING source as a root-owned
+    directory, after which the documented ``gpg --export > <path>`` fails and
+    even removing it needs root. An empty regular file instead is mounted as a
+    file; pg-backup treats it as "no key yet", and writing the key into it later
+    (same inode) is seen by the running container.
+
+    Returns ``present``, ``missing`` (placeholder created or already empty),
+    ``directory``, ``unmanaged`` (absolute/outside path left to the operator) or
+    ``unset``.
+    """
+    value = env_value(env_path.read_text(encoding="utf-8"), "BACKUP_GPG_PUBLIC_KEY_PATH")
+    if not value:
+        return "unset"
+    relative = Path(value)
+    if relative.is_absolute() or ".." in relative.parts:
+        return "unmanaged"
+    target = root / relative
+    parent = target.parent
+    try:
+        parent_info = os.lstat(parent)
+    except FileNotFoundError:
+        return "unmanaged"
+    if not stat.S_ISDIR(parent_info.st_mode):
+        return "unmanaged"
+    try:
+        info = os.lstat(target)
+    except FileNotFoundError:
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+        try:
+            os.fchmod(fd, 0o644)
+        finally:
+            os.close(fd)
+        return "missing"
+    if stat.S_ISDIR(info.st_mode):
+        return "directory"
+    if not stat.S_ISREG(info.st_mode):
+        return "unmanaged"
+    return "present" if info.st_size > 0 else "missing"
+
+
+# Generated values an EXISTING environment file gains when it lacks them.
+#
+# Deliberately an allow-list, not "every __CHANGE_ME__ key in the example":
+# backfilling ENCRYPTION_SALT or SECRET_KEY into a file that predates them would
+# silently re-key every stored credential. METRICS_AUTH_TOKEN is safe to add:
+# it only authorises Prometheus to read /metrics, and an install created before
+# the tier examples carried it has a Prometheus whose own API target is DOWN.
+BACKFILLED_SECRETS = ("METRICS_AUTH_TOKEN",)
+
+
+def _generate(key: str) -> str:
+    if key == "SECRET_KEY":
+        return secrets.token_urlsafe(48)
+    value = "".join(
+        secrets.choice(string.ascii_letters + string.digits) for _ in range(32)
+    )
+    return "admin:" + value if key == "FLOWER_BASIC_AUTH" else value
+
+
 def configure(
     root: Path, tier: str, dev: bool = False, domain: str = "", email: str = ""
-) -> tuple[Path, bool]:
+) -> tuple[Path, bool, list[str]]:
     validate_origin(domain, email)
     if tier not in {"lite", "pro", "max"}:
         raise ValueError("Unknown deployment tier")
@@ -141,34 +214,41 @@ def configure(
             "PUBLIC_BASE_URL": "https://localhost",
             "CORS_ORIGINS": '["https://localhost"]',
         }
+    example = root / (path.name + ".example")
+    example_text = example.read_text(encoding="utf-8") if example.is_file() else ""
+    backfill = [
+        key
+        for key in BACKFILLED_SECRETS
+        if re.search(r"^" + key + r"=__CHANGE_ME__\s*$", example_text, re.MULTILINE)
+    ]
     output = []
     seen = set()
+    present = set()
+    added = []
     for line in content.splitlines():
         item = line.strip()
         if not item or item.startswith("#") or "=" not in item:
             output.append(line)
             continue
         key, value = (part.strip() for part in item.split("=", 1))
-        if fresh and "__CHANGE_ME__" in value:
-            if key == "SECRET_KEY":
-                value = secrets.token_urlsafe(48)
-            else:
-                value = "".join(
-                    secrets.choice(string.ascii_letters + string.digits)
-                    for _ in range(32)
-                )
-                if key == "FLOWER_BASIC_AUTH":
-                    value = "admin:" + value
-            line = key + "=" + value
+        present.add(key)
+        if "__CHANGE_ME__" in value and (fresh or key in backfill):
+            line = key + "=" + _generate(key)
+            if not fresh:
+                added.append(key)
         if key in overrides:
             line = key + "=" + overrides[key]
             seen.add(key)
         output.append(line)
+    for key in backfill:
+        if key not in present:
+            output.append(key + "=" + _generate(key))
+            added.append(key)
     output.extend(
         key + "=" + value for key, value in overrides.items() if key not in seen
     )
     write_private(path, "\n".join(output) + "\n", None if fresh else existing[1])
-    return path, fresh
+    return path, fresh, added
 
 
 def main() -> None:
@@ -179,7 +259,7 @@ def main() -> None:
     parser.add_argument("--email", default="")
     args = parser.parse_args()
     try:
-        path, fresh = configure(
+        path, fresh, added = configure(
             Path.cwd(), args.tier, args.dev, args.domain, args.email
         )
     except (OSError, UnicodeError, ValueError) as exc:
@@ -197,6 +277,26 @@ def main() -> None:
     print(
         f"{path.name}: {'generated with random secrets' if fresh else 'existing credentials preserved'}; permissions 0600"
     )
+    if added:
+        # Names only: generated values never reach the installer's output.
+        print(f"{path.name}: generated missing {', '.join(added)}")
+    if not args.dev:
+        try:
+            key_state = ensure_backup_key_placeholder(Path.cwd(), path)
+        except OSError:
+            key_state = "unmanaged"
+        key_path = env_value(path.read_text(encoding="utf-8"), "BACKUP_GPG_PUBLIC_KEY_PATH")
+        if key_state == "missing":
+            print(
+                f"Database backups are OFF until a GPG public key is in {key_path}. "
+                f"Run ./scripts/backup-keygen.sh --env-file {path.name} after the stack is up."
+            )
+        elif key_state == "directory":
+            print(
+                f"WARNING: {key_path} is a directory (Docker created it). Database backups "
+                f"stay OFF until it is removed (sudo rmdir {key_path}) and "
+                "./scripts/backup-keygen.sh is run."
+            )
     if args.domain:
         print(
             "HTTPS origin configured; DNS and inbound ports 80/443 must be provisioned separately."

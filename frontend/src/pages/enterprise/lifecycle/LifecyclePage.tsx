@@ -56,6 +56,7 @@ import { ErrorState } from '@/components/ui/empty-state';
 import { SearchBar } from '@/components/ui/search-bar';
 import { cn } from '@/lib/utils';
 import { devicesApi, enterpriseApi, type LifecycleLogEntry } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const LIFECYCLE_STATES = [
   'discovered', 'adopting', 'provisioning', 'managed',
@@ -181,9 +182,7 @@ export default function LifecyclePage() {
       // Backend returns 422 on FSM violations (FE's VALID_TRANSITIONS
       // table can drift from backend ``LifecycleState`` enum). Without
       // this toast the user clicked Transition and saw nothing happen.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const detail = (err as any)?.response?.data?.detail
-        || (err instanceof Error ? err.message : t('LifecyclePage.errors.unknown'));
+      const detail = getApiErrorMessage(err, t('LifecyclePage.errors.unknown'));
       toast({ variant: 'destructive', title: t('LifecyclePage.toast.transitionFailedTitle'), description: String(detail) });
     },
   });

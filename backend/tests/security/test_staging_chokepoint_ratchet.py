@@ -96,7 +96,66 @@ MUTATING_PREFIXES = (
     # below DID list it in DEVICE_OPERATIONS -- the two classifiers disagreed,
     # and the weaker one is the one that gates new code.
     "factory",
+    # Added 2026-11-12 (26.12.0). The list above had no entry for these verbs,
+    # so direct writes named this way were invisible: the shared Switches/PoE
+    # port controls (configure_switch_port, cycle_poe_port), SSID and firewall
+    # rule toggles, batch reboot/firmware, Proxmox cloud-init regenerate and
+    # backup restore, config revert, VPN session kill. Verbs with no hit today
+    # are here so the next write named that way is caught on arrival.
+    "configure",
+    "toggle",
+    "cycle",
+    "batch",
+    "regenerate",
+    "restore",
+    "rollback",
+    "revert",
+    "clone",
+    "migrate",
+    "resize",
+    "shutdown",
+    "power",
+    "rename",
+    "apply",
+    "save",
+    "import",
+    "rotate",
+    "flush",
+    "kill",
+    "suspend",
+    "resume",
+    "reconnect",
+    "approve",
+    "authorize",
+    "deauthorize",
+    "kick",
+    "trigger",
+    "commit",
+    "replace",
+    # Added 2026-11-13 with the firewall gateway API conversion: the gateway
+    # writes named this way (power off, clear the IDS alert log, bring an IPsec
+    # tunnel up or down, install firmware) were invisible to the classifier.
+    # ``connect``/``disconnect`` alone would match every adapter session.
+    "halt",
+    "drop",
+    "connect_ipsec",
+    "disconnect_ipsec",
+    "firmware_update",
 )
+
+#: Names that match a mutating prefix but change nothing on a device. Each needs
+#: a reason; keep this short, since every entry is a name the ratchet ignores.
+NON_MUTATING_NAMES: dict[str, str] = {
+    "batch_firmware_check": "reads firmware availability for several devices",
+    "set_active_site": "Omada adapter: sets which site later calls address (in memory)",
+    "add_phone": "Grandstream adapter: registers a phone in its in-memory table",
+    # One audio chunk of a two-way audio session the operator opened; it changes
+    # no device state, and an audit record per chunk would be one per 20 ms.
+    "send_audio_data": "Hikvision two-way audio: streams a chunk into an open session",
+    # The controller health probe (66b65e83) checks whether the Omada session
+    # it kept is still logged in (GET loginStatus); it changes nothing.
+    "resume_session": "Omada adapter: checks a kept session is still logged in",
+}
 
 #: The pinned legacy inventory: {endpoint module: {direct-write adapter methods}}
 KNOWN_DIRECT_WRITE_ENDPOINTS: dict[str, set[str]] = {
@@ -119,176 +178,22 @@ KNOWN_DIRECT_WRITE_ENDPOINTS: dict[str, set[str]] = {
     #
     # These belong in docs/agents/STAGING-MIGRATION.md, which currently does not
     # mention app/modules at all.
-    "modules/cameras/api.py": {
-        "delete_patrol",
-        "reboot_device",
-        "set_auto_tracking",
-        "set_face_detection",
-        "set_holiday_schedule",
-        "set_holidays",
-        "set_image_settings",
-        "set_intrusion_detection",
-        "set_line_crossing",
-        "set_motion_detection",
-        "set_patrol",
-        "set_privacy_masks",
-        "set_recording_schedule",
-        "set_thermal_threshold",
-        "start_patrol",
-        "stop_patrol",
-    },
-    "modules/cameras/service.py": {"send_audio_data", "set_preset", "set_thermal_threshold"},
-    "modules/firewall/gateway_service.py": {
-        "create_alias",
-        "create_backup",
-        "create_dhcp_static_mapping",
-        "create_dns_domain_override",
-        "create_dns_override",
-        "create_firewall_rule",
-        "create_openvpn_instance",
-        "create_port_forward",
-        "create_shaper_pipe",
-        "create_shaper_queue",
-        "create_shaper_rule",
-        "create_source_nat_rule",
-        "create_static_route",
-        "create_wireguard_peer",
-        "create_wireguard_server",
-        "delete_alias",
-        "delete_backup",
-        "delete_dhcp_static_mapping",
-        "delete_dns_domain_override",
-        "delete_dns_override",
-        "delete_firewall_rule",
-        "delete_openvpn_instance",
-        "delete_port_forward",
-        "delete_shaper_pipe",
-        "delete_shaper_queue",
-        "delete_shaper_rule",
-        "delete_source_nat_rule",
-        "delete_static_route",
-        "delete_wireguard_peer",
-        "delete_wireguard_server",
-        "reboot_device",
-        "restart_ids",
-        "restart_service",
-        "start_ids",
-        "start_service",
-        "stop_ids",
-        "stop_service",
-        "update_alias",
-        "update_dhcp_static_mapping",
-        "update_dns_domain_override",
-        "update_dns_override",
-        "update_firewall_rule",
-        "update_ids_rules",
-        "update_ids_settings",
-        "update_openvpn_instance",
-        "update_port_forward",
-        "update_shaper_pipe",
-        "update_shaper_queue",
-        "update_shaper_rule",
-        "update_source_nat_rule",
-        "update_static_route",
-        "update_wireguard_peer",
-        "update_wireguard_server",
-    },
-    "modules/gateway/api/passthrough_api.py": {"create_backup", "restart_service"},
-    "modules/hypervisor/service.py": {
-        "update_guest_cloudinit",
-    },
-    "modules/voip/service.py": {
-        # factory_reset was invisible on TWO counts: this file is under
-        # app/modules (an unscanned root until 2026-08-26) and "factory_reset"
-        # did not match any MUTATING_PREFIX. It is properly gated -- the route
-        # requires voip.manage_phones AND an explicit ?confirm=true (409
-        # otherwise,), and the service refuses while
-        # ADAPTER_READ_ONLY is set -- so this is a pin, not an exemption. The
-        # point is that a FUTURE ungated one now fails here.
-        "factory_reset",
-        "create_extension",
-        "create_ring_group",
-        "delete_extension",
-        "delete_ring_group",
-        "reboot",
-        "set_config",
-        "update_extension",
-    },
-    "modules/voip/tasks.py": {"reboot_phone"},
-    "access_points.py": {
-        "adopt_device",
-        "forget_device",
-        "reboot_device",
-        "set_ap_location",
-        "set_ap_mesh",
-        "set_device_led",
-        "update_ap_radio",
-        "update_ap_ssid_override",
-        "upgrade_firmware",
-    },
-    "actions.py": {"reboot_device"},
-    "controllers.py": {
-        "create_controller_backup",
-        "create_vouchers",
-        "delete_voucher",
-        "update_captive_portal_config",
-        "update_dot1x_config",
-        "update_hotspot_config",
-        "update_site_radio_settings",
-    },
-    "devices.py": {
-        "adopt_device",
-        "forget_device",
-        "reboot_device",
-        "set_device_led",
-        "upgrade_firmware",
-    },
-    "network.py": {
-        "block_client",
-        "create_ssid",
-        "create_vlan",
-        "delete_ssid",
-        "delete_vlan",
-        "unblock_client",
-        "update_ssid",
-        "update_vlan",
-    },
-    "switches.py": {
-        "create_poe_schedule",
-        "create_port_profile",
-        "create_switch_acl_rule",
-        "create_switch_lag",
-        "delete_poe_schedule",
-        "delete_port_profile",
-        "delete_switch_acl_rule",
-        "delete_switch_lag",
-        "set_switch_port_bandwidth",
-        "set_switch_port_flow_control",
-        "set_switch_port_isolation",
-        "set_switch_port_lldp",
-        "set_switch_port_loopback_detect",
-        "set_switch_port_speed_duplex",
-        "set_switch_port_storm_control",
-        "update_dhcp_snooping_config",
-        "update_poe_schedule",
-        "update_port_profile",
-        "update_qos_config",
-        "update_switch_acl_rule",
-        "update_switch_igmp_config",
-        "update_switch_lag",
-        "update_switch_mirror_config",
-        "update_switch_port_overrides",
-        "update_switch_stp_config",
-    },
-    "unifi_clients.py": {"block_client_on_site", "forget_client", "unblock_client_on_site"},
-    "unifi_devices.py": {
-        "disable_device",
-        "restart_device",
-        "set_port_poe_on_site",
-        "update_port_override",
-    },
-    "unifi_wlans.py": {"enable_wlan", "update_wlan_password"},
+    # None left (2026-11-13): the firewall gateway API, the VoIP service and
+    # the hypervisor service, the last three files pinned here, write through
+    # the staging envelopes below. A new direct write in app/modules or the
+    # endpoints fails test_no_new_endpoint_writes_to_a_device_outside_staging.
 }
+
+#: Pinned 2026-11-12 (26.12.0), when the classifier learned the verbs above and
+#: started counting adapter calls that are wrapped (``asyncio.wait_for(...)``)
+#: rather than awaited directly. NOT new code: every entry predates this pin and
+#: was invisible until now. They reach the device with no staged row.
+_FOUND_BY_WIDER_CLASSIFIER_2026_11: dict[str, set[str]] = {
+    # None left (2026-11-13): the gateway and hypervisor writes found then are
+    # staged or audited now, and the unreachable direct backup restore is gone.
+}
+for _module, _names in _FOUND_BY_WIDER_CLASSIFIER_2026_11.items():
+    KNOWN_DIRECT_WRITE_ENDPOINTS.setdefault(_module, set()).update(_names)
 
 #: Operations that are disruptive and not trivially reversible. Tracked
 #: separately so the migration is ordered by consequence rather than file size.
@@ -324,26 +229,171 @@ HIGH_BLAST_RADIUS = {
 }
 
 
+#: Calls whose function argument is the device write of a change that goes
+#: through the staging chokepoint. ``AdapterStagingService.apply_now`` stages the
+#: change and applies it, in the same request, through ``apply_change``: read-only
+#: mode refuses it, ``force`` is required, and the ledger records who, what, when
+#: and the result. A device call written inside the function passed as one of
+#: these keyword arguments IS staged, so it is not a direct write.
+#:
+#: Every entry other than ``apply_now`` must forward that argument to
+#: ``apply_now`` unchanged (checked by
+#: test_every_staging_envelope_reaches_apply_now), so the list cannot become a
+#: way to label a direct write as staged.
+STAGED_ENVELOPES: dict[str, frozenset[str]] = {
+    "apply_now": frozenset({"perform"}),
+    # ZTP: AdoptionOrchestrator._device_write (adopt, firmware, provisioning)
+    "_device_write": frozenset({"perform"}),
+    # app/services/device_writes.py: the endpoint-facing forms of apply_now
+    "write_through_staging": frozenset({"perform"}),
+    "write_device_config": frozenset({"perform"}),
+    "write_controller_config": frozenset({"perform"}),
+    # services/device_control.py: DeviceControlService's configuration actions
+    "_staged_device_write": frozenset({"perform"}),
+    # cameras/config_write.py: every camera config write and its rollback
+    "staged_camera_write": frozenset({"apply", "rollback"}),
+    # modules/firewall/gateway_service.py: every firewall gateway API write
+    "_gateway_write": frozenset({"perform"}),
+    # modules/voip/service.py: PBX extension and ring-group writes
+    "_pbx_write": frozenset({"perform"}),
+    # One member of a change group (AdapterStagingService.apply_group_now).
+    # A dataclass, not a function: test_group_member_bodies_only_run_in_a_group
+    # checks that only apply_group_now runs them.
+    "GroupMember": frozenset({"perform", "compensate"}),
+}
+
+#: Operational actions (STAGING-MIGRATION option 3): not staged, audited. A call
+#: inside the function passed to ``audited_device_action(perform=...)`` writes
+#: an audit record once the device accepts it. Only the method names below may
+#: run there; any other adapter mutation inside the envelope still counts as a
+#: direct write, so a configuration change cannot be filed as an "action".
+AUDITED_ENVELOPES: dict[str, frozenset[str]] = {
+    "audited_device_action": frozenset({"perform"}),
+    # app/services/device_writes.py: the same, for one device row or controller
+    "device_action": frozenset({"perform"}),
+    "controller_action": frozenset({"perform"}),
+    # services/device_control.py: DeviceControlService's operational actions
+    "_audited_device_action": frozenset({"perform"}),
+    # modules/firewall/gateway_service.py: the gateway API's operational actions
+    "_gateway_action": frozenset({"perform"}),
+    # modules/voip/service.py: phone reboot and factory reset
+    "_phone_action": frozenset({"perform"}),
+}
+
+OPERATIONAL_ACTIONS: dict[str, str] = {
+    "reboot_device": "restarts the device; no configuration changes",
+    "restart_device": "restarts the device; no configuration changes",
+    "reboot": "restarts a phone; no configuration changes",
+    "reboot_phone": "restarts a phone; no configuration changes",
+    "batch_reboot": "restarts several devices",
+    "cycle_poe_port": "power-cycles one PoE port; its configuration is unchanged",
+    "power_cycle_port": "power-cycles one PoE port; its configuration is unchanged",
+    "start_patrol": "starts a saved PTZ patrol (live camera control)",
+    "stop_patrol": "stops a PTZ patrol (live camera control)",
+    "kick_client": "disconnects a wireless client; it may reconnect at once",
+    "restart_service": "restarts a service on the gateway",
+    "start_service": "starts a service on the gateway",
+    "stop_service": "stops a service on the gateway",
+    "start_ids": "starts the gateway's IDS service",
+    "stop_ids": "stops the gateway's IDS service",
+    "restart_ids": "restarts the gateway's IDS service",
+    "flush_arp": "clears the gateway's ARP cache",
+    "kill_openvpn_session": "disconnects one VPN session; the user may reconnect",
+    "connect_ipsec_tunnel": "brings a configured IPsec tunnel up; its configuration is unchanged",
+    "disconnect_ipsec_tunnel": "takes an IPsec tunnel down; its configuration is unchanged",
+    "halt_device": "powers the gateway off; kept behind its own confirmation",
+    "drop_ids_alert_log": "clears the gateway's IDS alert log",
+    "create_backup": "the device writes a backup of its own configuration",
+    "create_controller_backup": "the controller writes a backup of its own configuration",
+    "factory_reset": "erases the device; kept behind its own confirmation",
+}
+
+
+def _call_name(func: ast.expr) -> str | None:
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    if isinstance(func, ast.Name):
+        return func.id
+    return None
+
+
+def _scoped_defs(tree: ast.AST) -> dict[tuple[int, str], list[ast.AST]]:
+    """Nested function definitions keyed by (id of enclosing scope, name)."""
+    out: dict[tuple[int, str], list[ast.AST]] = {}
+
+    def visit(node: ast.AST, scope: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                out.setdefault((id(scope), child.name), []).append(child)
+                visit(child, child)
+            elif isinstance(child, (ast.Lambda, ast.ClassDef)):
+                visit(child, child)
+            else:
+                visit(child, scope)
+
+    visit(tree, tree)
+    return out
+
+
+def _envelope_bodies(tree: ast.AST, envelopes: dict[str, frozenset[str]]) -> list[ast.AST]:
+    """The functions and lambdas passed as an envelope's body argument."""
+    defs = _scoped_defs(tree)
+    bodies: list[ast.AST] = []
+
+    def visit(node: ast.AST, scope: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.Call):
+                kws = envelopes.get(_call_name(child.func) or "")
+                if kws:
+                    for kw in child.keywords:
+                        if kw.arg not in kws:
+                            continue
+                        if isinstance(kw.value, ast.Lambda):
+                            bodies.append(kw.value)
+                        elif isinstance(kw.value, ast.Name):
+                            bodies.extend(defs.get((id(scope), kw.value.id), []))
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                visit(child, child)
+            else:
+                visit(child, scope)
+
+    visit(tree, tree)
+    return bodies
+
+
+def _calls_inside(bodies: list[ast.AST]) -> set[int]:
+    return {id(n) for body in bodies for n in ast.walk(body) if isinstance(n, ast.Call)}
+
+
 def _is_mutating(name: str) -> bool:
+    if name in NON_MUTATING_NAMES:
+        return False
     n = name.lower().lstrip("_")
     return any(n == p or n.startswith(p + "_") for p in MUTATING_PREFIXES)
 
 
 def _direct_writes(path: Path) -> set[str]:
-    """Adapter mutating methods awaited directly in this module."""
+    """Adapter mutating methods called in this module.
+
+    Every call counts, not only ``await adapter.x()``: until 26.12.0 a call
+    wrapped in another (``await asyncio.wait_for(adapter.create_vlan(...))``)
+    was invisible, because the awaited expression is ``wait_for``.
+    """
     tree = ast.parse(path.read_text(encoding="utf-8"))
+    staged = _calls_inside(_envelope_bodies(tree, STAGED_ENVELOPES))
+    audited = _calls_inside(_envelope_bodies(tree, AUDITED_ENVELOPES))
     found: set[str] = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Await):
+        if not isinstance(node, ast.Call) or id(node) in staged:
             continue
-        call = node.value
-        if not isinstance(call, ast.Call):
-            continue
+        call = node
         func = call.func
         if not isinstance(func, ast.Attribute):
             continue
         recv = func.value
         if not isinstance(recv, ast.Name) or recv.id not in ADAPTER_RECEIVERS:
+            continue
+        if id(node) in audited and func.attr in OPERATIONAL_ACTIONS:
             continue
         if _is_mutating(func.attr):
             found.add(func.attr)
@@ -525,14 +575,12 @@ def test_no_device_operation_hides_behind_an_unexpected_receiver() -> None:
 #: Compared as an equality against this literal it flips in both directions: an
 #: operation migrated onto stage_change() drops out of ``still_direct``, and
 #: gutting HIGH_BLAST_RADIUS or the inventory empties it.
-UNMIGRATED_HIGH_BLAST = {
-    "disable_device",
-    "forget_client",
-    "forget_device",
-    "reboot_device",
-    "restart_device",
-    "upgrade_firmware",
-}
+#: None left. 2026-11-13: forget, firmware upgrade and disable go through
+#: staging (STAGING-MIGRATION option 2); the access point, device, UniFi and
+#: camera reboots/restarts are audited actions (option 3), and so, since the
+#: gateway API conversion, is the firewall gateway reboot. An audited action is
+#: not debt, so this set is empty: pinning a new direct one fails below.
+UNMIGRATED_HIGH_BLAST: set[str] = set()
 
 
 def test_high_blast_radius_operations_are_tracked() -> None:
@@ -575,3 +623,433 @@ def test_every_device_operation_is_classified_as_mutating() -> None:
         "prefix to MUTATING_PREFIXES, or the main ratchet cannot see a new "
         "direct call to them."
     )
+
+
+#: Request-path files that call an adapter method chosen at runtime
+#: (``getattr(adapter, name)(...)``). No name-based check can see what such a
+#: call does, so each file is pinned with its count and a new one fails here.
+#: Added 2026-11-12 (26.12.0). The staged appliers under app/services dispatch
+#: the same way legitimately (they run only inside apply_change) and are outside
+#: SCAN_ROOTS.
+KNOWN_DYNAMIC_DISPATCH: dict[str, int] = {
+    # bulk device actions (reboot / forget / ...) chosen by the request body
+    "devices.py": 1,
+    # _read_live_aggregate and _read_trust_inventory: both dispatch READS
+    "modules/firewall/gateway_service.py": 2,
+    # SyncService._read_device walks _SECTIONS, a constant tuple of get_* READ
+    # methods (pinned to reads by test_gateway_sync_sections_are_reads below)
+    "modules/gateway/services/sync_service.py": 1,
+}
+
+
+def test_gateway_sync_sections_are_reads() -> None:
+    """The gateway sync's dynamic dispatch can only ever reach read methods."""
+    from app.modules.gateway.services.sync_service import _SECTIONS
+
+    methods = [method for _, method in _SECTIONS]
+    assert methods, "the gateway sync reads no sections"
+    for method in methods:
+        assert method.startswith("get_"), (
+            f"{method} in the gateway sync's _SECTIONS is not a read; a write "
+            "there would reach the device on every periodic sync without staging"
+        )
+
+
+def _dynamic_dispatch_count(path: Path) -> int:
+    count = 0
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id in ADAPTER_RECEIVERS
+            and not isinstance(node.args[1], ast.Constant)
+        ):
+            count += 1
+    return count
+
+
+def test_dynamic_adapter_dispatch_in_request_paths_is_pinned() -> None:
+    """A runtime-chosen adapter call in a request path must be deliberate."""
+    actual: dict[str, int] = {}
+    for path in _iter_sources():
+        n = _dynamic_dispatch_count(path)
+        if n:
+            actual[_key(path)] = n
+    assert actual == KNOWN_DYNAMIC_DISPATCH, (
+        "getattr(adapter|client, <name>) dispatch in a request path changed. "
+        f"Found {actual}, pinned {KNOWN_DYNAMIC_DISPATCH}. A new dispatch can "
+        "reach any adapter method, including writes, without staging: call the "
+        "method by name (so the main ratchet sees it) or pin it here with a "
+        "reason. A removed one should be unpinned."
+    )
+
+
+def test_non_mutating_exceptions_are_real_adapter_methods() -> None:
+    """An exception for a name no adapter defines would be a silent hole."""
+    sources = "\n".join(
+        p.read_text(encoding="utf-8") for p in sorted((_APP / "adapters").rglob("*.py"))
+    )
+    for name in NON_MUTATING_NAMES:
+        assert f"def {name}(" in sources, f"{name} is not defined by any adapter"
+
+
+# ── app/services and app/tasks ──────────────────────────────────────────────
+#
+# SCAN_ROOTS covers the HTTP surface, but endpoints, the automation engine and
+# ZTP hand device writes to app/services, Celery runs others from app/tasks,
+# and a write placed there reaches the controller exactly as one in an
+# endpoint would. The site-to-site tunnel push
+# (VPNKeyExchangeService.push_config_to_gateway) is one: it writes to both
+# gateways outside staging and no ratchet could see it. Added 2026-11-13.
+#
+# The services tree also holds the staged appliers, which legitimately call
+# adapters directly (they run only inside AdapterStagingService.apply_change).
+# So this inventory is pinned separately, grouped by WHY each write is there.
+# ``read_only_refuses_write`` in the adapter clients still refuses every KNOWN
+# BYPASS while ADAPTER_READ_ONLY is on; what they skip is staging review and the
+# pending-change record. Same editing rules as above: removing an entry is
+# always right; adding one needs a reason.
+BACKGROUND_ROOTS = [_APP / "services", _APP / "tasks"]
+
+KNOWN_SERVICE_DIRECT_WRITES: dict[str, set[str]] = {
+    # ── Staged appliers: called only from build_applier() inside apply_change ──
+    "services/adapter_freepbx_extensions.py": {
+        "create_extension",
+        "update_extension",
+        "delete_extension",
+    },
+    "services/adapter_freepbx_trunks.py": {"create_trunk", "update_trunk", "delete_trunk"},
+    "services/adapter_omada_switch_ports.py": {"update_switch_port"},
+    "services/adapter_pfsense_firewall.py": {"apply_firewall_changes"},
+    "services/adapter_truenas_storage.py": {
+        "create_dataset",
+        "create_snapshot",
+        "delete_snapshot",
+        "start_scrub",
+    },
+    "services/adapter_unifi_hotspot.py": {
+        "create_hotspot_operator",
+        "delete_hotspot_operator",
+        "create_voucher",
+    },
+    "services/adapter_unifi_networks.py": {"update_network", "delete_network"},
+    "services/adapter_unifi_radios.py": {"update_radio"},
+    "services/adapter_unifi_switch.py": {
+        "update_switch_port",
+        "set_port_poe_on_site",
+        "update_port_override",
+        "power_cycle_port",
+    },
+    # Proxmox apply_* helpers, each dispatched from an adapter_proxmox_* applier
+    "services/hypervisor_backup_jobs.py": {"apply_reviewed_backup_job"},
+    "services/hypervisor_certificates.py": {"delete_custom_certificate"},
+    "services/hypervisor_cluster_operations.py": {
+        "create_ha_resource",
+        "delete_ha_resource",
+        "create_ha_group",
+        "delete_ha_group",
+    },
+    "services/hypervisor_deletion.py": {"delete_vm"},
+    "services/hypervisor_firewall_operations.py": {"apply_firewall_operation"},
+    "services/hypervisor_storage_operations.py": {"delete_storage_volume"},
+    "services/hypervisor_task_control.py": {"stop_task"},
+    # ── Not device writes: backup storage transports (SFTP/FTP client, the
+    #    TrueNAS backup data plane) and a Valkey lock ──
+    "services/backup.py": {"rename", "remove", "delete", "remove_backup_dataset"},
+    "services/discovery_jobs.py": {"set"},
+    "tasks/discovery.py": {"set"},
+    # ── KNOWN BYPASSES: device writes outside staging ──
+    # None left (2026-11-13): config-version rollback, drift auto-remediation,
+    # the 802.1X and roaming pushes and the Celery bulk operations are staged
+    # (or, for the bulk reboot, audited) where they run.
+}
+
+
+def _scan_services() -> dict[str, set[str]]:
+    out: dict[str, set[str]] = {}
+    for root in BACKGROUND_ROOTS:
+        for p in sorted(root.rglob("*.py")):
+            hits = _direct_writes(p)
+            if hits:
+                out[p.relative_to(_APP).as_posix()] = hits
+    return out
+
+
+def test_background_directories_are_readable() -> None:
+    """Guard the guard: an empty services/tasks scan must not read as clean."""
+    services, tasks = BACKGROUND_ROOTS
+    assert services.is_dir(), f"scan root not found: {services}"
+    assert tasks.is_dir(), f"scan root not found: {tasks}"
+    assert len(list(services.rglob("*.py"))) > 100, "the services scan looks truncated"
+    assert len(list(tasks.rglob("*.py"))) > 20, "the tasks scan looks truncated"
+
+
+def test_no_new_service_layer_device_write() -> None:
+    """A new direct device write in app/services or app/tasks needs a pin and a reason."""
+    new: dict[str, list[str]] = {}
+    for module, methods in _scan_services().items():
+        unexpected = methods - KNOWN_SERVICE_DIRECT_WRITES.get(module, set())
+        if unexpected:
+            new[module] = sorted(unexpected)
+
+    detail = "\n".join(f"  {m}: {', '.join(v)}" for m, v in sorted(new.items()))
+    assert not new, (
+        "New direct-to-device write(s) in app/services or app/tasks:\n"
+        + detail
+        + "\nA device mutation must be staged with stage_change() and applied by a "
+        "build_applier(). If this one IS a staged applier, or a deliberate "
+        "exception, pin it in KNOWN_SERVICE_DIRECT_WRITES under the right heading."
+    )
+
+
+def test_service_inventory_does_not_rot() -> None:
+    """Migrated or renamed service writes must be unpinned."""
+    actual = _scan_services()
+    stale: dict[str, list[str]] = {}
+    for module, methods in KNOWN_SERVICE_DIRECT_WRITES.items():
+        gone = methods - actual.get(module, set())
+        if gone:
+            stale[module] = sorted(gone)
+
+    detail = "\n".join(f"  {m}: {', '.join(v)}" for m, v in sorted(stale.items()))
+    assert not stale, (
+        f"KNOWN_SERVICE_DIRECT_WRITES lists entries that no longer exist -- remove them:\n{detail}"
+    )
+
+
+# ── Staging envelopes ───────────────────────────────────────────────────────
+
+
+def _all_app_sources() -> list[Path]:
+    return sorted(_APP.rglob("*.py"))
+
+
+@pytest.mark.parametrize(
+    ("envelopes", "root"),
+    [(STAGED_ENVELOPES, "apply_now"), (AUDITED_ENVELOPES, "audited_device_action")],
+)
+def test_every_staging_envelope_reaches_apply_now(envelopes, root) -> None:
+    """An envelope must hand its body, unchanged, to another envelope of its kind.
+
+    Each one is checked, so every chain ends at apply_now (staged) or at
+    audited_device_action (audited). Otherwise adding a name to an envelope
+    list would hide a direct write.
+    """
+    for name, kws in envelopes.items():
+        if name in (root, "GroupMember"):
+            continue
+        definitions = [
+            node
+            for path in _all_app_sources()
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+        ]
+        assert definitions, f"STAGED_ENVELOPES names {name!r}, which nothing defines"
+        for definition in definitions:
+            for kw in kws:
+                bodies = _envelope_bodies(definition, envelopes)
+                forwarded = any(
+                    isinstance(n, ast.Call)
+                    and _call_name(n.func) in envelopes
+                    and _call_name(n.func) != name
+                    and any(
+                        k.arg in envelopes[_call_name(n.func) or ""]
+                        and isinstance(k.value, ast.Name)
+                        and k.value.id == kw
+                        for k in n.keywords
+                    )
+                    for n in ast.walk(definition)
+                ) or any(
+                    isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == kw
+                    for body in bodies
+                    for n in ast.walk(body)
+                )
+                assert forwarded, (
+                    f"{name}() must pass its {kw!r} argument to {root} (or another "
+                    f"envelope of its kind) as {kw}={kw}; otherwise what it runs is "
+                    "not what the envelope says"
+                )
+
+
+def test_an_envelope_body_is_only_run_by_its_envelope() -> None:
+    """A function passed to an envelope must not also be called directly."""
+    offenders: list[str] = []
+    for path in [*_iter_sources(), *(p for r in BACKGROUND_ROOTS for p in sorted(r.rglob("*.py")))]:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        names = {
+            b.name
+            for b in _envelope_bodies(tree, {**STAGED_ENVELOPES, **AUDITED_ENVELOPES})
+            if isinstance(b, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in names
+            ):
+                offenders.append(f"{path.relative_to(_APP)}:{node.lineno} {node.func.id}()")
+    assert not offenders, (
+        "these staged write bodies are also called outside their envelope: " + ", ".join(offenders)
+    )
+
+
+def test_the_envelope_scan_sees_through_closures_and_lambdas() -> None:
+    """Guard the guard: the exclusion is lexical, and only for the envelope argument."""
+    src = """
+async def endpoint(adapter, staging):
+    async def _write():
+        return await adapter.reboot_device("x")
+
+    await staging.apply_now(perform=_write)
+    await staging.apply_now(perform=lambda: adapter.update_vlan(1))
+    await staging.apply_now(payload=adapter.delete_vlan(2), perform=_write)
+    await adapter.create_vlan(3)
+"""
+    tree = ast.parse(src)
+    staged = _calls_inside(_envelope_bodies(tree, STAGED_ENVELOPES))
+    direct = {
+        n.func.attr
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and isinstance(n.func.value, ast.Name)
+        and n.func.value.id == "adapter"
+        and id(n) not in staged
+    }
+    assert direct == {"delete_vlan", "create_vlan"}
+
+
+def test_the_audited_envelope_records_actions_and_nothing_else() -> None:
+    """A configuration write inside audited_device_action is still a direct write."""
+    src = """
+async def endpoint(adapter, db):
+    async def _act():
+        return await adapter.reboot_device("x")
+
+    await audited_device_action(db, perform=_act)
+    await audited_device_action(db, perform=lambda: adapter.update_vlan(1))
+"""
+    tree = ast.parse(src)
+    audited = _calls_inside(_envelope_bodies(tree, AUDITED_ENVELOPES))
+    still_direct = {
+        n.func.attr
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and isinstance(n.func.value, ast.Name)
+        and n.func.value.id == "adapter"
+        and _is_mutating(n.func.attr)
+        and not (id(n) in audited and n.func.attr in OPERATIONAL_ACTIONS)
+    }
+    assert still_direct == {"update_vlan"}
+
+
+def test_operational_actions_are_real_adapter_methods() -> None:
+    """An exemption for a name no adapter defines would be a silent hole."""
+    sources = "\n".join(
+        p.read_text(encoding="utf-8") for p in sorted((_APP / "adapters").rglob("*.py"))
+    )
+    missing = [name for name in OPERATIONAL_ACTIONS if f"def {name}(" not in sources]
+    assert not missing, f"not defined by any adapter: {missing}"
+
+
+def test_audited_device_action_records_only_accepted_actions() -> None:
+    """Guard the helper: a refused action is returned but not recorded."""
+    import asyncio
+
+    from app.adapters.base import AdapterResult
+    from app.services import device_writes
+
+    logged: list[dict] = []
+
+    class _Audit:
+        def __init__(self, _db: object) -> None:
+            pass
+
+        async def log(self, **kwargs: object) -> None:
+            logged.append(kwargs)
+
+    class _Db:
+        async def commit(self) -> None:
+            pass
+
+        async def rollback(self) -> None:
+            pass
+
+    import app.services.audit as audit_module
+
+    original = audit_module.AuditService
+    audit_module.AuditService = _Audit  # type: ignore[misc,assignment]
+    try:
+
+        async def run(result: object) -> object:
+            async def _perform() -> object:
+                return result
+
+            return await device_writes.audited_device_action(
+                _Db(),  # type: ignore[arg-type]
+                action="reboot",
+                target_type="device",
+                target_id="aa",
+                target_name="ap1",
+                organization_id=None,
+                actor_id=None,
+                parameters={"port": 3, "password": "hunter2"},
+                perform=_perform,
+            )
+
+        refused = AdapterResult.fail("busy")
+        assert asyncio.run(run(refused)) is refused
+        assert logged == []
+        assert asyncio.run(run(AdapterResult.ok({"done": True}))).success
+    finally:
+        audit_module.AuditService = original  # type: ignore[misc]
+    (entry,) = logged
+    assert entry["action"] == "device_action:reboot"
+    assert entry["new_state"]["parameters"]["port"] == 3  # type: ignore[index]
+    assert entry["new_state"]["parameters"]["password"] != "hunter2"  # type: ignore[index]
+
+
+def test_group_member_bodies_only_run_in_a_group() -> None:
+    """GroupMember.perform/compensate run only inside apply_group_now's apply_change."""
+    src = (_APP / "services" / "adapter_staging.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    service = next(
+        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "AdapterStagingService"
+    )
+    runners = {
+        node.name
+        for node in service.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(
+            isinstance(n, ast.Attribute)
+            and n.attr in ("perform", "compensate")
+            and isinstance(n.value, ast.Name)
+            and n.value.id == "member"
+            for n in ast.walk(node)
+        )
+    }
+    # Nothing outside the service touches a member's write either.
+    outside = [
+        n.lineno
+        for top in tree.body
+        if not (isinstance(top, ast.ClassDef) and top.name == "AdapterStagingService")
+        for n in ast.walk(top)
+        if isinstance(n, ast.Attribute)
+        and n.attr in ("perform", "compensate")
+        and isinstance(n.value, ast.Name)
+        and n.value.id == "member"
+    ]
+    assert not outside, outside
+    assert runners <= {"apply_group_now", "_apply_member"}, runners
+    member = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "_apply_member"
+    )
+    assert any(
+        isinstance(n, ast.Call) and _call_name(n.func) == "apply_change" for n in ast.walk(member)
+    ), "_apply_member must apply through apply_change"

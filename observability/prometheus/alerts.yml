@@ -81,65 +81,71 @@ groups:
             event loops, or contended adapter calls.
 
   # ──────────────────────────────────────────────────────────────────────
-  # DISARMED 2026-08-27 - the freesdn.celery group is commented out, not
-  # deleted, because there is nothing wrong with the rules: there is no
-  # producer for the metrics they read.
+  # Celery. Disarmed 2026-08-27 because neither metric had a producer; the
+  # backlog rule is RE-ARMED now that it has one.
   #
-  # ``freesdn_celery_queue_depth`` (backend/app/core/metrics.py:154) and
-  # ``freesdn_celery_tasks_total`` (:161) are declared, exported on /metrics
-  # and incremented from NOWHERE - grep the backend for either name and the
-  # only hit is the declaration. metrics.py:153 says the depth gauge is
-  # "updated by a periodic probe, see app.tasks.metrics"; app/tasks/metrics.py
-  # exists and contains no such probe. A scrape returns the empty family, so
-  # both expressions evaluate to no data and neither alert can ever fire.
+  # ``freesdn_celery_queue_depth`` is refreshed from the broker on every scrape
+  # of the API (app/core/metrics.py refresh_celery_queue_depth: one LLEN per
+  # declared queue, in the BROKER database - database 1 in the shipped compose,
+  # which the old tasks-page reader also got wrong by asking database 0). No
+  # worker scrape is needed because the API reads the broker itself.
   #
-  # Shipping them meant an operator who wired this file into Alertmanager
-  # believed they had Celery backlog and failure paging and had neither. That
-  # is worse than having no rule, which is why they are off rather than
-  # annotated.
-  #
-  # TO RE-ARM: uncomment this whole group the same commit that lands the
-  # producers. Cheapest complete route (from the celeryobs handoff): a
-  # collect-time custom collector in app/core/metrics.py doing ``r.llen(q)``
-  # per declared queue - app/api/v1/endpoints/tasks.py:625 already does
-  # exactly that read - plus celery ``task_postrun``/``task_failure`` signal
-  # handlers for the counter. The counter additionally needs the WORKER
-  # process scraped, i.e. a new target in docker/prometheus/prometheus.yml;
-  # the queue-depth gauge does not, because the API can read Redis itself.
-  # tests/tasks/test_observability_metrics_have_producers.py fails the moment
-  # a rule here names a metric nothing writes, so re-arming early is caught.
-  #
-  # - name: freesdn.celery
-  #   interval: 30s
-  #   rules:
-  #
-  #     - alert: FreeSDNCeleryQueueBacklog
-  #       expr: freesdn_celery_queue_depth > 1000
-  #       for: 10m
-  #       labels:
-  #         severity: warning
-  #         component: worker
-  #       annotations:
-  #         summary: "Celery queue {{ $labels.queue }} backlog above 1000"
-  #         description: |
-  #           The {{ $labels.queue }} Celery queue has had more than 1000
-  #           pending tasks for 10 minutes. Either the workers are too few,
-  #           the tasks themselves are too slow, or they're crash-looping.
-  #
-  #     - alert: FreeSDNCeleryTaskFailureSpike
-  #       expr: |
-  #         sum(rate(freesdn_celery_tasks_total{status="failure"}[5m]))
-  #           > 0.5
-  #       for: 10m
-  #       labels:
-  #         severity: warning
-  #         component: worker
-  #       annotations:
-  #         summary: "Celery task failures > 0.5/s for 10 minutes"
-  #         description: |
-  #           Celery task failure rate is sustained above 0.5/s. Scope to
-  #           the failing task with: ``rate(freesdn_celery_tasks_total
-  #           {status="failure"}[5m])``.
+  # FreeSDNCeleryTaskFailureSpike stays commented out: ``freesdn_celery_tasks_
+  # total`` is still written by nothing, and a counter incremented in a Celery
+  # worker is only visible if that WORKER process is scraped (a metrics port on
+  # the workers plus a target in docker/prometheus/prometheus.yml). Whether the
+  # workers may open one is an owner decision. Re-arm it with that producer.
+  # tests/tasks/test_observability_metrics_have_producers.py fails the moment a
+  # rule here names a metric nothing writes, so re-arming early is caught.
+  - name: freesdn.celery
+    interval: 30s
+    rules:
+
+      - alert: FreeSDNCeleryQueueBacklog
+        expr: freesdn_celery_queue_depth > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: "Celery queue {{ $labels.queue }} backlog above 1000"
+          description: |
+            The {{ $labels.queue }} Celery queue has had more than 1000
+            pending tasks for 10 minutes. Either the workers are too few,
+            the tasks themselves are too slow, or they're crash-looping.
+
+      # Per-queue heartbeats (app/core/queue_heartbeat.py): a queue some worker
+      # of this install consumes has not run a task for CELERY_QUEUE_STALE_SECONDS.
+      # In pro/max a wedged I/O worker stops every device poller this way while
+      # the default queue (and the old single heartbeat) stays healthy.
+      - alert: FreeSDNCeleryQueueStalled
+        expr: freesdn_celery_queue_stalled == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: "Celery queue {{ $labels.queue }} has stopped running tasks"
+          description: |
+            No heartbeat task has run on the {{ $labels.queue }} queue for
+            several minutes. The worker consuming it is down, wedged, or has
+            every slot stuck on long tasks; scheduled work routed there
+            (device polling for discovery/sync/metrics) is not happening.
+
+      # - alert: FreeSDNCeleryTaskFailureSpike
+      #   expr: |
+      #     sum(rate(freesdn_celery_tasks_total{status="failure"}[5m]))
+      #       > 0.5
+      #   for: 10m
+      #   labels:
+      #     severity: warning
+      #     component: worker
+      #   annotations:
+      #     summary: "Celery task failures > 0.5/s for 10 minutes"
+      #     description: |
+      #       Celery task failure rate is sustained above 0.5/s. Scope to
+      #       the failing task with: ``rate(freesdn_celery_tasks_total
+      #       {status="failure"}[5m])``.
 
   # ──────────────────────────────────────────────────────────────────────
   - name: freesdn.database

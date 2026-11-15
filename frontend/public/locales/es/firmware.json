@@ -225,6 +225,13 @@
       "upgradeFailed": "La actualizacion fallo",
       "unknownError": "Error desconocido"
     },
-    "catalogExecutionUnavailable": "Este catálogo almacena imágenes de firmware e historial de trabajos. La implementación desde el catálogo, la copia de seguridad automática y la reversión no están disponibles. Para las actualizaciones compatibles, utiliza el flujo de firmware con cambios preparados del controlador. Las finalizaciones históricas del catálogo no se verificaron en el hardware."
+    "catalogExecutionUnavailable": "Este catálogo almacena imágenes de firmware e historial de trabajos. La implementación desde el catálogo, la copia de seguridad automática y la reversión no están disponibles. Para las actualizaciones compatibles, utiliza el flujo de firmware con cambios preparados del controlador. Las finalizaciones históricas del catálogo no se verificaron en el hardware.",
+    "confirm": {
+      "deleteSchedule": {
+        "title": "¿Eliminar la programación \"{{name}}\"?",
+        "description": "Solo se elimina la programación. Los dispositivos conservan su firmware actual.",
+        "confirmLabel": "Eliminar programación"
+      }
+    }
   }
 }

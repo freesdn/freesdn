@@ -45,8 +45,13 @@ interface StatItem {
 interface StatsGridProps {
   /** Array of stat items */
   stats: StatItem[];
-  /** Number of columns */
-  columns?: 2 | 3 | 4;
+  /**
+   * Columns at full width. Match it to the number of cards so none is left
+   * alone on a row: five cards want columns={5}. Narrower screens step down
+   * (see GRID_COLS); a last card that would sit alone on a two-column row
+   * spans the row instead.
+   */
+  columns?: StatsColumns;
   /** Loading state */
   isLoading?: boolean;
   /** Animation delay */
@@ -54,6 +59,26 @@ interface StatsGridProps {
   /** Additional className */
   className?: string;
 }
+
+type StatsColumns = 2 | 3 | 4 | 5 | 6;
+
+// ============================================================================
+// Responsive columns
+// ============================================================================
+
+// Each count steps down at narrower widths without stranding a card: 3 goes
+// straight from one column to three (two would leave the third alone), 5 and
+// 6 pass through three. Wherever the grid is two columns wide, an odd last
+// card spans both so the row is never half empty. Breakpoints are viewport
+// widths; the sidebar takes 256px from lg up, which is why five and six
+// columns wait for xl.
+const GRID_COLS: Record<StatsColumns, string> = {
+  2: 'grid-cols-2 [&>*:last-child:nth-child(odd)]:col-span-2',
+  3: 'grid-cols-1 sm:grid-cols-3',
+  4: 'grid-cols-2 md:grid-cols-4 max-md:[&>*:last-child:nth-child(odd)]:col-span-2',
+  5: 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2',
+  6: 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-6',
+};
 
 // ============================================================================
 // Variant Colors
@@ -72,15 +97,13 @@ const variantColors: Record<StatVariant, string> = {
 // Loading Skeleton
 // ============================================================================
 
-function StatsSkeleton({ columns = 4 }: { columns?: number }) {
-  const gridCols: Record<number, string> = {
-    2: 'grid-cols-2',
-    3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-    4: 'grid-cols-2 md:grid-cols-4',
-  };
-
+function StatsSkeleton({ columns = 4, className }: { columns?: StatsColumns; className?: string }) {
   return (
-    <div className={cn('grid gap-4', gridCols[columns] || 'grid-cols-4')}>
+    <div
+      className={cn('grid gap-3 sm:gap-4', GRID_COLS[columns] ?? GRID_COLS[4], className)}
+      aria-busy="true"
+      data-testid="stats-skeleton"
+    >
       {Array.from({ length: columns }).map((_, i) => (
         <Card key={i}>
           <CardContent noOffset className="p-4">
@@ -107,8 +130,12 @@ interface StatCardProps extends StatItem {
   delay: number;
 }
 
+/** Values longer than this (characters) use the smaller value size. */
+const LONG_VALUE = 8;
+
 function StatCard({ title, value, icon: Icon, variant = 'primary', description, trend, linkTo, onClick, index, delay }: StatCardProps) {
   const isClickable = !!(linkTo || onClick);
+  const valueText = typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 
   // Inner card body · the canonical icon-LEFT + value-stack-RIGHT layout.
   // items-center vertically centers the icon block against the text stack
@@ -122,18 +149,30 @@ function StatCard({ title, value, icon: Icon, variant = 'primary', description, 
       )}
     >
       <CardContent noOffset className="p-4 sm:p-5">
-        <div className="flex items-center gap-3 sm:gap-4">
+        {/* Below sm the icon sits above the value: beside it, a half-width
+            card left about 86 px for the value and cut "203.0.113.10" or
+            "18d 4h 12m" short, with no tooltip to read on a phone. */}
+        <div className="flex flex-col items-start gap-2.5 sm:flex-row sm:items-center sm:gap-4" data-testid="stat-card-body">
           <div
             className={cn(
-              'flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-lg flex-shrink-0',
+              'flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-lg flex-shrink-0',
               variantColors[variant],
             )}
           >
             <Icon className="h-5 w-5 sm:h-[1.4rem] sm:w-[1.4rem]" />
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 w-full sm:w-auto sm:flex-1">
             <div className="flex items-baseline gap-2">
-              <p className="text-2xl sm:text-[1.7rem] leading-none font-bold tracking-tight text-foreground truncate">
+              <p
+                className={cn(
+                  'leading-none font-bold tracking-tight tabular-nums text-foreground truncate',
+                  // An address or a "288 / 520" ratio did not fit a quarter-
+                  // width card at the full size and was cut to "203.0.113...";
+                  // long values step down a size.
+                  valueText.length > LONG_VALUE ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-[1.7rem]',
+                )}
+                title={valueText || undefined}
+              >
                 {value}
               </p>
               {trend && (
@@ -147,9 +186,11 @@ function StatCard({ title, value, icon: Icon, variant = 'primary', description, 
                 </span>
               )}
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1 truncate">{title}</p>
+            {/* Two lines before an ellipsis: at 390 px a card is about 170 px
+                wide and one line cut "Total Controllers" to "Total Controll...". */}
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1 line-clamp-2 break-words" title={typeof title === 'string' ? title : undefined}>{title}</p>
             {description && (
-              <p className="text-[11px] sm:text-xs text-muted-foreground/70 mt-0.5 truncate">
+              <p className="text-[11px] sm:text-xs text-muted-foreground/70 mt-0.5 line-clamp-2 break-words" title={typeof description === 'string' ? description : undefined}>
                 {description}
               </p>
             )}
@@ -160,12 +201,15 @@ function StatCard({ title, value, icon: Icon, variant = 'primary', description, 
   );
 
   // Wrap in motion + (Link | button | div) based on interactivity.
+  // Clickable cards are tab stops; give them the same focus ring as buttons.
+  const focusRing =
+    'rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
   const wrapped = linkTo ? (
-    <Link to={linkTo} className="block">
+    <Link to={linkTo} className={cn('block h-full', focusRing)}>
       {body}
     </Link>
   ) : onClick ? (
-    <button type="button" onClick={onClick} className="block w-full text-left">
+    <button type="button" onClick={onClick} className={cn('block h-full w-full text-left', focusRing)}>
       {body}
     </button>
   ) : (
@@ -177,6 +221,7 @@ function StatCard({ title, value, icon: Icon, variant = 'primary', description, 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: delay + index * 0.05 }}
+      className="min-w-0"
     >
       {wrapped}
     </motion.div>
@@ -194,18 +239,12 @@ export function StatsGrid({
   delay = 0.1,
   className,
 }: StatsGridProps) {
-  const gridCols = {
-    2: 'grid-cols-2',
-    3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-    4: 'grid-cols-2 md:grid-cols-4',
-  };
-
   if (isLoading) {
-    return <StatsSkeleton columns={columns} />;
+    return <StatsSkeleton columns={columns} className={className} />;
   }
 
   return (
-    <div className={cn('grid gap-4', gridCols[columns], className)}>
+    <div className={cn('grid gap-3 sm:gap-4', GRID_COLS[columns] ?? GRID_COLS[4], className)}>
       {stats.map((stat, index) => (
         <StatCard key={stat.title} {...stat} index={index} delay={delay} />
       ))}
@@ -217,5 +256,5 @@ export function StatsGrid({
 // Exports
 // ============================================================================
 
-export type { StatItem, StatVariant };
+export type { StatItem, StatVariant, StatsColumns };
 export { StatsSkeleton };

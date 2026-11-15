@@ -76,6 +76,8 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout';
 import { EmptyState } from '@/components/ui/empty-state';
+import { StatusBadge, type StatusVariant } from '@/components/ui/status-indicator';
+import { TypeBadge } from '@/components/ui/type-badge';
 import { useSiteStore } from '@/stores/siteStore';
 
 // Sub-components
@@ -96,15 +98,35 @@ import { TopologyDiscoveryTab } from '@/components/discovery/TopologyDiscoveryTa
 // Types
 // ─────────────────────────────────────────────────────────────────────
 
+// Mirrors ControllerResponse. This used to read `type`, which the API does not
+// send (it is `controller_type`): the Type column was blank, and searching for
+// a controller that did not match by name or host threw on
+// `undefined.toLowerCase()` and crashed the page.
 interface ControllerItem {
   id: string;
   name: string;
-  type: string;
+  controller_type: string;
   host: string;
   status: string;
   site_id: string;
   site_name?: string;
   last_sync: string | null;
+}
+
+function controllerStatusVariant(status: string): StatusVariant {
+  switch (status) {
+    case 'connected':
+      return 'connected';
+    case 'syncing':
+      return 'syncing';
+    case 'error':
+    case 'unreachable':
+      return 'error';
+    case 'disconnected':
+      return 'disconnected';
+    default:
+      return 'unknown';
+  }
 }
 
 interface SiteItem {
@@ -161,7 +183,7 @@ function toComponentDevice(d: ApiDiscoveredDevice): DiscoveredDevice {
 // ─────────────────────────────────────────────────────────────────────
 
 export default function DiscoveryPage() {
-  const { t } = useTranslation('discovery');
+  const { t } = useTranslation(['discovery', 'controllers']);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
@@ -420,7 +442,7 @@ export default function DiscoveryPage() {
     onError: (err: any) => {
       toast({
         title: t('DiscoveryPage.toast.scanFailed.title'),
-        description: err.response?.data?.detail || t('DiscoveryPage.toast.scanFailed.description'),
+        description: getApiErrorMessage(err, t('DiscoveryPage.toast.scanFailed.description')),
         variant: 'destructive',
       });
     },
@@ -439,7 +461,7 @@ export default function DiscoveryPage() {
     onError: (err: any) => {
       toast({
         title: t('DiscoveryPage.toast.cancelFailed.title'),
-        description: err.response?.data?.detail || t('DiscoveryPage.toast.cancelFailed.description'),
+        description: getApiErrorMessage(err, t('DiscoveryPage.toast.cancelFailed.description')),
         variant: 'destructive',
       });
     },
@@ -489,7 +511,7 @@ export default function DiscoveryPage() {
       toast({
         title: t('DiscoveryPage.toast.agentScanFailed.title'),
         description:
-          err.response?.data?.detail || t('DiscoveryPage.toast.agentScanFailed.description'),
+          getApiErrorMessage(err, t('DiscoveryPage.toast.agentScanFailed.description')),
         variant: 'destructive',
       });
     },
@@ -572,7 +594,7 @@ export default function DiscoveryPage() {
       toast({
         title: t('DiscoveryPage.toast.bulkAdoptFailed.title'),
         description:
-          err.response?.data?.detail || t('DiscoveryPage.toast.bulkAdoptFailed.description'),
+          getApiErrorMessage(err, t('DiscoveryPage.toast.bulkAdoptFailed.description')),
         variant: 'destructive',
       });
     },
@@ -716,9 +738,9 @@ export default function DiscoveryPage() {
     if (!controllerSearch) return true;
     const q = controllerSearch.toLowerCase();
     return (
-      c.name.toLowerCase().includes(q) ||
-      c.host.toLowerCase().includes(q) ||
-      c.type.toLowerCase().includes(q)
+      (c.name ?? '').toLowerCase().includes(q) ||
+      (c.host ?? '').toLowerCase().includes(q) ||
+      (c.controller_type ?? '').toLowerCase().includes(q)
     );
   });
 
@@ -1324,34 +1346,18 @@ export default function DiscoveryPage() {
                         <tr key={controller.id} className="border-b hover:bg-muted/30">
                           <td className="py-3 px-4 font-medium">{controller.name}</td>
                           <td className="py-3 px-4">
-                            <Badge variant="outline" className="text-xs">
-                              {controller.type}
-                            </Badge>
+                            <TypeBadge type={controller.controller_type} size="sm" />
                           </td>
                           <td className="py-3 px-4 text-muted-foreground">{controller.host}</td>
                           <td className="py-3 px-4">
-                            <span
-                              className={cn(
-                                'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
-                                controller.status === 'online'
-                                  ? 'bg-emerald-500/10 text-emerald-500'
-                                  : controller.status === 'error'
-                                  ? 'bg-red-500/10 text-red-500'
-                                  : 'bg-muted text-muted-foreground',
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  'w-1.5 h-1.5 rounded-full',
-                                  controller.status === 'online'
-                                    ? 'bg-emerald-500'
-                                    : controller.status === 'error'
-                                    ? 'bg-red-500'
-                                    : 'bg-muted-foreground',
-                                )}
-                              />
-                              {controller.status}
-                            </span>
+                            {/* The API reports connected / disconnected / error /
+                                syncing / unreachable / unknown. This cell tested
+                                for 'online', so every healthy controller was grey. */}
+                            <StatusBadge variant={controllerStatusVariant(controller.status)} size="sm">
+                              {t(`controllers:ControllerDetailPage.status.${controller.status}`, {
+                                defaultValue: controller.status,
+                              })}
+                            </StatusBadge>
                           </td>
                           <td className="py-3 px-4 text-muted-foreground">
                             {controller.last_sync

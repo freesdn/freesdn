@@ -31,6 +31,8 @@ from typing import Any
 
 import httpx
 
+from app.adapters import io_policy
+from app.adapters.apply_context import FORCE_DOES_NOT_LIFT_READ_ONLY, read_only_refuses_write
 from app.adapters.exceptions import AdapterError, AdapterOutcomeUnknownError, AdapterReadOnlyError
 from app.adapters.http_utils import CircuitBreaker
 from app.adapters.proxmox.constants import (
@@ -764,17 +766,18 @@ class ProxmoxClient:
         # interpolation site in the adapter.
         _validate_path(path)
 
-        # Universal read-only gate: refuse mutations unless the caller
-        # has explicitly opted in via ``force=True``. The default
-        # config has ``ADAPTER_READ_ONLY=True``, so production
-        # deployments are safe out-of-the-box even without staging.
-        if method_upper in _WRITE_METHODS and _is_adapter_read_only() and not force:
+        # Universal read-only gate: while ADAPTER_READ_ONLY is set, refuse
+        # every mutation except an approved staged apply. ``force=True`` does
+        # not lift it (the hypervisor UI sends force on power/clone/migrate/
+        # delete, which made "writes disabled" a label rather than a lock).
+        if method_upper in _WRITE_METHODS and read_only_refuses_write(_is_adapter_read_only()):
             _record_request_metric(method_upper, "read_only_blocked")
             raise AdapterReadOnlyError(
                 "ADAPTER_READ_ONLY is set — Proxmox write refused. Set "
                 "ADAPTER_READ_ONLY=false in the environment AND pass "
                 "force=true to override. Both safeties must be down "
-                "before a write reaches the cluster.",
+                "before a write reaches the cluster."
+                + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else ""),
                 adapter_id="proxmox",
             )
 
@@ -817,12 +820,9 @@ class ProxmoxClient:
                         f"{_redact_error_text(str(e))}"
                     ) from e
                 except httpx.TimeoutException as e:
-                    # timeouts on idempotent methods are
-                    # retried with jittered backoff.
-                    if is_idempotent and attempt < attempts - 1:
-                        _record_request_metric(method_upper, "timeout_retry")
-                        await self._retry_backoff(attempt)
-                        continue
+                    # io_policy: a timeout is never retried, even for a GET. A
+                    # node that did not answer in time is slow or gone; asking
+                    # again only multiplies the wait and the node's load.
                     self._circuit.record_failure()
                     _record_request_metric(method_upper, "timeout")
                     _record_error("timeout")
@@ -840,6 +840,17 @@ class ProxmoxClient:
                     httpx.RemoteProtocolError,
                     httpx.DecodingError,
                 ) as e:
+                    # A connection dropped mid-read (keep-alive race, pveproxy
+                    # restart) is the one transport failure a replay fixes, and
+                    # only for an idempotent method.
+                    if (
+                        is_idempotent
+                        and attempt < attempts - 1
+                        and io_policy.may_retry_exception(e, idempotent=True)
+                    ):
+                        _record_request_metric(method_upper, "reset_retry")
+                        await self._retry_backoff(attempt)
+                        continue
                     self._circuit.record_failure()
                     _record_request_metric(method_upper, "transport")
                     _record_error("transport")
@@ -1018,12 +1029,12 @@ class ProxmoxClient:
         method = "POST"
         _validate_path(path)
 
-        if method in _WRITE_METHODS and _is_adapter_read_only() and not force:
+        if method in _WRITE_METHODS and read_only_refuses_write(_is_adapter_read_only()):
             _record_request_metric(method, "read_only_blocked")
             raise AdapterError(
                 "ADAPTER_READ_ONLY is set — Proxmox upload refused. Set "
                 "ADAPTER_READ_ONLY=false in the environment AND pass "
-                "force=true to override.",
+                "force=true to override." + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else ""),
                 adapter_id="proxmox",
             )
 

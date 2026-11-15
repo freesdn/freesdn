@@ -8,6 +8,8 @@
 
 // Core axios instance & helpers
 export { api, apiClient, API_URL, getCookie, getWebSocketUrl, getApiErrorMessage } from './client';
+export { parseApiError, getApiFieldErrors, isReadOnlyRefusal } from './errors';
+export type { ApiErrorInfo, ApiErrorKind, ApiFieldError } from './errors';
 
 // All TypeScript types / interfaces
 export * from './types';

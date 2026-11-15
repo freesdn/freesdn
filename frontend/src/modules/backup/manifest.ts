@@ -7,6 +7,11 @@ import { lazy } from 'react';
 import { Archive } from 'lucide-react';
 import type { FrontendModuleManifest } from '../types';
 
+// One lazy component shared by /backups and /backups/:tab. Two separate
+// `lazy()` wrappers are two component types, so moving between the first tab
+// and any other remounted the whole page.
+const BackupsPage = lazy(() => import('@/pages/backups/BackupsPage'));
+
 export const backupModule: FrontendModuleManifest = {
   id: 'backup',
   name: 'Backup',
@@ -16,7 +21,7 @@ export const backupModule: FrontendModuleManifest = {
   routes: [
     {
       path: '/backups',
-      component: lazy(() => import('@/pages/backups/BackupsPage')),
+      component: BackupsPage,
       title: 'Backups',
     },
     {
@@ -26,7 +31,7 @@ export const backupModule: FrontendModuleManifest = {
     },
     {
       path: '/backups/:tab',
-      component: lazy(() => import('@/pages/backups/BackupsPage')),
+      component: BackupsPage,
       title: 'Backups',
     },
   ],

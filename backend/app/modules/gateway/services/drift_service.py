@@ -11,7 +11,10 @@ device state.  Creates DriftEvent records for mismatches.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from typing import Any, TypeIs
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -37,11 +40,73 @@ from app.modules.gateway.models import (
 logger = logging.getLogger(__name__)
 
 
+def _may_contact(gw: GatewayConnection | None) -> TypeIs[GatewayConnection]:
+    """May a drift check open a connection to this gateway?
+
+    Only a live, sync-enabled gateway whose shared reachability breaker is
+    closed. The drift check used to load the brain by id alone, so a gateway
+    whose polling an operator had PAUSED (sync_enabled=false, as on the
+    2026-11 soak after the OPNsense incident), a soft-deleted one, or one the
+    health poll had just found unreachable, was still contacted every 15
+    minutes by up to four separate adapter sessions.
+    """
+    if gw is None or gw.deleted_at is not None or not gw.sync_enabled:
+        return False
+    from app.core.device_breaker import CLOSED, gateway_breaker, gateway_key
+
+    if gateway_breaker.peek(gateway_key(gw.id)) != CLOSED:
+        logger.info("Drift check skipped for gateway %s: polling paused by its breaker", gw.id)
+        return False
+    return True
+
+
+@asynccontextmanager
+async def _contact(gw: GatewayConnection, adapter: Any, holder: str) -> AsyncIterator[Any]:
+    """``adapter`` connected, or ``None`` while another poller holds the device.
+
+    Takes the device's slot first (one request group per device across every
+    poller), so a drift read never lands on a firewall that the full sync, the
+    health poll, a config backup or a UI read is already talking to. A busy
+    device is simply checked on the next 15-minute run.
+    """
+    from app.core.device_slot import device_slots, gateway_slot_key
+
+    key = gateway_slot_key(gw)
+    lease = await device_slots.acquire(key, holder)
+    if lease is None:
+        logger.info(
+            "Drift check skipped for gateway %s: %s", gw.id, await device_slots.abusy_reason(key)
+        )
+        yield None
+        return
+    try:
+        async with adapter:
+            yield adapter
+    finally:
+        await device_slots.arelease(lease)
+
+
 class DriftService:
     """Detects and manages configuration drift."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def _end_read_transaction(self) -> None:
+        """Close the read transaction before a gateway is contacted.
+
+        Each check reads the database, then the device, then builds events that
+        are written at the end of the run. A slow firewall used to hold the
+        transaction from the first read open across every device read (and,
+        behind PgBouncer, a server connection). Nothing is pending at this point
+        in a drift run; a session with unflushed changes is left alone.
+        """
+        in_transaction = getattr(self.db, "in_transaction", None)
+        if in_transaction is None or not in_transaction():
+            return
+        if self.db.new or self.db.dirty or self.db.deleted:
+            return
+        await self.db.commit()
 
     # ── Check ────────────────────────────────────────────────────────────
 
@@ -98,7 +163,7 @@ class DriftService:
             select(GatewayConnection).where(GatewayConnection.id == brain.gateway_id)
         )
         gw = gw_result.scalar_one_or_none()
-        if gw is None:
+        if not _may_contact(gw):
             return []
 
         # Load canonical VLANs for this site (org-scoped for defense-in-depth)
@@ -115,9 +180,12 @@ class DriftService:
             return []
 
         events: list[DriftEvent] = []
+        await self._end_read_transaction()
         adapter = build_adapter(gw)
         try:
-            async with adapter:
+            async with _contact(gw, adapter, "drift check (VLANs)") as adapter:
+                if adapter is None:
+                    return []
                 vlan_result = await adapter.get_vlan_devices()
                 if not vlan_result.success:
                     logger.warning(
@@ -171,7 +239,8 @@ class DriftService:
         gw_result = await self.db.execute(
             select(GatewayConnection).where(GatewayConnection.id == brain.gateway_id)
         )
-        return brain, gw_result.scalar_one_or_none()
+        gw = gw_result.scalar_one_or_none()
+        return brain, (gw if _may_contact(gw) else None)
 
     async def _check_brain_dhcp(self, role_map: SiteRoleMap) -> list[DriftEvent]:
         """Compare canonical DHCP scopes against brain device state."""
@@ -202,10 +271,11 @@ class DriftService:
         vlan_map: dict[UUID, CanonicalVLAN] = {v.id: v for v in vlan_result.scalars().all()}
 
         events: list[DriftEvent] = []
+        await self._end_read_transaction()
         adapter = build_adapter(gw)
         try:
-            async with adapter:
-                if not hasattr(adapter, "get_dhcp_leases"):
+            async with _contact(gw, adapter, "drift check (DHCP)") as adapter:
+                if adapter is None or not hasattr(adapter, "get_dhcp_leases"):
                     return []
                 leases_result = await adapter.get_dhcp_leases()
                 if not leases_result.success:
@@ -280,10 +350,11 @@ class DriftService:
             return []
 
         events: list[DriftEvent] = []
+        await self._end_read_transaction()
         adapter = build_adapter(gw)
         try:
-            async with adapter:
-                if not hasattr(adapter, "get_dns_overrides"):
+            async with _contact(gw, adapter, "drift check (DNS)") as adapter:
+                if adapter is None or not hasattr(adapter, "get_dns_overrides"):
                     return []
                 dns_data = await adapter.get_dns_overrides()
                 if not dns_data.success:
@@ -370,13 +441,14 @@ class DriftService:
 
         for dev_id, rules in rules_by_device.items():
             gw = gw_map.get(dev_id)
-            if gw is None:
+            if not _may_contact(gw):
                 continue
 
+            await self._end_read_transaction()
             adapter = build_adapter(gw)
             try:
-                async with adapter:
-                    if not hasattr(adapter, "get_dhcp_scopes"):
+                async with _contact(gw, adapter, "drift check (suppressions)") as adapter:
+                    if adapter is None or not hasattr(adapter, "get_dhcp_scopes"):
                         continue
                     scope_result = await adapter.get_dhcp_scopes()
                     if not (scope_result.success and scope_result.data):

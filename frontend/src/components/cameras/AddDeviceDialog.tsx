@@ -67,6 +67,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { cameraDiscoveryApi, camerasApi, nvrApi, sitePickerQuery, sitesApi, type DiscoveredChannel, type NVRConnectionTestRequest, type NVRConnectionTestResponse, type NVRDiscoveryResponse, type NVRImportResponse, type StandaloneCameraImportResponse } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── Host / IP validation ────────────────────────────────────────────────────
 // Accept an IPv4 address or a DNS hostname (RFC-1123 labels). Used to gate the
@@ -155,7 +156,7 @@ function SiteSelectWithCreate({
         </div>
         {createMutation.isError && (
           <p className="text-xs text-red-500">
-            {(createMutation.error as any)?.response?.data?.detail || t('AddDeviceDialog.site.createError')}
+            {getApiErrorMessage(createMutation.error, t('AddDeviceDialog.site.createError'))}
           </p>
         )}
       </div>
@@ -344,7 +345,7 @@ function ManualTab({ onSuccess, onClose }: { onSuccess: () => void; onClose: () 
       await cameraCreateMutation.mutateAsync(values as ManualFormValues);
     } catch (err) {
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
-      setServerError(e?.response?.data?.detail || e.message || t('AddDeviceDialog.manual.createError'));
+      setServerError(getApiErrorMessage(e, t('AddDeviceDialog.manual.createError')));
     }
   });
 
@@ -912,14 +913,14 @@ function DiscoverTab({ onSuccess, onClose }: { onSuccess: () => void; onClose: (
           {testMutation.isError && (
             <div className="flex items-center gap-2 text-red-500 text-sm p-3 bg-red-500/5 rounded-lg border border-red-500/20">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              {(testMutation.error as any)?.response?.data?.detail || t('AddDeviceDialog.discover.connect.testError')}
+              {getApiErrorMessage(testMutation.error, t('AddDeviceDialog.discover.connect.testError'))}
             </div>
           )}
 
           {discoverMutation.isError && (
             <div className="flex items-center gap-2 text-red-500 text-sm p-3 bg-red-500/5 rounded-lg border border-red-500/20">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              {(discoverMutation.error as any)?.response?.data?.detail || t('AddDeviceDialog.discover.connect.discoverError')}
+              {getApiErrorMessage(discoverMutation.error, t('AddDeviceDialog.discover.connect.discoverError'))}
             </div>
           )}
 
@@ -1082,7 +1083,7 @@ function DiscoverTab({ onSuccess, onClose }: { onSuccess: () => void; onClose: (
           {importMutation.isError && (
             <div className="flex items-center gap-2 text-red-500 text-sm p-3 bg-red-500/5 rounded-lg border border-red-500/20">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              {(importMutation.error as any)?.response?.data?.detail || t('AddDeviceDialog.discover.channels.importError')}
+              {getApiErrorMessage(importMutation.error, t('AddDeviceDialog.discover.channels.importError'))}
             </div>
           )}
 
@@ -1157,7 +1158,7 @@ function DiscoverTab({ onSuccess, onClose }: { onSuccess: () => void; onClose: (
           {cameraImportMutation.isError && (
             <div className="flex items-center gap-2 text-red-500 text-sm p-3 bg-red-500/5 rounded-lg border border-red-500/20">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              {(cameraImportMutation.error as any)?.response?.data?.detail || t('AddDeviceDialog.discover.cameraConfirm.importError')}
+              {getApiErrorMessage(cameraImportMutation.error, t('AddDeviceDialog.discover.cameraConfirm.importError'))}
             </div>
           )}
 

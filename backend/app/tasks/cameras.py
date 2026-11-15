@@ -17,14 +17,71 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.core.celery_app import celery_app
 from app.db.session import CelerySessionLocal as AsyncSessionLocal
 from app.modules.cameras.event_types import PUSH_ALERT_TYPES, normalize_event_type
 from app.tasks.base import async_task
 
+
+def _isapi_nvrs(nvr_model: Any) -> Any:
+    """The NVRs the Hikvision-ISAPI periodic tasks can talk to.
+
+    The health poll (every minute) and the alert ingest (every 30 s) build a
+    HikvisionAdapter for whatever NVR they are handed, but onboarding records
+    ONVIF and other vendors' recorders too (``device_type`` "onvif"; the
+    interactive paths pick the adapter by vendor). Every such NVR was sent
+    ISAPI requests with its stored login twice a minute, failing each time.
+    Rows that predate vendor detection carry the column default "hikvision".
+    """
+    return or_(nvr_model.device_type.is_(None), func.lower(nvr_model.device_type) == "hikvision")
+
+
+async def _polled_nvr_ids(session: Any, nvr_model: Any) -> list[Any]:
+    """The ISAPI NVRs the periodic tasks poll, minus organizations that
+    switched the Cameras module off (disabling a module stops its polling)."""
+    from app.modules.poll_gate import orgs_with_module_disabled
+
+    rows = (
+        await session.execute(
+            select(nvr_model.id, nvr_model.organization_id).where(
+                nvr_model.deleted_at.is_(None), _isapi_nvrs(nvr_model)
+            )
+        )
+    ).all()
+    disabled = await orgs_with_module_disabled(session, "cameras", {org for _, org in rows})
+    return [nvr_id for nvr_id, org in rows if org not in disabled]
+
+
 logger = logging.getLogger(__name__)
+
+
+# =========================================================================
+# Stored-host guard
+# =========================================================================
+
+
+async def _pinned_nvr_host(nvr: Any) -> tuple[str | None, str | None]:
+    """``(address, None)`` when the stored NVR login may be sent, else ``(None, reason)``.
+
+    ``address`` is the IP the check accepted; connect to it, not to
+    ``nvr.ip_address``, which the transport would resolve again (DNS
+    rebinding). The reason is already logged. Every task below pastes the stored
+    host into an ISAPI or RTSP URL with the stored login, and the endpoint-side
+    host check covers only what those endpoints write: a row stored before that
+    check was tightened, or written by another path, would be used unchecked.
+    Runs the shared point-of-use check (app/modules/cameras/host_guard.py) in a
+    thread because it resolves DNS.
+    """
+    from app.modules.cameras.host_guard import CameraHostRefused, check_stored_camera_host
+
+    try:
+        address = await asyncio.to_thread(check_stored_camera_host, nvr.ip_address)
+    except CameraHostRefused as exc:
+        logger.warning("NVR %s not contacted, its stored host is refused: %s", nvr.id, exc)
+        return None, str(exc)
+    return address, None
 
 
 # =========================================================================
@@ -41,31 +98,67 @@ async def _poll_single_nvr_health(nvr_id: UUID) -> dict[str, Any]:
       2) Call ``get_channel_track_info(channel)``
       3) Call ``get_channel_status_list()`` for online/offline
       4) Insert a ``CameraHealthSnapshot`` row
+
+    The database is read first and written afterwards in a short transaction;
+    no transaction is open while the recorder answers.
     """
     from app.adapters.hikvision.adapter import HikvisionAdapter
     from app.core.crypto import decrypt_credential
+    from app.core.device_breaker import nvr_breaker, nvr_key
+    from app.core.device_poll import device_poll
+    from app.core.device_slot import nvr_slot_key
     from app.modules.cameras.models import NVR as NVRModel
     from app.modules.cameras.models import Camera, CameraHealthSnapshot
 
     saved = 0
     errors = 0
 
+    # 1) Read the NVR; leaving the block ends the transaction.
     async with AsyncSessionLocal() as session:
         nvr = await session.get(NVRModel, nvr_id)
-        if not nvr:
-            return {"nvr_id": str(nvr_id), "error": "NVR not found"}
+    if not nvr:
+        return {"nvr_id": str(nvr_id), "error": "NVR not found"}
+    if not nvr.username or not nvr.password_encrypted:
+        return {"nvr_id": str(nvr_id), "error": "NVR has no credentials"}
+    address, refused = await _pinned_nvr_host(nvr)
+    if address is None:
+        return {"nvr_id": str(nvr_id), "error": "NVR host refused", "saved": 0, "errors": 1}
 
-        if not nvr.username or not nvr.password_encrypted:
-            return {"nvr_id": str(nvr_id), "error": "NVR has no credentials"}
+    password = decrypt_credential(nvr.password_encrypted)
+    adapter = HikvisionAdapter(
+        host=address,
+        username=nvr.username,
+        password=password,
+        port=nvr.port,
+    )
 
-        password = decrypt_credential(nvr.password_encrypted)
-        adapter = HikvisionAdapter(
-            host=nvr.ip_address,
-            username=nvr.username,
-            password=password,
-            port=nvr.port,
-        )
-
+    # 2) Talk to the recorder. The NVR's shared breaker and its device slot
+    # (cameras are polled through it): a recorder that stopped answering is
+    # probed by one poller, and one the alert ingest or a UI read is talking
+    # to is left for the next cycle.
+    readings: list[dict[str, Any]] = []
+    async with device_poll(
+        slot_key=nvr_slot_key(nvr),
+        breaker=nvr_breaker,
+        breaker_key=nvr_key(nvr.id),
+        holder="camera health poll",
+    ) as turn:
+        if turn.skipped:
+            return {"nvr_id": str(nvr_id), "skipped": True, "reason": turn.reason}
+        # Which cameras to read, in a transaction that ends before the first
+        # request to the recorder.
+        async with AsyncSessionLocal() as session:
+            cameras = [
+                (cam_id, channel_id or 1)
+                for cam_id, channel_id in (
+                    await session.execute(
+                        select(Camera.id, Camera.channel_id).where(
+                            Camera.nvr_id == nvr_id,
+                            Camera.deleted_at.is_(None),
+                        )
+                    )
+                ).all()
+            ]
         try:
             await adapter.connect()
 
@@ -77,17 +170,7 @@ async def _poll_single_nvr_health(nvr_id: UUID) -> dict[str, Any]:
                 if ch_id is not None:
                     online_map[ch_id] = ch.get("online", False)
 
-            # Load all cameras attached to this NVR
-            result = await session.execute(
-                select(Camera).where(
-                    Camera.nvr_id == nvr_id,
-                    Camera.deleted_at.is_(None),
-                )
-            )
-            cameras = result.scalars().all()
-
-            for cam in cameras:
-                channel = cam.channel_id or 1
+            for cam_id, channel in cameras:
                 try:
                     track_info = await adapter.get_channel_track_info(channel=channel)
                     if "error" in track_info:
@@ -96,38 +179,46 @@ async def _poll_single_nvr_health(nvr_id: UUID) -> dict[str, Any]:
 
                     tracks = track_info.get("tracks", [])
                     main_track = tracks[0] if tracks else {}
-
-                    is_online = online_map.get(channel, True)
-
-                    snapshot = CameraHealthSnapshot(
-                        organization_id=nvr.organization_id,
-                        camera_id=cam.id,
-                        captured_at=datetime.now(UTC),
-                        bitrate_kbps=main_track.get("bitrate_kbps"),
-                        frame_rate=main_track.get("frame_rate"),
-                        codec=main_track.get("codec"),
-                        resolution_width=main_track.get("resolution_width"),
-                        resolution_height=main_track.get("resolution_height"),
-                        is_online=is_online,
+                    readings.append(
+                        {
+                            "camera_id": cam_id,
+                            "captured_at": datetime.now(UTC),
+                            "bitrate_kbps": main_track.get("bitrate_kbps"),
+                            "frame_rate": main_track.get("frame_rate"),
+                            "codec": main_track.get("codec"),
+                            "resolution_width": main_track.get("resolution_width"),
+                            "resolution_height": main_track.get("resolution_height"),
+                            "is_online": online_map.get(channel, True),
+                        }
                     )
-                    session.add(snapshot)
-                    saved += 1
                 except Exception as exc:
                     logger.warning(
                         "Health poll failed for camera %s (ch %s): %s",
-                        cam.id,
+                        cam_id,
                         channel,
                         exc,
                     )
                     errors += 1
 
-            await session.commit()
-
         except Exception as exc:
+            turn.failed(exc)
             logger.error("Failed to poll NVR %s: %s", nvr_id, exc)
-            return {"nvr_id": str(nvr_id), "error": "Health poll failed", "saved": 0, "errors": 1}
+            return {
+                "nvr_id": str(nvr_id),
+                "error": "Health poll failed",
+                "saved": 0,
+                "errors": 1,
+            }
         finally:
             await adapter.disconnect()
+
+    # 3) Write: one short transaction for the snapshots.
+    if readings:
+        async with AsyncSessionLocal() as session:
+            for reading in readings:
+                session.add(CameraHealthSnapshot(organization_id=nvr.organization_id, **reading))
+            await session.commit()
+        saved = len(readings)
 
     return {"nvr_id": str(nvr_id), "saved": saved, "errors": errors}
 
@@ -139,12 +230,7 @@ async def _poll_all_camera_health() -> dict[str, Any]:
     from app.modules.cameras.models import NVR as NVRModel
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(NVRModel.id).where(
-                NVRModel.deleted_at.is_(None),
-            )
-        )
-        nvr_ids = [row[0] for row in result.all()]
+        nvr_ids = await _polled_nvr_ids(session, NVRModel)
 
     # Poll NVRs concurrently (bounded to avoid overload)
     sem = asyncio.Semaphore(4)
@@ -317,6 +403,12 @@ async def _archive_evidence(archive_id: UUID) -> dict[str, Any]:
             arch.error = "camera/NVR not found or missing credentials"
             await session.commit()
             return {"archive_id": str(archive_id), "status": "failed"}
+        address, refused = await _pinned_nvr_host(nvr)
+        if address is None:
+            arch.status = "failed"
+            arch.error = f"NVR host refused: {refused}"[:500]
+            await session.commit()
+            return {"archive_id": str(archive_id), "status": "failed"}
 
         arch.status = "archiving"
         await session.commit()
@@ -326,7 +418,7 @@ async def _archive_evidence(archive_id: UUID) -> dict[str, Any]:
         sha = hashlib.sha256()
         size = 0
         adapter = HikvisionAdapter(
-            host=nvr.ip_address,
+            host=address,
             username=nvr.username,
             password=decrypt_credential(nvr.password_encrypted),
             port=nvr.port,
@@ -623,35 +715,68 @@ async def _ingest_nvr_alerts(nvr_id: UUID) -> dict[str, Any]:
     """
     from app.adapters.hikvision.adapter import HikvisionAdapter
     from app.core.crypto import decrypt_credential
+    from app.core.device_breaker import nvr_breaker, nvr_key
+    from app.core.device_poll import device_poll
+    from app.core.device_slot import nvr_slot_key
     from app.modules.cameras.models import NVR as NVRModel
     from app.modules.cameras.models import Camera, CameraEvent
 
     ingested = 0
 
+    # 1) Read the NVR; leaving the block ends the transaction before the
+    # recorder is asked anything.
     async with AsyncSessionLocal() as session:
         nvr = await session.get(NVRModel, nvr_id)
-        if not nvr or not nvr.username or not nvr.password_encrypted:
-            return {"nvr_id": str(nvr_id), "ingested": 0, "error": "NVR not found or no creds"}
+    if not nvr or not nvr.username or not nvr.password_encrypted:
+        return {"nvr_id": str(nvr_id), "ingested": 0, "error": "NVR not found or no creds"}
+    address, refused = await _pinned_nvr_host(nvr)
+    if address is None:
+        return {"nvr_id": str(nvr_id), "ingested": 0, "error": "NVR host refused"}
 
-        password = decrypt_credential(nvr.password_encrypted)
-        adapter = HikvisionAdapter(
-            host=nvr.ip_address,
-            username=nvr.username,
-            password=password,
-            port=nvr.port,
-        )
+    password = decrypt_credential(nvr.password_encrypted)
+    adapter = HikvisionAdapter(
+        host=address,
+        username=nvr.username,
+        password=password,
+        port=nvr.port,
+    )
 
+    # 2) The one device read. Same breaker and slot as the health poll: the two
+    # never talk to one recorder at once, and an unresponsive one is not asked
+    # every 30 s. No database transaction is open while it answers.
+    async with device_poll(
+        slot_key=nvr_slot_key(nvr),
+        breaker=nvr_breaker,
+        breaker_key=nvr_key(nvr.id),
+        holder="NVR alert ingest",
+    ) as turn:
+        if turn.skipped:
+            return {
+                "nvr_id": str(nvr_id),
+                "ingested": 0,
+                "skipped": True,
+                "reason": turn.reason,
+            }
         try:
             await adapter.connect()
             event_state = await adapter.get_event_state()
+        except Exception as exc:
+            turn.failed(exc)
+            logger.error("Alert ingestion failed for NVR %s: %s", nvr_id, exc)
+            return {"nvr_id": str(nvr_id), "ingested": 0, "error": "Alert ingestion failed"}
+        finally:
+            await adapter.disconnect()
 
-            if "error" in event_state:
-                return {"nvr_id": str(nvr_id), "ingested": 0, "error": event_state["error"]}
+    if "error" in event_state:
+        return {"nvr_id": str(nvr_id), "ingested": 0, "error": event_state["error"]}
 
-            raw_events = event_state.get("events", [])
-            if not raw_events:
-                return {"nvr_id": str(nvr_id), "ingested": 0}
+    raw_events = event_state.get("events", [])
+    if not raw_events:
+        return {"nvr_id": str(nvr_id), "ingested": 0}
 
+    # 3) Store what it returned, in a transaction of its own.
+    async with AsyncSessionLocal() as session:
+        try:
             # Build channel → camera mapping (id + name for alert payloads)
             result = await session.execute(
                 select(Camera.id, Camera.channel_id, Camera.name).where(
@@ -780,12 +905,9 @@ async def _ingest_nvr_alerts(nvr_id: UUID) -> dict[str, Any]:
                     with contextlib.suppress(Exception):
                         await session.rollback()
                     logger.warning("Camera alert notification persistence failed")
-
         except Exception as exc:
             logger.error("Alert ingestion failed for NVR %s: %s", nvr_id, exc)
             return {"nvr_id": str(nvr_id), "ingested": 0, "error": "Alert ingestion failed"}
-        finally:
-            await adapter.disconnect()
 
     return {"nvr_id": str(nvr_id), "ingested": ingested}
 
@@ -795,8 +917,7 @@ async def _ingest_all_nvr_alerts() -> dict[str, Any]:
     from app.modules.cameras.models import NVR as NVRModel
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(NVRModel.id).where(NVRModel.deleted_at.is_(None)))
-        nvr_ids = [row[0] for row in result.all()]
+        nvr_ids = await _polled_nvr_ids(session, NVRModel)
 
     # Ingest alerts from NVRs concurrently (bounded)
     sem = asyncio.Semaphore(4)

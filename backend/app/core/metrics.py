@@ -46,7 +46,11 @@ mitigate in two ways:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import secrets
+from typing import cast
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response
@@ -63,6 +67,8 @@ from prometheus_fastapi_instrumentator import metrics
 
 from app.core.config import settings
 from app.core.metrics_routing import MetadataInstrumentator as Instrumentator
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # Custom metrics — business counters & gauges
@@ -151,10 +157,29 @@ adapter_pending_changes: Gauge = Gauge(
     ["adapter", "status"],
 )
 
-# Celery queue depth (updated by a periodic probe, see app.tasks.metrics).
+# Celery queue depth, refreshed from the broker on every scrape of this process
+# (refresh_celery_queue_depth, called by the /metrics handlers below).
 celery_queue_depth: Gauge = Gauge(
     "freesdn_celery_queue_depth",
     "Number of pending tasks in each Celery queue",
+    ["queue"],
+)
+
+# Per-queue heartbeats (app/core/queue_heartbeat.py), refreshed on every scrape
+# like the depth above. Age is -1 while a queue has never run its heartbeat.
+celery_queue_heartbeat_age: Gauge = Gauge(
+    "freesdn_celery_queue_heartbeat_age_seconds",
+    "Seconds since a heartbeat task last ran on each Celery queue (-1: never)",
+    ["queue"],
+)
+celery_queue_stalled: Gauge = Gauge(
+    "freesdn_celery_queue_stalled",
+    "1 while a Celery queue this install consumes has stopped running tasks",
+    ["queue"],
+)
+celery_queue_consumers: Gauge = Gauge(
+    "freesdn_celery_queue_consumers",
+    "Live workers subscribed to each Celery queue",
     ["queue"],
 )
 
@@ -257,6 +282,70 @@ system_info: Info = Info(
 # ============================================================================
 
 
+def broker_db(url: str) -> int:
+    """The Redis database number in a Celery broker URL (first one of a list).
+
+    The shipped compose puts the broker in database 1, not 0. A reader that asks
+    database 0 for queue lengths gets 0 for every queue, always.
+    """
+    path = urlparse(url.split(";", 1)[0]).path.strip("/")
+    return int(path) if path.isdigit() else 0
+
+
+def celery_queue_lengths() -> dict[str, int]:
+    """Pending messages in every declared Celery queue, read from the broker."""
+    from app.core.celery_app import broker_url, task_queues
+    from app.core.redis_client import get_sync_redis
+
+    client = get_sync_redis(db=broker_db(str(broker_url)), socket_timeout=2)
+    try:
+        # The sync client: llen returns an int (the stubs type every command
+        # as possibly awaitable).
+        return {queue.name: int(cast(int, client.llen(queue.name)) or 0) for queue in task_queues}
+    finally:
+        client.close()
+
+
+def refresh_celery_queue_depth() -> None:
+    """Set ``freesdn_celery_queue_depth`` for this scrape.
+
+    Declared since the observability work and written by nothing, so the
+    backlog alert evaluated an empty family forever. Read at scrape time: one
+    LLEN per queue, cheap, and correct whichever gunicorn worker is scraped. A
+    broker that cannot be read leaves the previous values rather than failing
+    the scrape (the Valkey exporter and redis_up alert cover an outage).
+    """
+    try:
+        lengths = celery_queue_lengths()
+    except Exception:  # noqa: BLE001 - never fail a scrape over one family
+        logger.debug("Celery queue depth unavailable for this scrape", exc_info=True)
+        return
+    for name, depth in lengths.items():
+        celery_queue_depth.labels(queue=name).set(depth)
+
+
+def refresh_celery_queue_heartbeats() -> None:
+    """Set the per-queue heartbeat gauges for this scrape (never fails it)."""
+    try:
+        from app.core.queue_heartbeat import STALLED, queue_status
+
+        status = queue_status()
+    except Exception:  # noqa: BLE001 - never fail a scrape over one family
+        logger.debug("Celery queue heartbeats unavailable for this scrape", exc_info=True)
+        return
+    for name, q in status.items():
+        age = q.get("last_heartbeat_age_seconds")
+        celery_queue_heartbeat_age.labels(queue=name).set(-1 if age is None else float(age))
+        celery_queue_stalled.labels(queue=name).set(1 if q.get("state") == STALLED else 0)
+        celery_queue_consumers.labels(queue=name).set(int(q.get("consumers") or 0))
+
+
+async def _render_metrics() -> Response:
+    await asyncio.to_thread(refresh_celery_queue_depth)
+    await asyncio.to_thread(refresh_celery_queue_heartbeats)
+    return Response(content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
+
+
 def setup_metrics(app: FastAPI) -> None:
     """Install the Prometheus ``/metrics`` endpoint on the given FastAPI app.
 
@@ -343,21 +432,16 @@ def setup_metrics(app: FastAPI) -> None:
                     status_code=401,
                     detail="Invalid metrics token",
                 )
-            return Response(
-                content=generate_latest(REGISTRY),
-                media_type=CONTENT_TYPE_LATEST,
-            )
+            return await _render_metrics()
     elif settings.ENVIRONMENT == "development":
         # No token configured — expose publicly only in development/local
         # environments. This is the fail-closed: outside development a
         # tokenless deploy never serves the unauthenticated endpoint.
-        instrumentator.expose(
-            app,
-            endpoint="/metrics",
-            include_in_schema=False,
-            tags=["monitoring"],
-            should_gzip=False,
-        )
+        # Same renderer as the authenticated branch (so scrape-time families
+        # such as the Celery queue depth are refreshed here too), unauthenticated.
+        @app.get("/metrics", include_in_schema=False, tags=["monitoring"])
+        async def metrics_endpoint_dev() -> Response:
+            return await _render_metrics()
     # If ENABLE_METRICS is True but no token is set and ENVIRONMENT is not
     # development, we fall through WITHOUT exposing /metrics at all (fail-closed,
     # ) — no unauthenticated telemetry leak in production/staging. An

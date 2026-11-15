@@ -27,6 +27,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   alerts,
+  controllers,
   dashboardSummary,
   devices,
   sites,
@@ -165,5 +166,37 @@ describe('the demo is populated enough to be worth visiting', () => {
     const mod = await import('../fixtures');
     const populated = Object.values(mod).filter((v) => Array.isArray(v) && v.length >= 5);
     expect(populated.length).toBeGreaterThanOrEqual(30);
+  });
+});
+
+describe('demo controllers match ControllerResponse', () => {
+  // The rows said status 'online' (not in the ControllerStatus enum) and had
+  // no port or sync fields, so the public demo's Controllers page showed every
+  // controller as "Neutral", hosts as "host:", "0 Connected / 0% online", and
+  // the detail page "host:undefined" with a sync interval of "undefineds".
+  const STATUSES = ['connected', 'disconnected', 'error', 'syncing', 'unknown', 'unreachable'];
+  const REQUIRED = [
+    'port',
+    'use_ssl',
+    'sync_enabled',
+    'sync_interval_seconds',
+    'last_sync',
+    'is_active',
+    'device_count',
+    'online_device_count',
+  ] as const;
+
+  it.each(controllers.map((c) => [c.name, c] as const))('%s uses the API status enum', (_name, c) => {
+    expect(STATUSES).toContain(c.status);
+  });
+
+  it.each(REQUIRED)('every controller has %s', (field) => {
+    for (const c of controllers) expect(c, c.name).toHaveProperty(field);
+  });
+
+  it('never reports more online devices than devices', () => {
+    for (const c of controllers) {
+      expect(c.online_device_count, c.name).toBeLessThanOrEqual(c.device_count);
+    }
   });
 });

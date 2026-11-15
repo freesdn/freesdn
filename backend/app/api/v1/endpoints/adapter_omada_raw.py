@@ -20,10 +20,14 @@ Layout::
           stage?: false  // future: route mutations through staging
         }
 
-Reads (method=GET) run live unconditionally. Writes — POST, PUT,
-PATCH, DELETE — refuse outright when ``settings.OMADA_READ_ONLY`` is
-True UNLESS the body has ``force=true`` (matching the rest of the
-gate). When read-only is off and force is True, the call goes through.
+READ-ONLY. Only ``method=GET`` is forwarded; every mutating method is
+refused, because a raw write would reach the controller without a staged
+change, a confirmation or the device slot. Make changes on the typed Omada
+pages, which stage them.
+
+Callers limited to some sites are refused: the path names an upstream Omada
+site id that cannot be mapped back to a FreeSDN site grant. Responses pass
+through ``redact_secrets`` before they are returned.
 
 This is a power-user endpoint, scoped to ``controller:write`` so
 ordinary users cannot probe arbitrary paths.
@@ -38,16 +42,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.dependencies import CurrentUser, require_permissions
+from app.core.redaction import redact_secrets
 from app.db.session import get_session
 from app.services.adapter_base import GatewayServiceBase
 
 router = APIRouter(prefix="/gateway-raw", tags=["gateway-raw"])
 
-
-# Methods that mutate state and must respect the read-only gate.
-_WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 # Path fragments that the typed wrappers intentionally route through
 # staging (admin / user / role mutation, backup ops, controller
@@ -71,45 +72,6 @@ _RAW_PATH_BLOCKLIST = (
 )
 
 
-# Path-segment verbs for CATASTROPHIC / irreversible device-or-controller ops.
-# The typed staging path classifies these features as catastrophic and forces
-# BOTH ``confirmed=true`` (enforce_omada_preflight) AND a minimum ``site_admin``
-# role (_required_apply_role) before apply. The raw escape hatch reaches the same
-# controller commands directly (e.g. ``/sites/{id}/cmd/devices/{mac}/forget``,
-# ``.../reboot``, ``.../upgrade``, ``/cmd/devices/batch/factoryReset``), so it
-# MUST apply the same second factor + role gate or it becomes a way to fire a
-# fleet wipe / firmware flash / unadopt with only ``controller:write`` and a
-# single ``force`` toggle. Matched as a trailing ``/``-delimited PATH SEGMENT
-# (case-insensitive) so we catch the real command verbs without false-matching
-# read paths like ``/firmware/upgradeLog`` or ``/setting/firmwareUpgradeSchedule``.
-_CATASTROPHIC_PATH_VERBS = frozenset(
-    {
-        "forget",  # unadopt — drops the device's controller-side config
-        "reboot",  # device reboot — network blip / outage risk
-        "upgrade",  # firmware flash — brick risk, not undoable
-        "factoryreset",  # wipe device(s) to factory defaults — irreversible
-    }
-)
-
-
-def _catastrophic_verb(canonical_path: str) -> str | None:
-    """Return the catastrophic command verb if the path's last (or
-    second-to-last, to cover ``.../{verb}/{trailing}``) segment is one.
-
-    Segment-anchored so ``/firmware/upgradeLog`` (segment ``upgradelog``) and
-    ``/setting/firmwareUpgradeSchedule`` do NOT match while the real command
-    paths (``.../cmd/devices/{mac}/upgrade``, ``.../batch/factoryReset``,
-    ``.../{mac}/reboot``, ``.../{mac}/forget``) do.
-    """
-    segments = [s for s in canonical_path.lower().split("/") if s]
-    # Inspect the last two segments so a trailing id (rare for these cmds) or a
-    # batch suffix doesn't hide the verb; the cmd verb is the last meaningful one.
-    for seg in segments[-2:]:
-        if seg in _CATASTROPHIC_PATH_VERBS:
-            return seg
-    return None
-
-
 class RawCallRequest(BaseModel):
     method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
     path: str = Field(
@@ -124,19 +86,11 @@ class RawCallRequest(BaseModel):
     body: dict[str, Any] | list[Any] | None = None
     force: bool = Field(
         default=False,
-        description=(
-            "Required for write methods (POST/PUT/PATCH/DELETE) when "
-            "OMADA_READ_ONLY is True. Default-safe."
-        ),
+        description="Ignored. Raw writes are refused; use the staged Omada pages.",
     )
     confirmed: bool = Field(
         default=False,
-        description=(
-            "Required IN ADDITION to force for catastrophic / irreversible "
-            "device commands (factory-reset, forget/unadopt, reboot, firmware "
-            "upgrade). Mirrors the confirmed=true second factor the typed "
-            "staging path enforces. Default-safe."
-        ),
+        description="Ignored. Raw writes are refused; use the staged Omada pages.",
     )
 
 
@@ -160,7 +114,7 @@ class _RawService(GatewayServiceBase):
     status_code=status.HTTP_200_OK,
     summary=(
         "Direct Omada v2 API passthrough. Use only when no typed "
-        "endpoint exists. Writes are gated by OMADA_READ_ONLY + force."
+        "endpoint exists. Read-only: only GET is forwarded."
     ),
 )
 async def raw_call(
@@ -169,12 +123,31 @@ async def raw_call(
     user: Annotated[CurrentUser, Depends(require_permissions("controller:write"))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
-    """Forward an arbitrary v2 call to the controller.
+    """Forward an arbitrary v2 GET to the controller, redacted.
 
-    Reads run live. Writes refuse unless ``OMADA_READ_ONLY=false`` AND
-    ``force=true`` — same dual-gate as ``apply_change``.
+    Writes are refused: they would bypass staging, confirmation and the
+    device slot. Site-limited callers are refused: the upstream site id in the
+    path cannot be checked against their FreeSDN site grants.
     """
     method_upper = body.method.upper()
+    if user.is_site_limited:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=(
+                "The raw Omada call is not available to users limited to some "
+                "sites: it cannot check the Omada site in the path against your "
+                "site access."
+            ),
+        )
+    if method_upper != "GET":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Raw Omada {method_upper} calls are disabled: a raw write would "
+                "skip staging. Make the change on the Omada pages, which stage it "
+                "for review before it is applied."
+            ),
+        )
 
     # Refuse paths that the typed wrappers intentionally route through
     # staging — admins, users, roles, backups, SSL/system mutation.
@@ -225,51 +198,7 @@ async def raw_call(
                 ),
             )
 
-    # Gate writes on the read-only flag
-    if method_upper in _WRITE_METHODS:
-        read_only = bool(
-            getattr(settings, "OMADA_READ_ONLY", True)
-            or getattr(settings, "ADAPTER_READ_ONLY", True)
-        )
-        if read_only and not body.force:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "OMADA_READ_ONLY is set — raw write refused. Pass "
-                    "force=true on the request body AND set "
-                    "OMADA_READ_ONLY=false on the server to override. "
-                    "Both safeties must be down."
-                ),
-            )
-
-        # Catastrophic device commands reached via the raw hatch (factory-reset,
-        # forget/unadopt, reboot, firmware upgrade) must satisfy the SAME second
-        # factor + role gate the typed staging path enforces — otherwise raw
-        # becomes a way to fire a fleet wipe / firmware flash with only
-        # controller:write and a single force toggle. site_admin role mirrors
-        # _required_apply_role; confirmed=true mirrors enforce_omada_preflight.
-        catastrophic_verb = _catastrophic_verb(canonical_path)
-        if catastrophic_verb is not None:
-            if not user.has_min_role("site_admin"):
-                raise HTTPException(
-                    status.HTTP_403_FORBIDDEN,
-                    detail=(
-                        f"raw {catastrophic_verb} is a catastrophic / "
-                        "irreversible device operation and requires minimum "
-                        "role site_admin"
-                    ),
-                )
-            if not body.confirmed:
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT,
-                    detail=(
-                        f"raw {catastrophic_verb} is catastrophic / irreversible; "
-                        "re-send with confirmed=true (in addition to force=true) "
-                        "to proceed"
-                    ),
-                )
-
-    # Audit-log every raw call (read or write). The escape hatch
+    # Audit-log every raw call. The escape hatch
     # bypasses the staging table, so the audit log is the only record
     # of what was called. Log BEFORE the controller fetch so the
     # access intent is recorded even if the call fails.
@@ -278,7 +207,7 @@ async def raw_call(
     audit = AuditService(db=session)
     try:
         await audit.log(
-            action=(AuditAction.READ if method_upper == "GET" else AuditAction.UPDATE),
+            action=AuditAction.READ,
             resource_type=ResourceType.CONTROLLER,
             resource_id=controller_id,
             organization_id=user.organization_id,
@@ -287,8 +216,6 @@ async def raw_call(
                 "method": method_upper,
                 "path": canonical_path,
                 "requested_path": body.path,
-                "force": body.force,
-                "confirmed": body.confirmed,
                 "source": "gateway-raw",
             },
         )
@@ -325,4 +252,4 @@ async def raw_call(
             detail=(f"controller rejected the call ({type(exc).__name__})"),
         ) from exc
 
-    return {"method": method_upper, "path": canonical_path, "response": response}
+    return {"method": method_upper, "path": canonical_path, "response": redact_secrets(response)}

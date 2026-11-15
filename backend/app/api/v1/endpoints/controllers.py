@@ -36,6 +36,7 @@ from app.core.dependencies import (
     is_unscoped_superuser,
     require_permissions,
 )
+from app.core.device_slot import controller_slot_key
 from app.core.site_access import assert_can_access_site, site_scope_filter
 from app.core.tenancy import tenant_filter
 from app.db import get_session
@@ -49,6 +50,8 @@ from app.schemas import (
     PaginatedResponse,
 )
 from app.schemas.core import _validate_site_mappings
+from app.services.device_live_read import take_device_turn
+from app.services.device_writes import controller_action, within, write_controller_config
 
 router = APIRouter()
 
@@ -336,6 +339,10 @@ async def _get_controller_and_adapter(
                     "granted site; an operator must map the controller's sites"
                 ),
             )
+    # A page's live read waits briefly for the controller's turn, or is answered
+    # with its last response (app/services/device_live_read.py). The callers
+    # connect only after this returns.
+    await take_device_turn(controller_slot_key(controller))
     return controller, adapter
 
 
@@ -1789,6 +1796,7 @@ async def get_controller_remote_sites(
     else:
         kwargs["mode"] = "local"
 
+    await take_device_turn(controller_slot_key(controller))
     try:
         adapter = adapter_registry.create_adapter(
             adapter_id=controller.type.lower(),
@@ -2188,8 +2196,15 @@ async def update_hotspot_config(
     _, adapter = await _get_controller_and_adapter(controller_id, session, current_user)
     _audit_config_write("hotspot.update", controller_id, current_user)
     try:
-        async with adapter:
-            result = await adapter.update_hotspot_config(config)
+        result = await write_controller_config(
+            session,
+            controller_id,
+            actor_id=current_user.id,
+            feature="controller.hotspot",
+            operation="update",
+            payload=dict(config),
+            perform=lambda: within(adapter, lambda: adapter.update_hotspot_config(config)),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return getattr(result, "value", result) or {"success": True}
@@ -2236,8 +2251,15 @@ async def update_captive_portal_config(
     _, adapter = await _get_controller_and_adapter(controller_id, session, current_user)
     _audit_config_write("captive_portal.update", controller_id, current_user)
     try:
-        async with adapter:
-            result = await adapter.update_captive_portal_config(config)
+        result = await write_controller_config(
+            session,
+            controller_id,
+            actor_id=current_user.id,
+            feature="controller.captive_portal",
+            operation="update",
+            payload=dict(config),
+            perform=lambda: within(adapter, lambda: adapter.update_captive_portal_config(config)),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return getattr(result, "value", result) or {"success": True}
@@ -2314,8 +2336,17 @@ async def create_vouchers(
     _, adapter = await _get_controller_and_adapter(controller_id, session, current_user)
     _audit_config_write("hotspot.vouchers.create", controller_id, current_user)
     try:
-        async with adapter:
-            result = await adapter.create_vouchers(data.model_dump(exclude_none=True))
+        result = await write_controller_config(
+            session,
+            controller_id,
+            actor_id=current_user.id,
+            feature="controller.hotspot.vouchers",
+            operation="create",
+            payload=data.model_dump(exclude_none=True),
+            perform=lambda: within(
+                adapter, lambda: adapter.create_vouchers(data.model_dump(exclude_none=True))
+            ),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return getattr(result, "value", result) or {"success": True}
@@ -2337,8 +2368,15 @@ async def delete_voucher(
     _, adapter = await _get_controller_and_adapter(controller_id, session, current_user)
     _audit_config_write("hotspot.vouchers.delete", controller_id, current_user)
     try:
-        async with adapter:
-            result = await adapter.delete_voucher(voucher_id)
+        result = await write_controller_config(
+            session,
+            controller_id,
+            actor_id=current_user.id,
+            feature="controller.hotspot.voucher",
+            operation="delete",
+            payload={"voucher_id": voucher_id},
+            perform=lambda: within(adapter, lambda: adapter.delete_voucher(voucher_id)),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return {"success": True}
@@ -2386,8 +2424,15 @@ async def update_dot1x_config(
     _, adapter = await _get_controller_and_adapter(controller_id, session, current_user)
     _audit_config_write("dot1x.update", controller_id, current_user)
     try:
-        async with adapter:
-            result = await adapter.update_dot1x_config(config)
+        result = await write_controller_config(
+            session,
+            controller_id,
+            actor_id=current_user.id,
+            feature="controller.dot1x",
+            operation="update",
+            payload=dict(config) if isinstance(config, dict) else {},
+            perform=lambda: within(adapter, lambda: adapter.update_dot1x_config(config)),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return getattr(result, "value", result) or {"success": True}
@@ -2472,8 +2517,15 @@ async def update_radius_servers(
     _audit_config_write("dot1x.radius.update", controller_id, current_user)
     try:
         payload = config.model_dump(exclude_none=True)
-        async with adapter:
-            result = await adapter.update_dot1x_config(payload)
+        result = await write_controller_config(
+            session,
+            controller_id,
+            actor_id=current_user.id,
+            feature="controller.dot1x.radius",
+            operation="update",
+            payload=dict(payload),
+            perform=lambda: within(adapter, lambda: adapter.update_dot1x_config(payload)),
+        )
         if not getattr(result, "success", True):
             logger.warning("RADIUS config update failed: %s", getattr(result, "message", "unknown"))
             raise HTTPException(502, detail="Failed to update RADIUS configuration")
@@ -2573,8 +2625,17 @@ async def update_site_radio_settings(
     _audit_config_write("wifi.radio_settings.update", controller_id, current_user)
     band = str(config.pop("band", "2g"))
     try:
-        async with adapter:
-            result = await adapter.update_site_radio_settings(band, config)
+        result = await write_controller_config(
+            session,
+            controller_id,
+            actor_id=current_user.id,
+            feature="controller.radio_settings",
+            operation="update",
+            payload={"band": band, **config},
+            perform=lambda: within(
+                adapter, lambda: adapter.update_site_radio_settings(band, config)
+            ),
+        )
         _raise_for_adapter_result(result, controller.type)
         return getattr(result, "value", result) or {"success": True}
     except HTTPException:
@@ -2684,8 +2745,14 @@ async def batch_reboot(
     )
     _, adapter = await _get_controller_and_adapter(controller_id, session, current_user)
     try:
-        async with adapter:
-            result = await adapter.batch_reboot(data.device_macs)
+        result = await controller_action(
+            session,
+            controller_id,
+            actor_id=current_user.id,
+            action="batch_reboot",
+            parameters={"device_macs": data.device_macs},
+            perform=lambda: within(adapter, lambda: adapter.batch_reboot(data.device_macs)),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return getattr(result, "value", result) or {
@@ -2732,8 +2799,17 @@ async def batch_firmware_upgrade(
     )
     _, adapter = await _get_controller_and_adapter(controller_id, session, current_user)
     try:
-        async with adapter:
-            result = await adapter.batch_firmware_upgrade(data.device_macs)
+        result = await write_controller_config(
+            session,
+            controller_id,
+            actor_id=current_user.id,
+            feature="controller.firmware_upgrade.batch",
+            operation="update",
+            payload={"device_macs": data.device_macs},
+            perform=lambda: within(
+                adapter, lambda: adapter.batch_firmware_upgrade(data.device_macs)
+            ),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return getattr(result, "value", result) or {
@@ -2914,8 +2990,14 @@ async def create_controller_backup(
     _, adapter = await _get_controller_and_adapter(controller_id, session, current_user)
     _audit_config_write("backup.create", controller_id, current_user)
     try:
-        async with adapter:
-            result = await adapter.create_controller_backup()
+        result = await controller_action(
+            session,
+            controller_id,
+            actor_id=current_user.id,
+            action="create_controller_backup",
+            parameters={},
+            perform=lambda: within(adapter, lambda: adapter.create_controller_backup()),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return getattr(result, "value", result) or {"success": True}

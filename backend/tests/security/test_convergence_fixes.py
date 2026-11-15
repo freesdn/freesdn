@@ -110,6 +110,7 @@ async def test_push_vlan_synced_on_nonthrowing_success(monkeypatch):
         net, "_get_adapter_for_controller", AsyncMock(return_value=_FakeAdapter(ok=True))
     )
 
+    _no_chokepoint(monkeypatch, net)
     out = await net._push_vlan_to_controller(session, netobj, "update")
     assert out["controller_synced"] is True
 
@@ -209,6 +210,7 @@ async def test_block_client_raises_on_nonthrowing_adapter_fail(monkeypatch):
 
     from app.adapters.exceptions import AdapterError
 
+    _no_chokepoint(monkeypatch, net)
     with pytest.raises(AdapterError):  # raise_for_adapter_result → AdapterError → 502
         await net.block_client("c1", session=session, _user=_user(role="org_admin"))
     session.commit.assert_not_awaited()  # no false "blocked" state
@@ -621,7 +623,12 @@ def test_pbx_adapter_read_only_gate_resolves_live_flag(monkeypatch, modpath, cls
     monkeypatch.setattr(rf, "is_adapter_read_only", lambda: True)
     with pytest.raises(exc):
         adapter._check_write_allowed(force=False, op="write")
-    adapter._check_write_allowed(force=True, op="write")  # force overrides
+    with pytest.raises(exc):  # 26.12.0: force alone no longer lifts read-only
+        adapter._check_write_allowed(force=True, op="write")
+    from app.adapters.apply_context import apply_window
+
+    with apply_window():  # an approved staged apply still gets through
+        adapter._check_write_allowed(force=True, op="write")
 
     monkeypatch.setattr(rf, "is_adapter_read_only", lambda: False)
     adapter._check_write_allowed(force=False, op="write")  # live OFF → allowed
@@ -1240,3 +1247,21 @@ async def test_actions_reboot_requires_confirm():
             confirm=False,
         )
     assert exc.value.status_code == 400
+
+
+async def _straight_through(_db, **kwargs):
+    """Stand-in for the staging chokepoint, which needs a real session.
+
+    These tests are about how the endpoint reads the adapter's answer; the
+    chokepoint (read-only refusal, the ledger row) is covered by
+    tests/api/test_direct_writes_are_staged.py.
+    """
+    return await kwargs["perform"]()
+
+
+def _no_chokepoint(monkeypatch, module):
+    from unittest.mock import AsyncMock as _AsyncMock
+    from uuid import uuid4 as _uuid4
+
+    monkeypatch.setattr(module, "write_through_staging", _straight_through)
+    monkeypatch.setattr(module, "controller_scope", _AsyncMock(return_value=(_uuid4(), _uuid4())))

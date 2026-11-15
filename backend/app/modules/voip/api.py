@@ -67,6 +67,7 @@ from app.modules.voip.schemas import (
 from app.modules.voip.service import (
     CrossTenantError,
     DiscoveryScanNotFoundError,
+    DuplicatePhoneMACError,
     PBXNotFoundError,
     PhoneNotFoundError,
     VoicemailNotFoundError,
@@ -422,6 +423,8 @@ async def create_phone(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Referenced site, PBX, extension, or template not found",
         )
+    except DuplicatePhoneMACError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
     from app.services.device_sync import trigger_device_registry_sync
 
     trigger_device_registry_sync("voip")
@@ -448,6 +451,8 @@ async def update_phone(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Phone not found",
         )
+    except DuplicatePhoneMACError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
 
 
 @phones_router.delete("/{phone_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -783,7 +788,11 @@ async def provision_phone(
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
     """Generate and push provisioning config for a phone."""
-    from app.modules.voip.provisioning import ProvisioningError, ProvisioningService
+    from app.modules.voip.provisioning import (
+        ProvisioningError,
+        ProvisioningService,
+        SharedPhoneMACError,
+    )
 
     prov = ProvisioningService(session, organization_id=_org_id(current_user))
     outcome = "failed"
@@ -808,6 +817,9 @@ async def provision_phone(
         else:
             result["rebooted"] = False
         return result
+    except SharedPhoneMACError as exc:
+        # Names the other phone so the operator knows which row to delete.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from None
     except ProvisioningError as exc:
         logger.error("Phone provisioning failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=400, detail="Provisioning failed")
@@ -1021,6 +1033,7 @@ async def trigger_discovery_scan(
                 else None,
                 "triggered_by": str(current_user.id),
                 "has_credentials": data.credentials is not None,
+                "try_default_credentials": data.try_default_credentials,
             },
         }
     )
@@ -1036,7 +1049,9 @@ async def trigger_discovery_scan(
             "username": data.credentials.username,
             "password": encrypt_credential(data.credentials.password),
         }
-    run_discovery_scan_task.delay(str(scan.id), creds_dict)
+    run_discovery_scan_task.delay(
+        str(scan.id), creds_dict, try_default_credentials=data.try_default_credentials
+    )
 
     return {
         "scan_id": str(scan.id),
@@ -1513,10 +1528,12 @@ async def bulk_firmware_upgrade(
     current_user: Annotated[CurrentUser, Depends(require_min_role("site_admin"))],
     service: Annotated[VoIPService, Depends(get_voip_service)],
 ):
-    """Schedule bulk firmware upgrade for multiple phones.
+    """Record a firmware target (and optional time) for multiple phones.
 
-    Requires the ``site_admin`` role — firmware operations are
-    irreversible and brick-the-fleet risky.
+    This does not upgrade anything: nothing reads the stored target to push
+    firmware, so the response says so instead of reporting an upgrade as
+    scheduled. The target feeds firmware compliance. Requires the
+    ``site_admin`` role.
     """
     _set_org(service, current_user)
     result = await service.bulk_update_firmware(
@@ -1527,6 +1544,11 @@ async def bulk_firmware_upgrade(
     return {
         "operation": "bulk_firmware",
         **result,
+        "message": (
+            f"Firmware target {data.target_version} recorded for {result['succeeded']} "
+            "phone(s). FreeSDN does not push firmware to phones yet: upgrade them "
+            "from the phone or your provisioning server."
+        ),
     }
 
 

@@ -167,4 +167,8 @@ def test_metrics_setup_called_from_main() -> None:
 
         mock_instr.assert_called_once()
         mock_instance.instrument.assert_called_once_with(app)
-        mock_instance.expose.assert_called_once()
+        # /metrics is served by setup_metrics' own route in both the token and
+        # the development branch (one renderer, so scrape-time families such as
+        # the Celery queue depth are refreshed in each), not by expose().
+        mock_instance.expose.assert_not_called()
+        assert any(getattr(route, "path", None) == "/metrics" for route in app.routes)

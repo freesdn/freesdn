@@ -52,6 +52,8 @@ import { ErrorState } from '@/components/ui/empty-state';
 import { SearchBar } from '@/components/ui/search-bar';
 import { enterpriseApi, type ConfigTemplate } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const SCOPE_ICONS: Record<string, React.ElementType> = {
   organization: Building2,
@@ -63,6 +65,7 @@ const SCOPE_ICONS: Record<string, React.ElementType> = {
 export default function ConfigTemplatesPage() {
   const { t } = useTranslation('enterprise');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const scopeLabel = (scope?: string) =>
     scope ? t(`ConfigTemplatesPage.scopes.${scope}`, { defaultValue: scope }) : '';
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -129,9 +132,7 @@ export default function ConfigTemplatesPage() {
   // ``onError`` so a 4xx from the backend left the form closed and the
   // user assumed success. Surface the server detail via toast.
   const errToast = (title: string) => (err: unknown) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const detail = (err as any)?.response?.data?.detail
-      || (err instanceof Error ? err.message : t('ConfigTemplatesPage.errors.unknown'));
+    const detail = getApiErrorMessage(err, t('ConfigTemplatesPage.errors.unknown'));
     toast({ variant: 'destructive', title, description: String(detail) });
   };
 
@@ -258,13 +259,18 @@ export default function ConfigTemplatesPage() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-destructive"
-            onClick={() => {
-              // The bulk Delete confirms (line ~348) but the row-level
-              // trash icon was a single click = silent destroy. Mirror
-              // the bulk path so a misclick can't lose a template.
-              if (window.confirm(t('ConfigTemplatesPage.confirm.deleteOne', { name: row.name }))) {
-                deleteMutation.mutate(row.id);
-              }
+            onClick={async () => {
+              // The bulk Delete confirms but the row-level trash icon was a
+              // single click = silent destroy. Mirror the bulk path so a
+              // misclick can't lose a template.
+              const ok = await confirm({
+                title: t('ConfigTemplatesPage.confirm.deleteOne', { name: row.name }),
+                description: t('ConfigTemplatesPage.confirm.deleteOneDescription'),
+                items: [row.name],
+                confirmLabel: t('ConfigTemplatesPage.confirm.deleteOneAction'),
+                destructive: true,
+              });
+              if (ok) deleteMutation.mutate(row.id);
             }}
           >
             <Trash2 className="h-4 w-4" />
@@ -364,8 +370,16 @@ export default function ConfigTemplatesPage() {
             label: t('ConfigTemplatesPage.bulk.delete'),
             icon: Trash2,
             variant: 'destructive',
-            onClick: () => {
-              if (confirm(t('ConfigTemplatesPage.confirm.deleteMany', { count: selectedTemplates.length }))) {
+            onClick: async () => {
+              const ok = await confirm({
+                title: t('ConfigTemplatesPage.confirm.deleteMany', { count: selectedTemplates.length }),
+                description: t('ConfigTemplatesPage.confirm.deleteManyDescription'),
+                count: selectedTemplates.length,
+                items: selectedTemplates.map((tpl) => tpl.name),
+                confirmLabel: t('ConfigTemplatesPage.confirm.deleteManyAction'),
+                destructive: true,
+              });
+              if (ok) {
                 selectedTemplates.forEach((tpl) => deleteMutation.mutate(tpl.id));
                 setSelectedTemplates([]);
               }

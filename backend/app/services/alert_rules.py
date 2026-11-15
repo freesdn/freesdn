@@ -611,6 +611,106 @@ class AlertRuleService:
         (org-wide). An empty list yields ``IN ()`` → no rows (fail closed)."""
         return [site_col.in_(site_ids)] if site_ids is not None else []
 
+    # The metrics collector writes every five minutes. A window shorter than two
+    # collections can fall between them and see nothing.
+    _METRIC_WINDOW_FLOOR_SECONDS = 600
+
+    @staticmethod
+    def _compare(value: float, operator: str, threshold: Any) -> bool:
+        try:
+            limit = float(threshold)
+        except (TypeError, ValueError):
+            return False
+        return {
+            ">": value > limit,
+            ">=": value >= limit,
+            "<": value < limit,
+            "<=": value <= limit,
+            "==": value == limit,
+            "!=": value != limit,
+        }.get(operator, False)
+
+    async def _latest_metric_series(
+        self,
+        logdb_factory: Any,
+        rule: AlertRule,
+        metric: str,
+        scope_sites: list[Any] | None,
+    ) -> list[Any]:
+        """Latest value of every series of ``metric`` in the rule's org and scope."""
+        if not metric:
+            return []
+        from app.models.analytics import MetricDataPoint
+
+        window = max(rule.check_interval_seconds or 300, self._METRIC_WINDOW_FLOOR_SECONDS)
+        cutoff = datetime.now(UTC) - timedelta(seconds=window)
+        filters = [
+            MetricDataPoint.organization_id == rule.organization_id,
+            MetricDataPoint.metric_name == metric,
+            MetricDataPoint.time >= cutoff,
+            *self._site_in(scope_sites, MetricDataPoint.site_id),
+        ]
+        if getattr(rule, "scope", None) == "device" and rule.scope_ids:
+            device_ids = []
+            for raw in rule.scope_ids:
+                try:
+                    device_ids.append(UUID(str(raw)))
+                except (TypeError, ValueError):
+                    continue
+            filters.append(MetricDataPoint.device_id.in_(device_ids))
+        stmt = (
+            select(
+                MetricDataPoint.labels_hash,
+                MetricDataPoint.value,
+                MetricDataPoint.site_id,
+                MetricDataPoint.device_id,
+                MetricDataPoint.time,
+            )
+            .where(*filters)
+            .distinct(MetricDataPoint.labels_hash)
+            .order_by(MetricDataPoint.labels_hash, MetricDataPoint.time.desc())
+            .limit(1000)
+        )
+        try:
+            async with logdb_factory() as logdb:
+                return list((await logdb.execute(stmt)).all())
+        except Exception:
+            logger.warning("Threshold rule %s: metric read failed", rule.id, exc_info=True)
+            return []
+
+    async def _fire_for_series(
+        self,
+        rule: AlertRule,
+        metric: str,
+        operator: str,
+        threshold: Any,
+        series: list[Any],
+    ) -> list[Alert]:
+        fired: list[Alert] = []
+        for _labels_hash, value, site_id, device_id, at in series:
+            if not self._compare(float(value), operator, threshold):
+                continue
+            alert = await self._fire_alert(
+                rule,
+                {
+                    "site_id": site_id,
+                    "device_id": device_id,
+                    "metric": metric,
+                    "message": f"{metric} is {value:g} (threshold: {operator} {threshold})",
+                    "details": {
+                        "metric": metric,
+                        "value": value,
+                        "threshold": threshold,
+                        "operator": operator,
+                        "observed_at": at.isoformat() if at else None,
+                        "source": "analytics.metric_data",
+                    },
+                },
+            )
+            if alert:
+                fired.append(alert)
+        return fired
+
     async def evaluate_threshold_rule(
         self,
         rule: AlertRule,
@@ -627,9 +727,21 @@ class AlertRuleService:
             logger.debug("Skipping threshold rule %s: LogDB not configured", rule.id)
             return []
 
+        scope_sites = await self._resolve_scope_site_ids(rule)
+
+        # Metrics first. A threshold rule names a metric ("device.cpu_usage >
+        # 90"), and metrics live in analytics.metric_data. This used to look
+        # ONLY at EventRecord rows whose event_type LIKE-matched the metric
+        # name with its underscores stripped ("%device.cpuusage%"), which
+        # nothing publishes, so a CPU/memory/uptime/clients threshold could
+        # never fire. The EventRecord path below stays as the fallback for a
+        # name that is not a recorded metric.
+        series = await self._latest_metric_series(logdb_factory, rule, metric, scope_sites)
+        if series:
+            return await self._fire_for_series(rule, metric, operator, threshold, series)
+
         # Look for recent events that carry metric data
         cutoff = datetime.now(UTC) - timedelta(seconds=time_window)
-        scope_sites = await self._resolve_scope_site_ids(rule)
         stmt = select(EventRecord).where(
             EventRecord.organization_id == rule.organization_id,
             EventRecord.__table__.c.timestamp >= cutoff,

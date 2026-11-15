@@ -199,6 +199,28 @@ def generate_provisioning_signature(mac: str) -> str:
     return _hmac_for_mac(normalized)
 
 
+async def live_phones_with_mac(
+    session: AsyncSession,
+    mac: str,
+    *,
+    exclude_id: UUID | None = None,
+    limit: int = 5,
+) -> list[Any]:
+    """Live (not soft-deleted) phones whose stored MAC is ``mac``, org-agnostic.
+
+    ``mac`` is the canonical form (see :func:`normalize_mac`); MACs are stored
+    that way since migration 032. Phones it flagged as sharing a MAC can both
+    be live, so callers that expect one row must not use scalar_one_or_none().
+    """
+    from app.modules.voip.models import Phone
+
+    query = select(Phone).where(Phone.mac_address == mac, Phone.deleted_at.is_(None))
+    if exclude_id is not None:
+        query = query.where(Phone.id != exclude_id)
+    rows = await session.execute(query.order_by(Phone.created_at).limit(limit))
+    return list(rows.scalars().all())
+
+
 async def resolve_provisioning_request(
     request: Request,
     session: AsyncSession,
@@ -221,7 +243,6 @@ async def resolve_provisioning_request(
            valid HMAC ``sig`` must be present.
     """
     from app.models.core import Site
-    from app.modules.voip.models import Phone
 
     normalized = normalize_mac(mac_address)
     if not normalized:
@@ -229,13 +250,24 @@ async def resolve_provisioning_request(
 
     # ── Resolve phone by MAC. NO org filter here on purpose: the tenant
     # is whatever the device's site declares. ───────────────────────
+    from sqlalchemy.exc import MultipleResultsFound
+
+    from app.modules.voip.models import Phone
+
     phone_q = await session.execute(
         select(Phone).where(
             Phone.mac_address == normalized,
             Phone.deleted_at.is_(None),
         )
     )
-    phone = phone_q.scalar_one_or_none()
+    try:
+        phone = phone_q.scalar_one_or_none()
+    except MultipleResultsFound:
+        # Two live phones claim this MAC (flagged by migration 032). Serving
+        # either would hand one phone the other's credentials; refuse both
+        # until the operator deletes one.
+        logger.warning("Provisioning request for MAC %s refused: phones share it", normalized)
+        return None
     if not phone:
         return None
 

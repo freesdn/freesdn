@@ -11,7 +11,9 @@ URL layout::
     POST  /api/v1/unifi/{controller_id}/sites/{site}/wlans/{wlan_id}/enable
 
 Read paths strip the PSK and any RADIUS shared secret. Writes
-require ``site_admin`` and explicit ``force=true``.
+require ``site_admin`` and explicit ``force=true``, are refused while
+read-only mode is on, and are recorded in the staging ledger
+(``direct.unifi.wlans.*``) as they are made.
 """
 
 from __future__ import annotations
@@ -21,10 +23,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.unifi import UniFiAdapter
-from app.api.v1.deps import CurrentUser, require_min_role, require_permissions
+from app.api.v1.deps import CurrentUser, get_session, require_min_role, require_permissions
 from app.api.v1.endpoints.unifi_deps import get_adapter_for_controller
+from app.services.device_writes import controller_scope, write_through_staging
 
 router = APIRouter(prefix="/unifi", tags=["UniFi"])
 
@@ -124,14 +128,28 @@ async def update_wlan_password(
     body: Annotated[_WlanPasswordBody, Body()],
     user: Annotated[CurrentUser, Depends(require_min_role("site_admin"))],
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UniFiWlanWriteResponse:
     try:
-        detail = await adapter.update_wlan_password(
-            site,
-            wlan_id,
-            body.new_psk,
+        organization_id, site_id = await controller_scope(session, controller_id)
+        detail = await write_through_staging(
+            session,
+            organization_id=organization_id,
+            controller_id=controller_id,
+            site_id=site_id,
+            feature="unifi.wlans.password",
+            operation="update",
+            target_id=wlan_id,
+            # The ledger keeps that the PSK changed, never the PSK.
+            payload={"site": site, "wlan_id": wlan_id, "new_psk": body.new_psk},
+            perform=lambda: adapter.update_wlan_password(
+                site, wlan_id, body.new_psk, force=body.force
+            ),
             force=body.force,
+            actor_id=user.id,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     finally:
@@ -158,14 +176,25 @@ async def enable_wlan(
     body: Annotated[_WlanEnableBody, Body()],
     user: Annotated[CurrentUser, Depends(require_min_role("site_admin"))],
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UniFiWlanWriteResponse:
     try:
-        detail = await adapter.enable_wlan(
-            site,
-            wlan_id,
-            body.enabled,
+        organization_id, site_id = await controller_scope(session, controller_id)
+        detail = await write_through_staging(
+            session,
+            organization_id=organization_id,
+            controller_id=controller_id,
+            site_id=site_id,
+            feature="unifi.wlans.enable",
+            operation="update",
+            target_id=wlan_id,
+            payload={"site": site, "wlan_id": wlan_id, "enabled": body.enabled},
+            perform=lambda: adapter.enable_wlan(site, wlan_id, body.enabled, force=body.force),
             force=body.force,
+            actor_id=user.id,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     finally:

@@ -7,7 +7,7 @@
  * The full key is shown only once at creation time.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -17,8 +17,6 @@ import {
   Key,
   Plus,
   Trash2,
-  Copy,
-  Check,
   AlertTriangle,
   Clock,
   ShieldCheck,
@@ -27,6 +25,7 @@ import {
 import { api } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/ui/copy-button';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Dialog,
@@ -50,6 +49,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,12 +96,18 @@ function KeyCreatedDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation('settings');
-  const [copied, setCopied] = useState(false);
+  // The key is shown only once, so a failed copy must be impossible to miss:
+  // the message stays until a later copy works, and the key is selected so
+  // the operator can copy it by hand before closing the dialog.
+  const [copyFailed, setCopyFailed] = useState(false);
+  const keyInputRef = useRef<HTMLInputElement>(null);
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(apiKey.key);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyResult = (ok: boolean) => {
+    setCopyFailed(!ok);
+    if (!ok) {
+      keyInputRef.current?.focus();
+      keyInputRef.current?.select();
+    }
   };
 
   return (
@@ -125,17 +131,29 @@ function KeyCreatedDialog({
         </Alert>
 
         <div className="space-y-2">
-          <Label>{t('APIKeysTab.created.keyLabel')}</Label>
+          <Label htmlFor="api-key-created-value">{t('APIKeysTab.created.keyLabel')}</Label>
           <div className="flex gap-2">
             <Input
+              id="api-key-created-value"
+              ref={keyInputRef}
               value={apiKey.key}
               readOnly
               className="font-mono text-sm"
             />
-            <Button variant="outline" size="icon" onClick={handleCopy}>
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            </Button>
+            <CopyButton
+              value={apiKey.key}
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              aria-label={t('APIKeysTab.created.copyKey')}
+              onCopyResult={handleCopyResult}
+            />
           </div>
+          {copyFailed && (
+            <p role="alert" className="text-sm text-destructive">
+              {t('APIKeysTab.created.copyFailed')}
+            </p>
+          )}
         </div>
 
         <DialogFooter>
@@ -323,7 +341,7 @@ export function APIKeysTab() {
       toast({
         title: t('APIKeysTab.toast.revokeFailed.title'),
         description:
-          err?.response?.data?.detail || t('APIKeysTab.toast.revokeFailed.description'),
+          getApiErrorMessage(err, t('APIKeysTab.toast.revokeFailed.description')),
         variant: 'destructive',
       });
     },

@@ -48,6 +48,19 @@ class OmadaApiError(OmadaError):
     """Omada returned a non-success API response."""
 
 
+class OmadaInvalidRequestError(OmadaApiError):
+    """errorCode -1001 "Invalid request parameters.": the request shape was refused.
+
+    Raised for a read the controller wants in another form (for example a list
+    endpoint called without paging parameters), so endpoint fallbacks that catch
+    ``OmadaApiError`` move on to the next form. It never means the session expired.
+    """
+
+
+class OmadaUnsupportedEndpointError(OmadaApiError):
+    """This controller firmware does not serve the endpoint (-1600 or HTTP 404)."""
+
+
 class OmadaValidationError(ConfigurationError):
     """Omada rejected request validation."""
 

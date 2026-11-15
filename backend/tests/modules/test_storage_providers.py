@@ -218,7 +218,7 @@ def test_proxmox_reports_no_temperatures_rather_than_zero():
 
     class _Adapter:
         async def get_nodes(self):
-            return SimpleNamespace(data=[])
+            return SimpleNamespace(success=True, data=[])
 
         async def disconnect(self):
             return None
@@ -294,9 +294,7 @@ def test_each_appliance_names_its_vendor():
 
     from app.modules.storage import module as mod
 
-    assert '"vendor": ctrl.controller_type' in inspect.getsource(
-        mod._fabric_storage_health_handler
-    )
+    assert '"vendor": ctrl.controller_type' in inspect.getsource(mod._fabric_storage_health_handler)
 
 
 @pytest.mark.parametrize("vendor", sorted(STORAGE_PROVIDERS))
@@ -326,9 +324,7 @@ def test_no_storage_reader_hardcodes_a_vendor():
     from app.tasks import storage as task_mod
 
     readers = {
-        "storage.health (Fabric)": inspect.getsource(
-            fabric_mod._fabric_storage_health_handler
-        ),
+        "storage.health (Fabric)": inspect.getsource(fabric_mod._fabric_storage_health_handler),
         "storage.poll_health (Celery)": inspect.getsource(task_mod._poll_storage_health),
     }
 
@@ -376,3 +372,39 @@ def test_both_readers_summarise_through_the_same_function():
         inspect.getsource(task_mod._poll_storage_health),
     ):
         assert "summarize_health(" in src
+
+
+async def _read_proxmox(monkeypatch, nodes_result, storage_result=None):
+    import app.services.adapter_proxmox_vm as vm
+
+    class _Adapter:
+        async def get_nodes(self):
+            return nodes_result
+
+        async def get_storage(self, _node):
+            return storage_result
+
+        async def disconnect(self):
+            return None
+
+    async def _build(_controller):
+        return _Adapter()
+
+    monkeypatch.setattr(vm, "build_proxmox_adapter", _build)
+    monkeypatch.setitem(STORAGE_PROVIDERS, "proxmox", _ProxmoxProvider())
+    return await read_controller_storage(SimpleNamespace(id="x", controller_type="proxmox"))
+
+
+async def test_a_failed_proxmox_node_listing_is_unreachable_not_healthy(monkeypatch):
+    """The adapter returns AdapterResult.fail for timeouts and an open breaker;
+    reading that as "no nodes" summarised a dead cluster as healthy."""
+    failed = SimpleNamespace(success=False, data=None, error="timeout")
+    assert await _read_proxmox(monkeypatch, failed) is None
+
+
+async def test_a_node_whose_storage_cannot_be_read_is_unavailable_not_absent(monkeypatch):
+    nodes = SimpleNamespace(success=True, data=[{"node": "pve1"}])
+    failed = SimpleNamespace(success=False, data=None, error="timeout")
+    reading = await _read_proxmox(monkeypatch, nodes, failed)
+    assert [(pool.name, pool.status) for pool in reading.pools] == [("pve1/*", "UNAVAIL")]
+    assert summarize_health(reading.pools, reading.alerts, reading.disk_temps)["status"] != "ok"

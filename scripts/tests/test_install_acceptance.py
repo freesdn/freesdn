@@ -235,3 +235,55 @@ def test_incomplete_or_unhealthy_maintenance_refused(module, policy_state, mutat
         policy_state["settings"]["max_parallel_workers"] = "32"
     with pytest.raises(ValueError):
         module.logdb_policies_ready(policy_state)
+
+
+# PostgreSQL 18.7 + TimescaleDB < 2.32.1: every background job run is recorded
+# as Failed with one specific error although its work lands. The check accepts
+# exactly that, and nothing more.
+PORTAL = {"code": "24000", "message": 'cannot drop portal "" while it is being set up'}
+
+
+def _portal_failure(policy_state, *, errors=None, pg="180007", tsdb="2.30.2"):
+    policy_state["server_version_num"] = pg
+    policy_state["timescaledb_version"] = tsdb
+    job = policy_state["jobs"][0]
+    job.update(last_run_status="Failed", total_runs=9, total_successes=1, total_failures=8)
+    job["errors"] = [PORTAL] if errors is None else errors
+    return job
+
+
+def test_the_known_portal_defect_alone_does_not_fail_the_install(module, policy_state):
+    _portal_failure(policy_state)
+    assert module.logdb_policies_ready(policy_state) is True
+
+
+@pytest.mark.parametrize("case", [
+    "other-error", "mixed-errors", "no-errors", "older-postgres", "fixed-timescaledb",
+    "newer-timescaledb", "unknown-versions",
+])
+def test_anything_beyond_the_known_defect_still_fails(module, policy_state, case):
+    other = {"code": "XX000", "message": "could not drop chunk"}
+    if case == "other-error":
+        _portal_failure(policy_state, errors=[other])
+    elif case == "mixed-errors":
+        _portal_failure(policy_state, errors=[PORTAL, other])
+    elif case == "no-errors":
+        _portal_failure(policy_state, errors=[])
+    elif case == "older-postgres":
+        _portal_failure(policy_state, pg="180006")
+    elif case == "fixed-timescaledb":
+        _portal_failure(policy_state, tsdb="2.32.1")
+    elif case == "newer-timescaledb":
+        _portal_failure(policy_state, tsdb="2.33.0")
+    elif case == "unknown-versions":
+        job = _portal_failure(policy_state)
+        del policy_state["server_version_num"]
+        assert job["errors"] == [PORTAL]
+    with pytest.raises(ValueError, match="maintenance policy failed"):
+        module.logdb_policies_ready(policy_state)
+
+
+def test_a_defect_tolerated_job_must_still_have_run(module, policy_state):
+    job = _portal_failure(policy_state)
+    job["total_runs"] = 0
+    assert module.logdb_policies_ready(policy_state) is False

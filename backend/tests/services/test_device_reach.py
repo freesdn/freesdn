@@ -59,6 +59,7 @@ async def test_reach_uses_agent_when_preferred_and_connected():
     out = await device_reach.reach_device_http(
         uuid4(),
         "http://cam.lan/api",
+        allowed_hosts={"cam.lan"},
         registry=reg,
         prefer_agent=True,
         username="u",
@@ -74,7 +75,9 @@ async def test_reach_uses_agent_when_preferred_and_connected():
 async def test_reach_falls_to_direct_when_no_agent(monkeypatch):
     reg = _FakeRegistry(connected=False, proxy_result=None)
     monkeypatch.setattr(device_reach, "build_async_client", lambda **_k: _FakeClient())
-    out = await device_reach.reach_device_http(uuid4(), "http://x", registry=reg, prefer_agent=True)
+    out = await device_reach.reach_device_http(
+        uuid4(), "http://x", allowed_hosts={"x"}, registry=reg, prefer_agent=True
+    )
     assert out["via"] == "direct"
     assert out["status_code"] == 200
 
@@ -82,7 +85,7 @@ async def test_reach_falls_to_direct_when_no_agent(monkeypatch):
 @pytest.mark.asyncio
 async def test_reach_direct_by_default(monkeypatch):
     monkeypatch.setattr(device_reach, "build_async_client", lambda **_k: _FakeClient())
-    out = await device_reach.reach_device_http(uuid4(), "http://x")
+    out = await device_reach.reach_device_http(uuid4(), "http://x", allowed_hosts={"x"})
     assert out["via"] == "direct"
     assert out["body"] == "direct-body"
 
@@ -91,7 +94,9 @@ async def test_reach_direct_by_default(monkeypatch):
 async def test_reach_raises_when_agent_proxy_fails():
     reg = _FakeRegistry(connected=True, proxy_result=_FakeResult(False, error="boom"))
     with pytest.raises(device_reach.DeviceUnreachableError):
-        await device_reach.reach_device_http(uuid4(), "http://x", registry=reg, prefer_agent=True)
+        await device_reach.reach_device_http(
+            uuid4(), "http://x", allowed_hosts={"x"}, registry=reg, prefer_agent=True
+        )
 
 
 @pytest.mark.asyncio

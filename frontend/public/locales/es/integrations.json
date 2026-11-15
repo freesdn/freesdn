@@ -71,7 +71,14 @@
       "typeCountPlural": "{{n}} tipos"
     },
     "confirm": {
-      "delete": "¿Eliminar esta integración? Esto también elimina todo el historial de entregas."
+      "delete": "¿Eliminar esta integración? Esto también elimina todo el historial de entregas.",
+      "deleteTitle": "¿Eliminar la integración \"{{name}}\"?",
+      "deleteBody": "FreeSDN deja de enviarle eventos y se elimina todo su historial de entregas. Esta acción no se puede deshacer.",
+      "deleteAction": "Eliminar integración",
+      "bulkDeleteTitle_one": "¿Eliminar {{count}} integración?",
+      "bulkDeleteTitle_other": "¿Eliminar {{count}} integraciones?",
+      "bulkDeleteBody": "FreeSDN deja de enviarles eventos y se elimina todo su historial de entregas. Esta acción no se puede deshacer.",
+      "bulkDeleteAction": "Eliminar integraciones"
     },
     "toasts": {
       "createFailed": "No se pudo crear la integración",

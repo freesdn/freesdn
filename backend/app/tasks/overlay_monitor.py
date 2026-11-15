@@ -226,20 +226,33 @@ async def _poll_overlay_health() -> dict[str, Any]:
     reachable = True
     peers: list[dict[str, Any]] | None = None
 
+    # Resolve the organization and close the session before the daemon is
+    # asked anything: no database transaction waits on the overlay.
     async with CelerySessionLocal() as session:
         org_id = await _appliance_org_id(session)
-        if org_id is None:
-            return {"success": False, "reason": "no_organization"}
+    if org_id is None:
+        return {"success": False, "reason": "no_organization"}
 
+    from app.core.device_poll import device_poll
+    from app.core.device_slot import OVERLAY_SLOT_KEY
+
+    # The overlay daemon's turn, shared with the VPN page's discovery read: a
+    # cycle that finds it busy is skipped and the last snapshot stands.
+    async with device_poll(
+        slot_key=OVERLAY_SLOT_KEY, breaker=None, breaker_key=None, holder="overlay health"
+    ) as turn:
+        if turn.skipped:
+            logger.info("Overlay poll skipped: %s", turn.reason)
+            return {"success": True, "skipped": True, "reason": turn.reason}
         try:
             peers = await discover_overlay_devices()  # reuses the shipped read-op
         except Exception as exc:  # noqa: BLE001 — a bad daemon read must not crash the beat
             reachable = False
             logger.warning("Overlay poll unreachable: %s", exc)
 
-        prev = _state_get(org_id)
-        pending_events = _transitions(prev, peers, reachable, org_id)
-        _state_set(org_id, _snapshot(reachable, peers))
+    prev = _state_get(org_id)
+    pending_events = _transitions(prev, peers, reachable, org_id)
+    _state_set(org_id, _snapshot(reachable, peers))
 
     # Publish AFTER the snapshot is durably stored (steady state never re-fires).
     for ev in pending_events:

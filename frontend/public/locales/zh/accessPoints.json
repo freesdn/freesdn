@@ -26,7 +26,9 @@
     "status": {
       "online": "在线",
       "offline": "离线",
-      "adopting": "纳管中"
+      "adopting": "纳管中",
+      "degraded": "降级",
+      "provisioning": "配置中"
     },
     "header": {
       "title": "接入点",
@@ -54,7 +56,20 @@
       "clearFilters": "清除筛选",
       "loading": "正在加载接入点...",
       "emptyTitle": "未找到接入点",
-      "emptyDescription": "运行发现以查找网络中的接入点。"
+      "emptyDescription": "运行发现以查找网络中的接入点。",
+      "itemName": "接入点",
+      "actionsFor": "{{name}} 的操作",
+      "columns": {
+        "name": "名称",
+        "status": "状态",
+        "ip": "IP 地址",
+        "mac": "MAC 地址",
+        "site": "站点",
+        "radios": "射频",
+        "clients": "客户端",
+        "uptime": "运行时间",
+        "actions": "操作"
+      }
     },
     "card": {
       "clients": "客户端",

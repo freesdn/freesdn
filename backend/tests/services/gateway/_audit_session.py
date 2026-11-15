@@ -101,6 +101,12 @@ def make_audit_session(controller_type):
             assert statement._for_update_arg is not None
             assert statement.compile().params == {"id_1": 1}
             return SimpleNamespace(first=lambda: session.audit_raw_state)
+        if [d["entity"] for d in descriptions] == [Controller, Controller] and [
+            d["name"] for d in descriptions
+        ] == ["host", "config"]:
+            # apply_change names the device's slot from its controller
+            # (app/core/device_slot.py); no row here, so no slot is taken.
+            return SimpleNamespace(first=lambda: None)
         if len(descriptions) != 1:
             raise AssertionError("Unexpected gateway fixture SQL projection")
         column = descriptions[0]

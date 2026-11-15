@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.organization_access import organization_admits, organization_state_admits
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -289,8 +290,9 @@ class AuthService:
                 pass
             raise InvalidCredentialsError()
 
-        # Check if account is active (same pattern as locked branch).
-        if not user.is_active:
+        # Check if account is active (same pattern as locked branch). A member
+        # of a deleted or deactivated organization is refused the same way.
+        if not user.is_active or not organization_state_admits(user, user.organization):
             logger.warning(
                 "Login attempt on disabled account",
                 extra={"user_id": str(user.id)},
@@ -493,7 +495,7 @@ class AuthService:
         )
         user = result.scalar_one_or_none()
 
-        if not user:
+        if not user or not await organization_admits(self.db, user):
             raise TokenInvalidError()
 
         current_tv = getattr(user, "token_version", 0) or 0

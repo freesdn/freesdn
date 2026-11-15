@@ -81,6 +81,7 @@ import {
 import { poeApi, getApiErrorMessage } from '@/lib/api';
 import { useToastHelpers } from '@/components/ui/toast';
 import { useDeviceCapabilities } from '@/hooks/useDeviceCapabilities';
+import { useConfirm } from '@/hooks';
 
 // Types
 interface PoEPort {
@@ -162,6 +163,7 @@ const getModeLabel = (t: TFunc, mode: string) => {
 export default function PoEPage() {
   const { t } = useTranslation('poe');
   const toast = useToastHelpers();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
@@ -449,7 +451,14 @@ export default function PoEPage() {
   };
 
   const handleScheduleDelete = async (schedule: PoEScheduleDetail) => {
-    if (!window.confirm(t('PoEPage.schedules.menu.delete') + ': ' + schedule.name)) return;
+    const ok = await confirm({
+      title: t('PoEPage.schedules.confirmDelete.title', { name: schedule.name }),
+      description: t('PoEPage.schedules.confirmDelete.body'),
+      items: [schedule.name],
+      confirmLabel: t('PoEPage.schedules.confirmDelete.action'),
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await poeApi.deleteSchedule(schedule.id);
       queryClient.invalidateQueries({ queryKey: ['poe-schedules'] });

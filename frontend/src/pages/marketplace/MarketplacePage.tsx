@@ -27,6 +27,7 @@ import {
 import { api, getApiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { PageHeader } from '@/components/layout';
+import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -394,6 +395,7 @@ export default function MarketplacePage() {
       <PageHeader
         icon={Package}
         title={t('MarketplacePage.header.title')}
+        titleBadge={<CapabilityMaturityBadge capabilityId="plugins" />}
         subtitle={t('MarketplacePage.header.subtitle')}
         actions={
           isSuperuser ? (

@@ -23,10 +23,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.unifi import UniFiAdapter
-from app.api.v1.deps import CurrentUser, require_min_role, require_permissions
+from app.api.v1.deps import CurrentUser, get_session, require_min_role, require_permissions
 from app.api.v1.endpoints.unifi_deps import get_adapter_for_controller
+from app.services.device_writes import controller_scope, write_through_staging
 
 router = APIRouter(prefix="/unifi", tags=["UniFi"])
 
@@ -117,9 +119,25 @@ async def block_client(
     body: Annotated[_ClientForceBody, Body()],
     user: Annotated[CurrentUser, Depends(require_min_role("site_admin"))],
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UniFiClientWriteResponse:
     try:
-        detail = await adapter.block_client_on_site(site, mac, force=body.force)
+        organization_id, site_id = await controller_scope(session, controller_id)
+        detail = await write_through_staging(
+            session,
+            organization_id=organization_id,
+            controller_id=controller_id,
+            site_id=site_id,
+            feature="unifi.clients.block",
+            operation="update",
+            target_id=mac,
+            payload={"site": site, "mac": mac},
+            perform=lambda: adapter.block_client_on_site(site, mac, force=body.force),
+            force=body.force,
+            actor_id=user.id,
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     finally:
@@ -144,9 +162,25 @@ async def unblock_client(
     body: Annotated[_ClientForceBody, Body()],
     user: Annotated[CurrentUser, Depends(require_min_role("site_admin"))],
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UniFiClientWriteResponse:
     try:
-        detail = await adapter.unblock_client_on_site(site, mac, force=body.force)
+        organization_id, site_id = await controller_scope(session, controller_id)
+        detail = await write_through_staging(
+            session,
+            organization_id=organization_id,
+            controller_id=controller_id,
+            site_id=site_id,
+            feature="unifi.clients.unblock",
+            operation="update",
+            target_id=mac,
+            payload={"site": site, "mac": mac},
+            perform=lambda: adapter.unblock_client_on_site(site, mac, force=body.force),
+            force=body.force,
+            actor_id=user.id,
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     finally:
@@ -171,9 +205,25 @@ async def forget_client(
     body: Annotated[_ClientForceBody, Body()],
     user: Annotated[CurrentUser, Depends(require_min_role("site_admin"))],
     adapter: Annotated[UniFiAdapter, Depends(get_adapter_for_controller)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UniFiClientWriteResponse:
     try:
-        detail = await adapter.forget_client(site, mac, force=body.force)
+        organization_id, site_id = await controller_scope(session, controller_id)
+        detail = await write_through_staging(
+            session,
+            organization_id=organization_id,
+            controller_id=controller_id,
+            site_id=site_id,
+            feature="unifi.clients.forget",
+            operation="delete",
+            target_id=mac,
+            payload={"site": site, "mac": mac},
+            perform=lambda: adapter.forget_client(site, mac, force=body.force),
+            force=body.force,
+            actor_id=user.id,
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(400, detail=str(exc)) from exc
     finally:

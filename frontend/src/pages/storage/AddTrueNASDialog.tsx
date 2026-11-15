@@ -10,7 +10,9 @@
  * adapter connects over TLS only, the operator just supplies host + key.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { HardDrive, Eye, EyeOff, XCircle, CheckCircle, TestTube, Loader2, Info } from 'lucide-react';
 import { z } from 'zod';
@@ -21,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { controllersApi, sitePickerQuery } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface AddTrueNASDialogProps {
   open: boolean;
@@ -34,18 +37,19 @@ interface TestResult {
   details?: { latency_ms?: number; controller_version?: string };
 }
 
-const schema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  site_id: z.string().min(1, 'Site is required'),
-  host: z.string().min(1, 'Host is required'),
-  port: z.coerce.number().int().min(1).max(65535),
-  verify_ssl: z.boolean(),
-  sync_enabled: z.boolean(),
-  sync_interval_seconds: z.coerce.number().int().positive(),
-  username: z.string().min(1, 'Username is required'),
-  api_key: z.string().min(1, 'API key is required'),
-});
-type TrueNASFormValues = z.infer<typeof schema>;
+const buildSchema = (t: TFunction) =>
+  z.object({
+    name: z.string().min(1, t('addDialog.validation.name')),
+    site_id: z.string().min(1, t('addDialog.validation.site')),
+    host: z.string().min(1, t('addDialog.validation.host')),
+    port: z.coerce.number().int().min(1).max(65535),
+    verify_ssl: z.boolean(),
+    sync_enabled: z.boolean(),
+    sync_interval_seconds: z.coerce.number().int().positive(),
+    username: z.string().min(1, t('addDialog.validation.username')),
+    api_key: z.string().min(1, t('addDialog.validation.apiKey')),
+  });
+type TrueNASFormValues = z.infer<ReturnType<typeof buildSchema>>;
 
 const defaultValues: TrueNASFormValues = {
   name: '',
@@ -60,6 +64,8 @@ const defaultValues: TrueNASFormValues = {
 };
 
 export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) {
+  const { t } = useTranslation('storage');
+  const schema = useMemo(() => buildSchema(t), [t]);
   const queryClient = useQueryClient();
   const [showKey, setShowKey] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
@@ -111,11 +117,11 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
     <FormDialog<TrueNASFormValues>
       open={open}
       onOpenChange={handleOpenChange}
-      title="Add TrueNAS Storage"
-      description="Connect a TrueNAS appliance (SCALE / CORE) read-only to surface pool health, capacity, and disks."
+      title={t('addDialog.title')}
+      description={t('addDialog.description')}
       schema={schema}
       defaultValues={defaultValues}
-      submitLabel="Add Appliance"
+      submitLabel={t('addDialog.submit')}
       contentClassName="sm:max-w-[520px] max-h-[85vh] overflow-y-auto"
       onSubmit={async (values) => {
         await createMutation.mutateAsync(values);
@@ -125,7 +131,7 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
         const handleTestConnection = async () => {
           const v = form.getValues();
           if (!v.host?.trim() || !v.username?.trim() || !v.api_key) {
-            setTestResult({ success: false, message: 'Host, username and API key are required to test' });
+            setTestResult({ success: false, message: t('addDialog.testNeedsFields') });
             return;
           }
           setIsTesting(true);
@@ -142,11 +148,7 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
             });
             setTestResult(res.data);
           } catch (err: unknown) {
-            const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-            const detail =
-              axiosErr.response?.data?.detail ||
-              (err as { message?: string }).message ||
-              'Connection test failed';
+            const detail = getApiErrorMessage(err, t('addDialog.testFailed'));
             setTestResult({ success: false, message: detail, error: detail });
           } finally {
             setIsTesting(false);
@@ -162,7 +164,7 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
           <>
             <div className="flex items-center gap-2 text-sm font-medium pb-2 -mt-2">
               <HardDrive className="h-5 w-5" />
-              <span>TrueNAS Storage</span>
+              <span>{t('addDialog.heading')}</span>
             </div>
 
             {/* Name */}
@@ -171,9 +173,9 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>{t('addDialog.name')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. S4 (Backup NAS)" {...field} />
+                    <Input placeholder={t('addDialog.namePlaceholder')} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -186,11 +188,11 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
               name="site_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Site</FormLabel>
+                  <FormLabel>{t('addDialog.site')}</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a site" />
+                        <SelectValue placeholder={t('addDialog.sitePlaceholder')} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -212,9 +214,9 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
                   name="host"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Host</FormLabel>
+                      <FormLabel>{t('addDialog.host')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="truenas.lan or 100.x.y.z" {...field} />
+                        <Input placeholder={t('addDialog.hostPlaceholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -226,7 +228,7 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
                 name="port"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Port</FormLabel>
+                    <FormLabel>{t('addDialog.port')}</FormLabel>
                     <FormControl>
                       <Input type="number" min={1} max={65535} {...field} />
                     </FormControl>
@@ -242,13 +244,12 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
               name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>API Key Owner</FormLabel>
+                  <FormLabel>{t('addDialog.keyOwner')}</FormLabel>
                   <FormControl>
                     <Input placeholder="truenas_admin" {...field} />
                   </FormControl>
                   <FormDescription>
-                    The login-enabled account the API key belongs to. On TrueNAS 25.x the{' '}
-                    <code>root</code> account is disabled by default, use <code>truenas_admin</code>.
+                    <Trans i18nKey="addDialog.keyOwnerHelp" t={t} components={{ code: <code /> }} />
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -261,12 +262,12 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
               name="api_key"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>API Key</FormLabel>
+                  <FormLabel>{t('addDialog.apiKey')}</FormLabel>
                   <div className="relative">
                     <FormControl>
                       <Input
                         type={showKey ? 'text' : 'password'}
-                        placeholder="3-…  (Credentials → API Keys)"
+                        placeholder={t('addDialog.apiKeyPlaceholder')}
                         autoComplete="off"
                         {...field}
                       />
@@ -275,15 +276,13 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
                       type="button"
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
                       onClick={() => setShowKey((s) => !s)}
-                      tabIndex={-1}
+                      aria-label={showKey ? t('addDialog.hideKey') : t('addDialog.showKey')}
+                      aria-pressed={showKey}
                     >
                       {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  <FormDescription>
-                    Read-only is recommended. The connection always uses TLS, TrueNAS revokes any
-                    key seen over a plaintext connection.
-                  </FormDescription>
+                  <FormDescription>{t('addDialog.apiKeyHelp')}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -296,8 +295,8 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
               render={({ field }) => (
                 <FormItem className="flex items-center justify-between rounded-md border p-3">
                   <div className="space-y-0.5">
-                    <FormLabel>Verify TLS certificate</FormLabel>
-                    <FormDescription>Leave off for the default self-signed appliance cert.</FormDescription>
+                    <FormLabel>{t('addDialog.verifyTls')}</FormLabel>
+                    <FormDescription>{t('addDialog.verifyTlsHelp')}</FormDescription>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -316,17 +315,17 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
                 disabled={testDisabled}
               >
                 {isTesting ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Testing…</>
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> {t('addDialog.testing')}</>
                 ) : (
-                  <><TestTube className="h-4 w-4 mr-2" /> Test Connection</>
+                  <><TestTube className="h-4 w-4 mr-2" /> {t('addDialog.test')}</>
                 )}
               </Button>
               {testResult && (
                 <div
                   className={`flex items-start gap-2 rounded-md border p-3 text-sm ${
                     testResult.success
-                      ? 'border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300'
-                      : 'border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300'
+                      ? 'border-success/40 bg-success/10 text-success'
+                      : 'border-destructive/40 bg-destructive/10 text-destructive'
                   }`}
                 >
                   {testResult.success ? (
@@ -336,7 +335,7 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
                   )}
                   <div className="min-w-0">
                     <div className="font-medium">
-                      {testResult.success ? 'Connection OK' : 'Connection failed'}
+                      {testResult.success ? t('addDialog.testOk') : t('addDialog.testFailed')}
                       {testResult.details?.controller_version
                         ? ` · ${testResult.details.controller_version}`
                         : ''}
@@ -351,10 +350,7 @@ export function AddTrueNASDialog({ open, onOpenChange }: AddTrueNASDialogProps) 
 
             <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
               <Info className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>
-                Read-only: FreeSDN never writes to the appliance. It surfaces ZFS pool health,
-                capacity, disks and datasets in one pane.
-              </span>
+              <span>{t('addDialog.writesNote')}</span>
             </div>
           </>
         );

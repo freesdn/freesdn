@@ -15,9 +15,11 @@ WORKDIR /app
 # ============================================
 FROM base AS development
 
-# Install dependencies (.npmrc carries legacy-peer-deps=true - see that file)
+# Install the LOCKED dependency set (.npmrc carries legacy-peer-deps=true - see
+# that file). `npm install` could re-resolve ranges at build time and pull a
+# release no review or 72-hour hold had seen; `npm ci` installs the lock or fails.
 COPY package.json package-lock.json* .npmrc* ./
-RUN npm install --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 
 # Copy source code
 COPY . .

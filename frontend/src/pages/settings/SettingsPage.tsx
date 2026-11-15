@@ -37,7 +37,6 @@ import {
   Cpu,
   Info,
   ShieldCheck,
-  Eye,
   type LucideIcon,
 } from 'lucide-react';
 import { ModulesSettingsTab } from './ModulesSettingsTab';
@@ -45,6 +44,7 @@ import { NotificationsSettingsTab } from './NotificationsSettingsTab';
 import { AboutSettingsTab } from './AboutSettingsTab';
 import { APIKeysTab } from './APIKeysTab';
 import { OAuth2AppsTab } from './OAuth2AppsTab';
+import { AccessSettingsTab } from './AccessSettingsTab';
 // PluginsPage moved to top-level /plugins route
 import AISettingsPage from './AISettingsPage';
 import SSOSettingsPage from './SSOSettingsPage';
@@ -61,8 +61,7 @@ import { PageHeader } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUIStore, ACCENT_PRESETS } from '@/stores';
 import { useToast } from '@/hooks/use-toast';
-import { useToastHelpers } from '@/components/ui/toast';
-import { api, systemApi, getApiErrorMessage } from '@/lib/api';
+import { api } from '@/lib/api';
 import { UserProfile } from '@/components/auth';
 
 // ---------------------------------------------------------------------------
@@ -459,96 +458,6 @@ function AppearanceSettingsTab() {
         <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
         <span>{t('SettingsPage.appearance.autoSaveNote')}</span>
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Access Settings Tab · adapter read-only / write mode
-// ---------------------------------------------------------------------------
-function AccessSettingsTab() {
-  const { t } = useTranslation('settings');
-  const toast = useToastHelpers();
-  const readOnlyMode = useUIStore((state) => state.readOnlyMode);
-  const setReadOnlyMode = useUIStore((state) => state.setReadOnlyMode);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleToggle = async (nextReadOnly: boolean) => {
-    setIsSaving(true);
-    try {
-      const res = await systemApi.setAdapterReadOnly(nextReadOnly);
-      const applied = res.data.read_only;
-      setReadOnlyMode(applied);
-      if (applied) {
-        toast.success(
-          t('SettingsPage.access.toast.readOnlyTitle', 'Read-only mode enabled'),
-          t('SettingsPage.access.toast.readOnlyDesc', 'Device writes are now disabled platform-wide.'),
-        );
-      } else {
-        toast.success(
-          t('SettingsPage.access.toast.writeTitle', 'Write access enabled'),
-          t('SettingsPage.access.toast.writeDesc', 'Devices can now be managed and configured.'),
-        );
-      }
-    } catch (err) {
-      toast.error(
-        t('SettingsPage.access.toast.errorTitle', 'Failed to update mode'),
-        getApiErrorMessage(err, t('messages.saveFailed')),
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <SettingSection
-        title={t('SettingsPage.access.title', 'Read-only / Write access')}
-        description={t(
-          'SettingsPage.access.description',
-          'Control whether FreeSDN can write to your devices. Read-only mode is the safe, monitor-only posture, all device writes are refused platform-wide.',
-        )}
-      >
-        <SettingRow
-          label={
-            readOnlyMode
-              ? t('SettingsPage.access.row.labelReadOnly', 'Read-only mode (monitor only)')
-              : t('SettingsPage.access.row.labelWrite', 'Read-write mode (manage)')
-          }
-          description={
-            readOnlyMode
-              ? t('SettingsPage.access.row.descReadOnly', 'Device writes are disabled. Turn this off to manage and configure devices.')
-              : t('SettingsPage.access.row.descWrite', 'Device writes are enabled. Turn this on to lock the platform to monitor-only.')
-          }
-        >
-          <Switch
-            checked={readOnlyMode}
-            onCheckedChange={handleToggle}
-            disabled={isSaving}
-            aria-label={t('SettingsPage.access.row.toggleAria', 'Toggle read-only mode')}
-          />
-        </SettingRow>
-
-        <div
-          className={cn(
-            'flex items-start gap-3 rounded-lg border p-4 text-sm',
-            readOnlyMode
-              ? 'border-warning/30 bg-warning/10 text-warning'
-              : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-          )}
-        >
-          {readOnlyMode ? (
-            <Eye className="mt-0.5 h-4 w-4 shrink-0" />
-          ) : (
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-          )}
-          <span>
-            {readOnlyMode
-              ? t('SettingsPage.access.status.readOnly', 'Read-only mode is ON. FreeSDN will not write to any device.')
-              : t('SettingsPage.access.status.write', 'Write access is ON. FreeSDN can apply changes to managed devices.')}
-          </span>
-        </div>
-      </SettingSection>
     </div>
   );
 }

@@ -236,7 +236,10 @@
       "runScan": "Run Scan",
       "disconnect": "Disconnect",
       "disconnectConfirm": "Are you sure you want to remove this agent?",
-      "menuLabel": "Actions for {{name}}"
+      "menuLabel": "Actions for {{name}}",
+      "disconnectTitle": "Remove agent \"{{name}}\"?",
+      "disconnectBody": "Its key stops working, so it can no longer connect, and its heartbeat history is deleted. FreeSDN also revokes any WireGuard VPN configuration for its site. Discoveries and runs are kept.",
+      "disconnectAction": "Remove agent"
     },
     "stats": {
       "total": {
@@ -312,7 +315,12 @@
         "confirm": "Delete {{count}} agent(s)? This soft-deletes the registration; existing discoveries and runs are preserved.",
         "result": "{{ok}} deleted",
         "resultWithFailures": "{{ok}} deleted, {{fail}} failed",
-        "toastTitle": "Bulk delete done"
+        "toastTitle": "Bulk delete done",
+        "confirmTitle_one": "Delete {{count}} agent?",
+        "confirmTitle_other": "Delete {{count}} agents?",
+        "confirmBody": "Each agent's key stops working and its heartbeat history is deleted. FreeSDN also revokes any WireGuard VPN configuration for their sites. Discoveries and runs are kept.",
+        "confirmAction_one": "Delete agent",
+        "confirmAction_other": "Delete agents"
       }
     },
     "register": {
@@ -346,7 +354,8 @@
         "name": "Agent name is required",
         "siteRequired": "Select a site",
         "nameRequired": "Agent name is required"
-      }
+      },
+      "copyField": "Copy {{label}}"
     },
     "pageHeader": {
       "title": "Remote Agents",

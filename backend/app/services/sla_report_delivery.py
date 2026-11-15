@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.dependencies import CurrentUser, _load_user_permissions
+from app.core.organization_access import organization_admits
 from app.models.core import User
 from app.models.notification import NotificationPreference, NotificationProviderRecord
 from app.models.sla import SLAPolicy, SLAReport, SLAReportDelivery, SLAReportSchedule
@@ -127,7 +128,7 @@ async def recipient_principal(db: AsyncSession, org_id: UUID, user_id: UUID) -> 
         )
         .execution_options(populate_existing=True)
     )
-    if user is None:
+    if user is None or not await organization_admits(db, user):
         raise ReportDeliveryError("recipient_unavailable")
     principal = CurrentUser(
         user,

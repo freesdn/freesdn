@@ -3383,6 +3383,9 @@ async def update_cloudinit(
         svc = HypervisorService(session)
         config = {k: v for k, v in body.model_dump().items() if v is not None}
         return await svc.update_cloudinit_config(ctrl, node, vmid, config)
+    except HTTPException:
+        # Read-only mode, device busy, controller not found: already the answer.
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
@@ -3407,6 +3410,9 @@ async def regenerate_cloudinit(
         ctrl = await _get_controller(controller_id, session, current_user)
         svc = HypervisorService(session)
         return await svc.regenerate_cloudinit(ctrl, node, vmid)
+    except HTTPException:
+        # Read-only mode, device busy: already the answer.
+        raise
     except Exception:
         logger.exception("Failed to regenerate CloudInit drive")
         raise HTTPException(status_code=500, detail="Failed to regenerate CloudInit drive")

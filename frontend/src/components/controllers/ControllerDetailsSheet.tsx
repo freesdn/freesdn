@@ -18,7 +18,6 @@ import {
   CheckCircle,
   XCircle,
   ExternalLink,
-  Copy,
   TestTube,
   Loader2,
   Zap,
@@ -39,12 +38,14 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from 'react-i18next';
 import { controllersApi, type TestConnectionResult, type ControllerMetadata } from '@/lib/api';
 import { cn, formatRelativeTime, formatUptime, formatWatts } from '@/lib/utils';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface Controller {
   id: string;
@@ -115,11 +116,7 @@ const STATUS_CONFIG = {
 };
 
 function InfoRow({ label, value, copyable = false }: { label: string; value: React.ReactNode; copyable?: boolean }) {
-  const handleCopy = () => {
-    if (typeof value === 'string') {
-      navigator.clipboard.writeText(value);
-    }
-  };
+  const { t } = useTranslation('common');
 
   return (
     <div className="flex items-start justify-between py-1.5">
@@ -127,9 +124,11 @@ function InfoRow({ label, value, copyable = false }: { label: string; value: Rea
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-right">{value}</span>
         {copyable && typeof value === 'string' && (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCopy}>
-            <Copy className="h-3 w-3" />
-          </Button>
+          <CopyButton
+            value={value}
+            className="h-6 w-6"
+            aria-label={t('ControllerDetailsSheet.copyValue', { label })}
+          />
         )}
       </div>
     </div>
@@ -204,7 +203,7 @@ export function ControllerDetailsSheet({
       setTestResult({
         success: false,
         message: t('ControllerDetailsSheet.test.failedMessage'),
-        error: axiosErr.response?.data?.detail || err.message,
+        error: getApiErrorMessage(axiosErr),
       });
     },
   });

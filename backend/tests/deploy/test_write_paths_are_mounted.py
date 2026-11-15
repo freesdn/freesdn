@@ -60,15 +60,41 @@ def _compose() -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
+#: Stages of backend/Dockerfile that hold no application code at all, so a
+#: service built from one cannot execute a backend write or open a Redis
+#: client. Checked against the Dockerfile itself below, so an entry cannot
+#: silently exempt a stage that later gains the app.
+NON_APP_BACKEND_TARGETS = {
+    "tailscale-runtime": "the `tailscale` runtime container: tailscaled and a shell entrypoint",
+}
+
+
 def _backend_services(compose: dict) -> dict[str, dict]:
     """Services built from the backend image -- they can run any backend code."""
     out = {}
     for name, svc in (compose.get("services") or {}).items():
         build = svc.get("build") or {}
         ctx = build.get("context", "") if isinstance(build, dict) else str(build)
+        if isinstance(build, dict) and build.get("target") in NON_APP_BACKEND_TARGETS:
+            continue
         if "backend" in str(ctx) or "backend" in str(svc.get("image", "")):
             out[name] = svc
     return out
+
+
+def test_non_app_backend_targets_really_hold_no_app() -> None:
+    """The exemption above is only true while those stages copy no app code."""
+    df = _dockerfile()
+    if not df:
+        pytest.skip("backend/Dockerfile not in this checkout")
+    for target in NON_APP_BACKEND_TARGETS:
+        pattern = rf"^FROM [^\n]+ AS {re.escape(target)}\n(.*?)(?=^FROM |\Z)"
+        stage = re.search(pattern, df, re.M | re.S)
+        assert stage, f"backend/Dockerfile has no stage {target}"
+        body = stage.group(1)
+        app_copy = r"^COPY\s+(?:--chown=\S+\s+)?(?:app|alembic|scripts)\b"
+        assert not re.search(app_copy, body, re.M), target
+        assert "builder-base" not in body and "python" not in body.lower(), target
 
 
 def _mounts(svc: dict) -> set[str]:

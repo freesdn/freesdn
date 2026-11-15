@@ -229,3 +229,76 @@ async def test_pending_change_api_uses_the_same_verified_applier(port_context):
     assert response.status == "applied"
     assert response.applied_response["readback_verified"] is True
     c.client.update_switch_port.assert_awaited_once()
+
+
+async def _site_admin(c, level):
+    user = User(
+        id=uuid4(),
+        organization_id=c.org.id,
+        email=f"{uuid4().hex}@example.invalid",
+        username=uuid4().hex,
+        hashed_password="not-a-login",
+        role=UserRole.SITE_ADMIN,
+    )
+    c.db.add(user)
+    await c.db.commit()
+    return CurrentUser(
+        user=user,
+        permissions=["network:*"],
+        accessible_site_ids={c.site.id},
+        site_access_levels={c.site.id: level},
+    )
+
+
+async def test_read_only_site_grant_cannot_write_a_port(port_context):
+    c = port_context
+    reader = await _site_admin(c, "read")
+    token = current_user_var.set(reader)
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await switches.toggle_port(
+                str(c.device.id), 1, switches.PortToggleIn(enabled=False, force=True), c.db, reader
+            )
+        assert exc.value.status_code == 403
+        with pytest.raises(HTTPException) as staged:
+            await GatewaySwitchPortsService(c.db).stage_state(
+                c.device, 1, False, "poe", c.org.id, reader.id
+            )
+        assert staged.value.status_code == 403
+    finally:
+        current_user_var.reset(token)
+    c.client.update_switch_port.assert_not_awaited()
+    rows = (
+        await c.db.execute(
+            select(AdapterPendingChange).where(AdapterPendingChange.organization_id == c.org.id)
+        )
+    ).all()
+    assert rows == []
+
+
+async def test_grant_reduced_to_read_after_staging_refuses_the_apply(port_context):
+    c = port_context
+    writer = await _site_admin(c, "write")
+    svc = GatewaySwitchPortsService(c.db)
+    token = current_user_var.set(writer)
+    try:
+        change = await svc.stage_state(c.device, 1, False, "enabled", c.org.id, writer.id)
+    finally:
+        current_user_var.reset(token)
+    # The next request loads the reduced grant.
+    reduced = CurrentUser(
+        user=writer.user,
+        permissions=["network:*"],
+        accessible_site_ids={c.site.id},
+        site_access_levels={c.site.id: "read"},
+    )
+    token = current_user_var.set(reduced)
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await svc.staging.apply_change(change.id, force=True, applier=svc.build_applier(change))
+    finally:
+        current_user_var.reset(token)
+    assert exc.value.status_code == 403
+    c.client.update_switch_port.assert_not_awaited()
+    await c.db.refresh(change)
+    assert change.status == "pending"

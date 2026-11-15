@@ -37,7 +37,19 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.adapters.apply_context import apply_window
 from app.adapters.opnsense.client import OPNsenseAPIError, OPNsenseClient
+
+
+@pytest.fixture(autouse=True)
+def _inside_staged_apply():
+    """These tests exercise what happens after a write is dispatched. In
+    production that only runs inside an approved staged apply (apply_change
+    opens the window, then the applier passes force=True). Read-only mode is
+    the code default under test, and since 26.12.0 force alone does not lift
+    it, so the tests run inside the same window the real path uses."""
+    with apply_window():
+        yield
 
 
 def _client() -> OPNsenseClient:

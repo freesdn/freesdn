@@ -12,7 +12,8 @@
       "disconnected": "Disconnected",
       "error": "Error",
       "syncing": "Syncing",
-      "unknown": "Unknown"
+      "unknown": "Unknown",
+      "unreachable": "Unreachable"
     },
     "error": {
       "notFound": "Controller not found",
@@ -150,8 +151,13 @@
       "title": "Danger Zone",
       "description": "Deleting this controller will also remove all associated devices from FreeSDN.",
       "confirm": "Delete controller \"{{name}}\"? This will also remove all {{count}} managed devices.",
-      "delete": "Delete Controller"
-    }
+      "delete": "Delete Controller",
+      "confirmTitle": "Delete controller \"{{name}}\"?",
+      "confirmBody_one": "FreeSDN stops managing it and removes its {{count}} device from FreeSDN. Nothing is changed on the controller itself.",
+      "confirmBody_other": "FreeSDN stops managing it and removes its {{count}} devices from FreeSDN. Nothing is changed on the controller itself.",
+      "confirmBodyNoCount": "FreeSDN stops managing it and removes every device it manages from FreeSDN. Nothing is changed on the controller itself."
+    },
+    "copyValue": "Copy {{label}}"
   },
   "ControllersPage": {
     "header": {

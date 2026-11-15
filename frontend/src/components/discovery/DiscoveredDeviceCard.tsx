@@ -35,6 +35,8 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 
 const PORT_SERVICES: Record<number, string> = {
   22: 'SSH', 23: 'Telnet', 53: 'DNS', 80: 'HTTP', 161: 'SNMP',
@@ -115,6 +117,15 @@ export default function DiscoveredDeviceCard({
   onSelectionChange,
 }: DiscoveredDeviceCardProps) {
   const { t } = useTranslation('common');
+  const { toast } = useToast();
+  const { copy } = useCopyToClipboard();
+  const copyIp = async () => {
+    if (await copy(device.ip)) {
+      toast({ title: t('DiscoveredDeviceCard.toast.ipCopied') });
+    } else {
+      toast({ title: t('CopyButton.failed'), description: t('CopyButton.failedHint'), variant: 'destructive' });
+    }
+  };
   const DeviceIcon = DEVICE_ICONS[device.device_type || ''] || Monitor;
   const statusInfo = getStatusInfo(device);
   const StatusIcon = statusInfo.icon;
@@ -170,7 +181,7 @@ export default function DiscoveredDeviceCard({
               <DropdownMenuItem onClick={() => onViewDetails?.(device)}>
                 <Eye className="h-4 w-4 mr-2" /> {t('DiscoveredDeviceCard.actions.viewDetails')}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigator.clipboard.writeText(device.ip)}>
+              <DropdownMenuItem onClick={() => void copyIp()}>
                 <Copy className="h-4 w-4 mr-2" /> {t('DiscoveredDeviceCard.actions.copyIp')}
               </DropdownMenuItem>
               {device.open_ports?.includes(80) || device.open_ports?.includes(443) ? (

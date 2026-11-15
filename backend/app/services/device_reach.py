@@ -22,12 +22,19 @@ client when a site may be agent-only. See docs.freesdn.org.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 from uuid import UUID
 
 import httpx
 
 from app.core.http_client import build_async_client
+from app.services.agent_proxy_policy import (
+    AgentProxyRefused,
+    check_proxy_target,
+    scrub_request_headers,
+    scrub_response_headers,
+)
 
 
 class DeviceUnreachableError(Exception):
@@ -62,20 +69,27 @@ class AgentHTTPTransport(httpx.AsyncBaseTransport):
         registry: Any,
         site_id: UUID,
         *,
+        allowed_hosts: Iterable[str] | None = None,
         verify_ssl: bool = False,
         timeout: float = 15.0,
     ) -> None:
         self._registry = registry
         self._site_id = site_id
+        # The device(s) this client exists to reach. Without them the registry
+        # refuses every request (app/services/agent_proxy_policy.py).
+        self._allowed_hosts = tuple(allowed_hosts or ())
         self._verify_ssl = verify_ssl
         self._timeout = timeout
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         raw = bytes(request.content) if request.content else b""
         body = raw.decode("utf-8", errors="replace") if raw else None
+        # Set-Cookie and the like are kept on the way back: this response stays
+        # inside the adapter's own client, whose cookie jar needs them.
         result = await self._registry.proxy_http_via_site(
             self._site_id,
             url=str(request.url),
+            allowed_hosts=self._allowed_hosts,
             method=request.method,
             headers=dict(request.headers),
             body=body,
@@ -107,6 +121,7 @@ async def reach_device_http(
     site_id: UUID,
     url: str,
     *,
+    allowed_hosts: Iterable[str] | None = None,
     registry: Any = None,
     method: str = "GET",
     headers: dict[str, str] | None = None,
@@ -128,12 +143,27 @@ async def reach_device_http(
     The agent ``registry`` (an ``AgentRegistryService``) is INJECTED by the caller
     — kept out of this service to avoid a service→endpoint import and to keep this
     helper pure/testable.
+
+    ``allowed_hosts`` names the device(s) ``url`` may point at, and is required:
+    both transports refuse (``DeviceUnreachableError``) a URL whose host is not
+    on it, or that is loopback, link-local or metadata, before anything is sent
+    (app/services/agent_proxy_policy.py). FreeSDN's own credentials are removed
+    from ``headers``, and session and token headers from the response, because
+    this result is meant to be handed to a caller outside the adapter. The
+    caller is responsible for having checked the user's grant on ``site_id``
+    (``proxy_http_via_site`` re-checks a request-scoped site-limited user).
     """
+    try:
+        check_proxy_target(url, allowed_hosts)
+    except AgentProxyRefused as exc:
+        raise DeviceUnreachableError(f"refused to reach {url}: {exc}") from exc
+    headers = scrub_request_headers(headers)
     if prefer_agent and registry is not None:
         if registry.get_connection_for_site(site_id) is not None:
             result = await registry.proxy_http_via_site(
                 site_id,
                 url=url,
+                allowed_hosts=tuple(allowed_hosts or ()),
                 method=method,
                 headers=headers,
                 body=body,
@@ -146,7 +176,7 @@ async def reach_device_http(
                 r = result.result
                 return {
                     "status_code": r.get("status_code"),
-                    "headers": r.get("headers", {}),
+                    "headers": scrub_response_headers(r.get("headers")),
                     "body": r.get("body", ""),
                     "via": "agent",
                 }
@@ -161,13 +191,15 @@ async def reach_device_http(
         resp = await client.request(
             method,
             url,
-            headers=headers or {},
+            headers=headers,
             content=body,
             auth=auth,
+            # Same rule as the agent: the target does not choose the next hop.
+            follow_redirects=False,
         )
         return {
             "status_code": resp.status_code,
-            "headers": dict(resp.headers),
+            "headers": scrub_response_headers(dict(resp.headers)),
             "body": resp.text,
             "via": "direct",
         }
@@ -190,6 +222,7 @@ def agent_transport_for_site(
     registry: Any,
     site: Any,
     *,
+    allowed_hosts: Iterable[str] | None = None,
     verify_ssl: bool = False,
     timeout: float = 15.0,
 ) -> AgentHTTPTransport | None:
@@ -200,11 +233,14 @@ def agent_transport_for_site(
     this and pass the result as the client's ``transport``. ``None`` means "build
     a normal (overlay-aware) client". Falls back to direct (returns ``None``) if
     the site wants the agent but none is connected — surfaced as a normal direct
-    attempt rather than a hard failure.
+    attempt rather than a hard failure. ``allowed_hosts`` is the device host the
+    adapter is built for; without it the agent refuses every request.
     """
     if registry is None or not site_prefers_agent(site):
         return None
     site_id = getattr(site, "id", None)
     if site_id is None or registry.get_connection_for_site(site_id) is None:
         return None
-    return AgentHTTPTransport(registry, site_id, verify_ssl=verify_ssl, timeout=timeout)
+    return AgentHTTPTransport(
+        registry, site_id, allowed_hosts=allowed_hosts, verify_ssl=verify_ssl, timeout=timeout
+    )

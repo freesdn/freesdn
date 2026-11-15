@@ -3,6 +3,7 @@
 """Actual app timeout error contract with an owned file; no authentication claim."""
 
 import asyncio
+import gc
 import json
 import re
 from uuid import UUID
@@ -52,9 +53,18 @@ async def test_actual_app_preheader_timeout_retains_standard_error_and_headers(
     if request_id_kind != 'absent':
         headers['X-Request-ID'] = 'owned-correlation-12' if request_id_kind == 'valid' else 'owned invalid request id'
     base = ('https' if https else 'http') + '://owned-app.test'
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url=base) as client:
-        reference = await client.get('/owned-reference-contract', headers=headers)
-        result = await asyncio.wait_for(client.get('/owned-deadline-contract', headers=headers), 5)
+    # The 0.2 s preparation deadline is shorter than a full collection late in a
+    # long suite (0.5-1.3 s on CI runners): a pause during the request let the
+    # deadline fire before authorize() was entered. This test is about the
+    # timeout contract, not collector timing, so the collector waits.
+    gc.collect()
+    gc.disable()
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url=base) as client:
+            reference = await client.get('/owned-reference-contract', headers=headers)
+            result = await asyncio.wait_for(client.get('/owned-deadline-contract', headers=headers), 5)
+    finally:
+        gc.enable()
     no_descriptors = not opened(tmp_path / 'spool')
     response.pool.acquire().close()
     actual, expected = result.json(), reference.json()

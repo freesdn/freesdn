@@ -89,6 +89,7 @@ from app.adapters.truenas.constants import (
     WS_METHOD_SYSTEM_INFO,
     WS_PATH,
 )
+from app.core.http_client import build_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -511,7 +512,7 @@ class TrueNASWSClient:
             # The POST streams the whole blob — use the dedicated upload timeout,
             # NOT the (short) WS read timeout, so a slow multi-MB upload isn't
             # cut off mid-stream (which would orphan a half-created job).
-            async with httpx.AsyncClient(
+            async with build_async_client(
                 base_url=base,
                 verify=self._ssl_context(),
                 trust_env=False,
@@ -630,7 +631,7 @@ class TrueNASWSClient:
         base = f"https://{self.host}:{tls_port}"
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         try:
-            async with httpx.AsyncClient(
+            async with build_async_client(
                 base_url=base,
                 verify=self._ssl_context(),
                 trust_env=False,

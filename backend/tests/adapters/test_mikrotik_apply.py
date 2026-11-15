@@ -32,6 +32,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
+from app.adapters.apply_context import apply_window
 from app.adapters.mikrotik.client import MikroTikClient
 from app.services.adapter_mikrotik_firewall import (
     _APPLY as FIREWALL_APPLY,
@@ -383,14 +384,15 @@ class TestClientLevelGate:
         "app.adapters.mikrotik.client._is_adapter_read_only",
         lambda: True,
     )
-    async def test_set_system_identity_allowed_with_force(self) -> None:
+    async def test_set_system_identity_allowed_in_staged_apply(self) -> None:
         client = self._make_client()
         mock_response = MagicMock(status_code=200, text='{"ok": true}')
         mock_response.json.return_value = {"ok": True}
         client._client = AsyncMock()
         client._client.is_closed = False
         client._client.request = AsyncMock(return_value=mock_response)
-        result = await client.set_system_identity("renamed", force=True)
+        with apply_window():
+            result = await client.set_system_identity("renamed", force=True)
         assert result == {"ok": True}
         # Verify the wire format: RouterOS REST uses POST /<path>/set
         # for singleton updates (NOT PATCH — verified against real CHR

@@ -99,6 +99,13 @@ async def discover_overlay_devices() -> list[dict[str, Any]]:
     if settings.resolved_vpn_mode == "off":
         return devices
 
+    # A page's read waits briefly for the daemon's turn, or is answered with its
+    # last response (app/services/device_live_read.py); no-op in a poller.
+    from app.core.device_slot import OVERLAY_SLOT_KEY
+    from app.services.device_live_read import take_device_turn
+
+    await take_device_turn(OVERLAY_SLOT_KEY)
+
     # ── Tailscale peers (rich metadata: os + tags) ──────────────────────────────
     try:
         ts = TailscaleService()

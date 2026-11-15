@@ -8,6 +8,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { camerasApi } from '@/lib/api';
 import {
   Maximize2,
@@ -24,7 +25,6 @@ import {
   ChevronRight,
   ZoomIn,
   ZoomOut,
-  Home,
   Loader2,
   Move,
   Circle,
@@ -49,6 +49,9 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { MseLivePlayer } from './MseLivePlayer';
+import { useCameraControlPermissions } from './cameraPermissions';
+import { DisabledReason } from '@/components/ui/disabled-reason';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface CameraDevice {
   id: string | number;
@@ -81,12 +84,19 @@ function PTZControls({
   onHome,
   onStop,
   disabled = false,
+  homeLabel,
+  homeUnavailable,
 }: {
   onMove: (direction: 'up' | 'down' | 'left' | 'right') => void;
   onZoom: (direction: 'in' | 'out') => void;
+  /** Goes to preset 1: the backend has no home-position command. */
   onHome: () => void;
   onStop: () => void;
   disabled?: boolean;
+  /** "Go to preset 1", with the preset's name when the camera has it. */
+  homeLabel: string;
+  /** Why preset 1 cannot be used (the camera has no preset 1), if so. */
+  homeUnavailable?: string;
 }) {
   const { t } = useTranslation('common');
   return (
@@ -95,8 +105,8 @@ function PTZControls({
         {t('CameraLiveViewModal.ptz.control')}
       </div>
 
-      {/* Direction pad */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1" role="group" aria-label={t('CameraLiveViewModal.ptz.directionControls')}>
+      {/* Direction pad: always three columns, it is a compass */}
+      <div className="grid grid-cols-3 gap-1" role="group" aria-label={t('CameraLiveViewModal.ptz.directionControls')}>
         <div />
         <Button
           variant="secondary"
@@ -123,16 +133,19 @@ function PTZControls({
         >
           <ChevronLeft className="h-5 w-5" />
         </Button>
-        <Button
-          variant="secondary"
-          size="icon"
-          className="h-10 w-10"
-          disabled={disabled}
-          onClick={onHome}
-          aria-label={t('CameraLiveViewModal.ptz.home')}
-        >
-          <Home className="h-4 w-4" />
-        </Button>
+        <DisabledReason reason={!disabled ? homeUnavailable : undefined}>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-10 w-10 text-xs font-semibold"
+            disabled={disabled || !!homeUnavailable}
+            onClick={onHome}
+            aria-label={homeUnavailable && !disabled ? homeUnavailable : homeLabel}
+            title={homeUnavailable && !disabled ? undefined : homeLabel}
+          >
+            P1
+          </Button>
+        </DisabledReason>
         <Button
           variant="secondary"
           size="icon"
@@ -209,20 +222,25 @@ function PresetButtons({
       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
         {t('CameraLiveViewModal.presets.title')}
       </div>
-      <div className="grid grid-cols-2 gap-1.5">
-        {presets.map((preset) => (
-          <Button
-            key={preset.id}
-            variant="outline"
-            size="sm"
-            className="text-xs h-8"
-            disabled={disabled}
-            onClick={() => onSelectPreset(preset.id)}
-          >
-            {preset.name}
-          </Button>
-        ))}
-      </div>
+      {presets.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{t('CameraLiveViewModal.presets.none')}</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-1.5">
+          {presets.map((preset) => (
+            <Button
+              key={preset.id}
+              variant="outline"
+              size="sm"
+              className="h-8 truncate text-xs"
+              title={preset.name}
+              disabled={disabled}
+              onClick={() => onSelectPreset(preset.id)}
+            >
+              {preset.name}
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -243,6 +261,30 @@ export function CameraLiveViewModal({ camera, open, onOpenChange, onStreamingCha
   const [clockTime, setClockTime] = useState(() => new Date());
 
   const isOnline = camera?.status === 'online' || camera?.status === 'recording';
+  const { canPtz } = useCameraControlPermissions();
+  // The camera's own presets. This used to be a fixed list of four invented
+  // names ("Entrance", "Parking", ...) shown for every PTZ camera.
+  const { data: presetsRes } = useQuery({
+    queryKey: ['camera-ptz-presets', camera?.id],
+    queryFn: () => camerasApi.getPTZPresets(String(camera?.id)),
+    enabled: open && !!camera?.has_ptz && isOnline && canPtz,
+  });
+  const rawPresets: unknown = presetsRes?.data?.items;
+  const presetItems = (Array.isArray(rawPresets) ? rawPresets : []) as { id: number; name?: string | null }[];
+  const presets = presetItems.map((p) => ({
+    id: p.id,
+    name: p.name || t('CameraLiveViewModal.presets.presetName', { id: p.id }),
+  }));
+  const preset1 = presetItems.some((p) => p.id === 1) ? presets.find((p) => p.id === 1) : undefined;
+  // Only a list that names presets says preset 1 is missing; an empty list
+  // means FreeSDN does not know the camera's presets, not that it has none.
+  const presetsKnown = presetItems.length > 0;
+  // A refused move (502 "The camera refused the PTZ command") used to be
+  // only logged to the console; it is shown under the controls instead.
+  const [ptzError, setPtzError] = useState<string | null>(null);
+  const reportPtzFailure = (error: unknown) => {
+    setPtzError(t('CameraLiveViewModal.ptz.failed', { reason: getApiErrorMessage(error) }));
+  };
   const [streamUrl, setStreamUrl] = useState('');
   // Layered live transports, best → most-compatible:
   //   1. MSE (sub-second, go2rtc WebSocket)  → mseError flips on failure
@@ -400,8 +442,9 @@ export function CameraLiveViewModal({ camera, open, onOpenChange, onStreamingCha
     if (!camera) return;
     try {
       await camerasApi.ptzControl(String(camera.id), direction, 50);
+      setPtzError(null);
     } catch (error) {
-      console.error('PTZ move failed:', error);
+      reportPtzFailure(error);
     }
   };
 
@@ -409,17 +452,22 @@ export function CameraLiveViewModal({ camera, open, onOpenChange, onStreamingCha
     if (!camera) return;
     try {
       await camerasApi.ptzControl(String(camera.id), direction === 'in' ? 'zoom_in' : 'zoom_out', 50);
+      setPtzError(null);
     } catch (error) {
-      console.error('PTZ zoom failed:', error);
+      reportPtzFailure(error);
     }
   };
 
+  // The centre button goes to preset 1. There is no home-position command
+  // in the backend (the PTZ route accepts directions, zoom, stop and
+  // preset), so it is labelled as what it does, not "home".
   const handlePTZHome = async () => {
     if (!camera) return;
     try {
       await camerasApi.ptzControl(String(camera.id), 'preset', 50, 1);
+      setPtzError(null);
     } catch (error) {
-      console.error('PTZ home failed:', error);
+      reportPtzFailure(error);
     }
   };
 
@@ -449,13 +497,6 @@ export function CameraLiveViewModal({ camera, open, onOpenChange, onStreamingCha
       // ignore
     }
   }, [camera]);
-
-  const presets = [
-    { id: 1, name: t('CameraLiveViewModal.presets.entrance') },
-    { id: 2, name: t('CameraLiveViewModal.presets.parking') },
-    { id: 3, name: t('CameraLiveViewModal.presets.wideView') },
-    { id: 4, name: t('CameraLiveViewModal.presets.zoom') },
-  ];
 
   if (!camera) return null;
 
@@ -807,20 +848,32 @@ export function CameraLiveViewModal({ camera, open, onOpenChange, onStreamingCha
           {/* Side Panel - PTZ Controls */}
           {camera.has_ptz && (
             <div className="w-48 border-l p-4 space-y-6 bg-muted/30">
+              {!canPtz && (
+                <p className="text-xs text-muted-foreground">{t('CameraPermissions.needsPtz')}</p>
+              )}
               <PTZControls
                 onMove={handlePTZMove}
                 onZoom={handlePTZZoom}
                 onHome={handlePTZHome}
                 onStop={handlePTZStop}
-                disabled={camera.status === 'offline'}
+                disabled={camera.status === 'offline' || !canPtz}
+                homeLabel={preset1
+                  ? t('CameraLiveViewModal.ptz.gotoPreset1Named', { name: preset1.name })
+                  : t('CameraLiveViewModal.ptz.gotoPreset1')}
+                homeUnavailable={presetsKnown && !preset1 ? t('CameraLiveViewModal.ptz.noPreset1') : undefined}
               />
-              <PresetButtons
-                presets={presets}
-                onSelectPreset={(id) => {
-                  camerasApi.ptzControl(String(camera.id), 'preset', 50, id).catch(() => {});
-                }}
-                disabled={camera.status === 'offline'}
-              />
+              {ptzError && (
+                <p role="alert" className="text-xs text-destructive break-words">{ptzError}</p>
+              )}
+              {canPtz && (
+                <PresetButtons
+                  presets={presets}
+                  onSelectPreset={(id) => {
+                    camerasApi.ptzControl(String(camera.id), 'preset', 50, id).then(() => setPtzError(null), reportPtzFailure);
+                  }}
+                  disabled={camera.status === 'offline'}
+                />
+              )}
             </div>
           )}
         </div>

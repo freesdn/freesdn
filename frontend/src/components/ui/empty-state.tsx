@@ -6,7 +6,8 @@
  * Consistent empty state UI for lists, tables, and pages
  */
 
-import { LucideIcon, Package, Search, FileQuestion, Plus } from 'lucide-react';
+import { AlertTriangle, LucideIcon, Package, Search, Plus, RefreshCw } from 'lucide-react';
+import { getApiErrorMessage } from '@/lib/api/errors';
 import { useTranslation } from 'react-i18next';
 import { Button } from './button';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,10 @@ interface EmptyStateProps {
   };
   className?: string;
   variant?: 'default' | 'compact' | 'card';
+  /** `destructive` tints the icon for failures. */
+  tone?: 'neutral' | 'destructive';
+  /** ARIA role for the container, e.g. `alert` for a failure. */
+  role?: string;
 }
 
 export function EmptyState({
@@ -36,15 +41,19 @@ export function EmptyState({
   secondaryAction,
   className,
   variant = 'default',
+  tone = 'neutral',
+  role,
 }: EmptyStateProps) {
   const ActionIcon = action?.icon || Plus;
+  const iconWrap = tone === 'destructive' ? 'bg-destructive/10' : 'bg-muted';
+  const iconColor = tone === 'destructive' ? 'text-destructive' : 'text-muted-foreground';
 
   if (variant === 'compact') {
     return (
-      <div className={cn('flex items-center justify-center py-8 text-center', className)}>
+      <div className={cn('flex items-center justify-center py-8 text-center', className)} role={role}>
         <div className="space-y-2 max-w-sm">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-            <Icon className="h-6 w-6 text-muted-foreground" />
+          <div className={cn('mx-auto flex h-12 w-12 items-center justify-center rounded-full', iconWrap)}>
+            <Icon className={cn('h-6 w-6', iconColor)} aria-hidden="true" />
           </div>
           <p className="text-sm font-medium text-foreground">{title}</p>
           {description && (
@@ -66,9 +75,9 @@ export function EmptyState({
       <div className={cn(
         'flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center',
         className
-      )}>
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-          <Icon className="h-6 w-6 text-muted-foreground" />
+      )} role={role}>
+        <div className={cn('flex h-14 w-14 items-center justify-center rounded-full', iconWrap)}>
+          <Icon className={cn('h-6 w-6', iconColor)} aria-hidden="true" />
         </div>
         <h3 className="mt-4 text-lg font-semibold">{title}</h3>
         {description && (
@@ -95,9 +104,9 @@ export function EmptyState({
 
   // Default variant
   return (
-    <div className={cn('flex flex-col items-center justify-center py-16 text-center', className)}>
-      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-        <Icon className="h-10 w-10 text-muted-foreground" />
+    <div className={cn('flex flex-col items-center justify-center px-4 py-12 sm:py-16 text-center', className)} role={role}>
+      <div className={cn('flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full', iconWrap)}>
+        <Icon className={cn('h-8 w-8 sm:h-10 sm:w-10', iconColor)} aria-hidden="true" />
       </div>
       <h3 className="mt-6 text-xl font-semibold">{title}</h3>
       {description && (
@@ -165,18 +174,33 @@ export function NoDataState({
 
 export function ErrorState({
   message,
+  error,
   onRetry,
+  variant,
+  className,
 }: {
+  /** Text to show. Defaults to the message read from `error`. */
   message?: string;
+  /** The thrown value (a query error); its server message is shown. */
+  error?: unknown;
   onRetry?: () => void;
+  variant?: 'default' | 'compact' | 'card';
+  className?: string;
 }) {
   const { t } = useTranslation('common');
+  const description =
+    message ?? (error ? getApiErrorMessage(error, t('EmptyState.error.description')) : t('EmptyState.error.description'));
   return (
     <EmptyState
-      icon={FileQuestion}
+      icon={AlertTriangle}
+      tone="destructive"
+      role="alert"
+      variant={variant}
+      className={className}
       title={t('EmptyState.error.title')}
-      description={message ?? t('EmptyState.error.description')}
-      action={onRetry ? { label: t('EmptyState.error.retry'), onClick: onRetry } : undefined}
+      description={description}
+      // The default action icon is a plus; a retry is not an "add".
+      action={onRetry ? { label: t('EmptyState.error.retry'), onClick: onRetry, icon: RefreshCw } : undefined}
     />
   );
 }
@@ -205,10 +229,11 @@ export function InlineErrorBanner({
       )}
       role="alert"
     >
-      <FileQuestion className="h-5 w-5 text-destructive flex-shrink-0" />
-      <div className="flex-1 text-sm text-foreground">{children}</div>
+      <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" aria-hidden="true" />
+      <div className="flex-1 min-w-0 text-sm text-foreground break-words">{children}</div>
       {onRetry && (
-        <Button size="sm" variant="ghost" onClick={onRetry}>
+        <Button size="sm" variant="ghost" onClick={onRetry} className="shrink-0">
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
           {t('EmptyState.inlineError.retry')}
         </Button>
       )}

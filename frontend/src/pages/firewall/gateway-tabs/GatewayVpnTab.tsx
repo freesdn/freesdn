@@ -12,6 +12,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { GatewayLiveReadNotice } from './GatewayLiveReadNotice';
 import { useTranslation } from 'react-i18next';
+import { useConfigValueFormatter } from '@/lib/format-value';
 import {
   Activity,
   CheckCircle,
@@ -100,6 +101,7 @@ export function GatewayVpnTab({
   onRetryVpn,
 }: GatewayVpnTabProps) {
   const { t } = useTranslation('firewall');
+  const formatValue = useConfigValueFormatter();
 
   const wgServerColumns: DataTableColumn<any>[] = [
     { id: 'name', header: t('GatewayVpnTab.columns.name'), accessorFn: (r: any) => r.name || '-', sortable: true },
@@ -345,7 +347,7 @@ export function GatewayVpnTab({
               {Object.entries(ipsecStatusData.data.status).map(([key, val]) => (
                 <div key={key}>
                   <dt className="text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</dt>
-                  <dd className="font-medium">{typeof val === 'boolean' ? (val ? t('GatewayVpnTab.common.yes') : t('GatewayVpnTab.common.no')) : String(val ?? '-')}</dd>
+                  <dd className="font-medium break-words">{formatValue(val)}</dd>
                 </div>
               ))}
             </dl>

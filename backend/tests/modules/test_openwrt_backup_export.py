@@ -119,6 +119,14 @@ async def test_create_endpoint_never_returns_configuration_under_backup_permissi
     monkeypatch.setattr(settings, "ADAPTER_READ_ONLY", read_only)
     before = await snapshot(f)
     response = await f.client.post(f"/firewall/gateways/{f.gateway.id}/backups")
+    if read_only:
+        # Creating a backup is a gateway action, and read-only mode refuses
+        # every gateway action before the gateway is contacted.
+        assert response.status_code == 403
+        assert not f.export_calls and not f.requests and f.calls == []
+        assert SECRET not in response.text and SECRET not in caplog.text
+        assert await snapshot(f) == before
+        return
     assert response.status_code == 501
     assert response.json() == {"error": {"code": 501, "message": UNSUPPORTED, "request_id": None}}
     assert not f.export_calls and not f.requests and f.calls == ["construct", "connect"]

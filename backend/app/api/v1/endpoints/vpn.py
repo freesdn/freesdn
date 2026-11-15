@@ -100,6 +100,7 @@ from app.services.vpn_integration import (
     PersistentVPNService,
     TailscaleService,
     WireGuardService,
+    _tailscaled_answers,
     get_tailscale_setup,
     get_vpn_manager,
 )
@@ -364,16 +365,23 @@ async def get_vpn_runtime(
     FreeSDN is capless by default (no privileged VPN sidecar). The frontend reads
     this to render an honest state — e.g. a "VPN sidecar not deployed" banner when
     the module is enabled but the infra component isn't running — instead of empty
-    or erroring widgets. PURE / best-effort: it only reads env + checks for the
-    control socket / tun device; it never shells out, so it can't 500.
+    or erroring widgets. PURE / best-effort: it only reads env, connects to the
+    control socket and checks for the tun device; it never shells out, so it
+    can't 500.
+
+    ``sidecar_reachable`` means tailscaled accepts a connection on its LocalAPI
+    socket (the runtime container, or the vpn sidecar). It used to mean the
+    socket FILE exists, and a killed or crashed tailscaled leaves that file
+    behind, so a dead daemon read as reachable. The connect takes milliseconds
+    and is the same check the Tailscale status reads make before running the CLI.
     """
     mode = settings.resolved_vpn_mode
     sidecar_reachable = False
     tun_available = False
     try:
-        sidecar_reachable = os.path.exists("/var/run/tailscale/tailscaled.sock")
-    except OSError:
-        pass
+        sidecar_reachable = await _tailscaled_answers()
+    except Exception:  # noqa: BLE001 - best effort; this endpoint never 500s
+        logger.debug("Could not check the Tailscale socket", exc_info=True)
     try:
         tun_available = os.path.exists("/dev/net/tun")
     except OSError:
@@ -782,10 +790,9 @@ async def connection_action(
 
         setup = get_tailscale_setup()
         if data.action == "connect":
-            # netfilter_mode MUST be re-passed: reconnect uses
-            # ``tailscale up --reset``, which wipes unspecified prefs, and
-            # dropping --netfilter-mode silently reverts NetBird coexistence to
-            # the default and breaks the overlay sharing 100.64.0.0/10. The
+            # reconnect keeps every preference the node has; the NetBird
+            # coexistence netfilter mode is resolved here and applied on top,
+            # so a NetBird connection added since the login is honoured. The
             # resolver for it already lives in this module.
             action_result = await setup.reconnect(
                 netfilter_mode=await _resolve_tailscale_netfilter_mode(session, org_id)
@@ -1185,8 +1192,8 @@ async def reconnect_tailscale(
 ) -> Any:
     """Reconnect a previously disconnected Tailscale agent."""
     setup = get_tailscale_setup()
-    # reconnect uses `tailscale up --reset` (wipes prefs); re-resolve + re-apply
-    # the NetBird-coexistence netfilter mode so it survives the reconnect.
+    # reconnect keeps the node's preferences; re-resolve the NetBird-coexistence
+    # netfilter mode and apply it on top (a NetBird link may postdate the login).
     netfilter_mode = await _resolve_tailscale_netfilter_mode(session, _org_id(user))
     result = await setup.reconnect(netfilter_mode=netfilter_mode)
     return TailscaleActionResponse(**result)

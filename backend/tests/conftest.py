@@ -71,3 +71,75 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
             yield client
     finally:
         app.dependency_overrides.pop(get_session, None)
+
+
+@pytest.fixture(autouse=True)
+def _backup_files_may_live_in_the_temp_dir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Allow the system temp dir as a local backup root, as an operator would.
+
+    Local backup storage is confined to /data/backups plus the server setting
+    BACKUP_LOCAL_EXTRA_ROOTS. Tests keep their backup files under pytest's
+    tmp_path, which lives in the system temp dir, so the test environment adds
+    that root through the same setting. Tests of the confinement itself set
+    their own value.
+    """
+    import tempfile
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "BACKUP_LOCAL_EXTRA_ROOTS", tempfile.gettempdir())
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _slot_store_is_bound_before_any_test_stubs_redis() -> None:
+    """Bind the shared slot/lock client to the real Valkey once, up front.
+
+    ``celery_app._get_solo_redis`` caches the first client it builds. Several
+    tests replace ``redis_client.get_sync_redis`` with a stub while a poller
+    runs; if that poller's device slot were the first caller, the stub would
+    become every later test's slot store.
+    """
+    from app.core.celery_app import _get_solo_redis
+
+    _get_solo_redis()
+
+
+@pytest.fixture(autouse=True)
+def _device_slots_are_private_to_each_test(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give every test its own device-slot namespace in Valkey.
+
+    Slots are keyed by device address, and tests reuse the same documentation
+    addresses (192.0.2.1, 10.0.0.1) all over the suite. A test that fails while
+    holding a slot would otherwise make an unrelated later test see that device
+    as busy until the lease expired.
+    """
+    import uuid
+
+    from app.core import device_slot
+    from app.services import device_live_read
+
+    run = uuid.uuid4().hex
+    monkeypatch.setattr(device_slot, "_PREFIX", f"freesdn:devslot:test-{run}:")
+    # Remembered live answers too: a page read in one test must never be
+    # served as "as of" data in another that reuses the same URL.
+    monkeypatch.setattr(device_live_read, "_CACHE_PREFIX", f"freesdn:liveread:test-{run}:")
+
+
+@pytest.fixture(autouse=True)
+def _device_write_records_join_the_test_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write staging-ledger rows and device-action audit records in the caller's session.
+
+    In production they get a session of their own (app.services.device_writes
+    .ledger_session), so the chokepoint's commits never commit the request's own
+    changes early. A test's data lives in the db_session fixture's uncommitted
+    outer transaction, which another connection cannot see, so here the record
+    joins that transaction instead. test_device_writes_ledger_session.py covers
+    the production path.
+    """
+    import contextlib
+
+    import app.services.device_writes as device_writes
+
+    monkeypatch.setattr(
+        device_writes, "ledger_session_factory", lambda db: contextlib.nullcontext(db)
+    )

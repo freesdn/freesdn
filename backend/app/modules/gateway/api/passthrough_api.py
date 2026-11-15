@@ -18,8 +18,19 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CurrentUser, require_permissions
+from app.core.device_slot import gateway_slot_key
 from app.db import get_session
 from app.modules.gateway.adapter_helpers import build_adapter, get_gateway
+from app.services.adapter_staging import AdapterStagingService
+from app.services.device_writes import audited_device_action
+
+
+def _refuse_in_read_only_mode() -> None:
+    """Backup and service restart act on the gateway: refused in read-only
+    mode before it is contacted, as GatewayService.device_action does."""
+    if AdapterStagingService.is_read_only():
+        raise HTTPException(403, detail="Read-only mode is on: gateway actions are refused.")
+
 
 router = APIRouter(prefix="/diagnostics", tags=["Gateway Diagnostics"])
 
@@ -187,9 +198,26 @@ async def trigger_backup(
     """Trigger a configuration backup on the gateway."""
     org_id = _org_id(current_user)
     gw = await get_gateway(db, gateway_id, organization_id=org_id, current_user=current_user)
+    _refuse_in_read_only_mode()
     adapter = build_adapter(gw)
-    async with adapter:
-        result = await adapter.create_backup()
+
+    async def _backup():
+        async with adapter:
+            return await adapter.create_backup()
+
+    result = await audited_device_action(
+        db,
+        action="create_backup",
+        target_type="gateway",
+        target_id=gw.id,
+        target_name=getattr(gw, "name", None),
+        organization_id=gw.org_id,
+        site_id=gw.site_id,
+        actor_id=current_user.id,
+        parameters={},
+        perform=_backup,
+        slot_key=gateway_slot_key(gw),
+    )
     if not result.success:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
@@ -239,9 +267,26 @@ async def restart_service(
         )
     org_id = _org_id(current_user)
     gw = await get_gateway(db, body.gateway_id, organization_id=org_id, current_user=current_user)
+    _refuse_in_read_only_mode()
     adapter = build_adapter(gw)
-    async with adapter:
-        result = await adapter.restart_service(body.service_name)
+
+    async def _restart():
+        async with adapter:
+            return await adapter.restart_service(body.service_name)
+
+    result = await audited_device_action(
+        db,
+        action="restart_service",
+        target_type="gateway",
+        target_id=gw.id,
+        target_name=getattr(gw, "name", None),
+        organization_id=gw.org_id,
+        site_id=gw.site_id,
+        actor_id=current_user.id,
+        parameters={"service": body.service_name},
+        perform=_restart,
+        slot_key=gateway_slot_key(gw),
+    )
     if not result.success:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,

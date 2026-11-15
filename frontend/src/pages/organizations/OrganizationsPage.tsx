@@ -58,8 +58,10 @@ import {
 } from '@/components/ui/select';
 import { PageHeader, PageToolbar } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { api } from '@/lib/api';
 import { escapeCell } from '@/lib/csv';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // Types
 interface Organization {
@@ -373,6 +375,7 @@ export function OrganizationsPage() {
   const { t } = useTranslation();
   const { t: tOrg } = useTranslation('organizations');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [planFilter, setPlanFilter] = useState<string>('all');
@@ -467,7 +470,7 @@ export function OrganizationsPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const errDetail = (err: any, fallback: string): string =>
-    err?.response?.data?.detail || (err instanceof Error ? err.message : fallback);
+    getApiErrorMessage(err, fallback);
 
   // Edit, throws on failure so FormDialog surfaces the server-error banner.
   const handleEditOrg = async (id: string, values: EditOrgFormValues) => {
@@ -481,8 +484,15 @@ export function OrganizationsPage() {
     toast({ title: t('common:success'), description: t('organizations.actions.editOrganization') });
   };
 
-  const handleDeleteOrg = (org: Organization) => {
-    if (!window.confirm(t('organizations.actions.deleteOrganization') + `: ${org.name}?`)) return;
+  const handleDeleteOrg = async (org: Organization) => {
+    const ok = await confirm({
+      title: t('organizations.confirm.delete.title', { name: org.name }),
+      description: t('organizations.confirm.delete.description'),
+      items: [org.name],
+      confirmLabel: t('organizations.actions.deleteOrganization'),
+      destructive: true,
+    });
+    if (!ok) return;
     void (async () => {
       try {
         await api.delete(`/organizations/${org.id}`);
@@ -498,14 +508,17 @@ export function OrganizationsPage() {
     })();
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedRows.length === 0) return;
-    if (
-      !window.confirm(
-        t('organizations.actions.deleteOrganization') + ` (${selectedRows.length})?`,
-      )
-    )
-      return;
+    const confirmed = await confirm({
+      title: t('organizations.confirm.deleteMany.title'),
+      description: t('organizations.confirm.deleteMany.description'),
+      count: selectedRows.length,
+      items: selectedRows.map((o) => o.name),
+      confirmLabel: t('organizations.confirm.deleteMany.confirmLabel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
     void (async () => {
       const results = await Promise.allSettled(
         selectedRows.map((o) => api.delete(`/organizations/${o.id}`)),

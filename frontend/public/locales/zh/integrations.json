@@ -71,7 +71,14 @@
       "typeCountPlural": "{{n}} 种类型"
     },
     "confirm": {
-      "delete": "删除此集成？这也会移除所有投递历史。"
+      "delete": "删除此集成？这也会移除所有投递历史。",
+      "deleteTitle": "删除集成“{{name}}”？",
+      "deleteBody": "FreeSDN 将停止向其发送事件，并移除其全部投递历史。此操作无法撤销。",
+      "deleteAction": "删除集成",
+      "bulkDeleteTitle_one": "删除 {{count}} 个集成？",
+      "bulkDeleteTitle_other": "删除 {{count}} 个集成？",
+      "bulkDeleteBody": "FreeSDN 将停止向它们发送事件，并移除其全部投递历史。此操作无法撤销。",
+      "bulkDeleteAction": "删除集成"
     },
     "toasts": {
       "createFailed": "创建集成失败",

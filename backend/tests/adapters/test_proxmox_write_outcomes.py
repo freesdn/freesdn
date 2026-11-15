@@ -5,6 +5,7 @@
 import httpx
 import pytest
 
+from app.adapters.apply_context import apply_window
 from app.adapters.exceptions import AdapterOutcomeUnknownError
 from app.adapters.proxmox.adapter import ProxmoxAdapter
 from app.adapters.proxmox.client import ProxmoxClient, ProxmoxClientConfig
@@ -12,6 +13,17 @@ from app.adapters.validation import validate_upid
 from app.services.adapter_staging import outcome_is_unknown
 
 UPID = "UPID:pve1:00001234:00ABCDEF:00000000:qmstart:101:root@pam!audit:"
+
+
+@pytest.fixture(autouse=True)
+def _inside_staged_apply():
+    """These tests exercise what happens after a write is dispatched. In
+    production that only runs inside an approved staged apply (apply_change
+    opens the window, then the applier passes force=True). Read-only mode is
+    the code default under test, and since 26.12.0 force alone does not lift
+    it, so the tests run inside the same window the real path uses."""
+    with apply_window():
+        yield
 
 
 def connected(handler):

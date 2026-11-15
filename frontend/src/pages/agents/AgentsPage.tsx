@@ -21,7 +21,6 @@ import {
   Trash2,
   AlertTriangle,
   CheckCircle,
-  Copy,
   Eye,
   EyeOff,
   ShieldCheck,
@@ -73,7 +72,10 @@ import {
 import { agentFleetApi } from '@/lib/api/agents';
 import { FleetActivityPanel } from '@/components/agent/FleetActivityPanel';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
+import { CopyButton } from '@/components/ui/copy-button';
 import { escapeCell } from '@/lib/csv';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const AGENT_STATUS_VARIANT: Record<string, StatusVariant> = {
   online: 'connected',
@@ -144,10 +146,6 @@ function RegisterAgentDialog({
     },
   });
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-  };
-
   const handleClose = () => {
     setRegistrationResult(null);
     setShowApiKey(false);
@@ -180,9 +178,13 @@ function RegisterAgentDialog({
                 <label className="text-sm font-medium text-muted-foreground">{t('AgentsPage.register.fields.agentId')}</label>
                 <div className="flex gap-2">
                   <Input value={registrationResult.agent_id} readOnly className="font-mono text-sm" />
-                  <Button variant="outline" size="icon" onClick={() => copyToClipboard(registrationResult.agent_id)}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
+                  <CopyButton
+                    value={registrationResult.agent_id}
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    aria-label={t('AgentsPage.register.copyField', { label: t('AgentsPage.register.fields.agentId') })}
+                  />
                 </div>
               </div>
 
@@ -198,9 +200,13 @@ function RegisterAgentDialog({
                   <Button variant="outline" size="icon" onClick={() => setShowApiKey(!showApiKey)}>
                     {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
-                  <Button variant="outline" size="icon" onClick={() => copyToClipboard(registrationResult.agent_key)}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
+                  <CopyButton
+                    value={registrationResult.agent_key}
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    aria-label={t('AgentsPage.register.copyField', { label: t('AgentsPage.register.fields.agentKey') })}
+                  />
                 </div>
               </div>
 
@@ -208,9 +214,13 @@ function RegisterAgentDialog({
                 <label className="text-sm font-medium text-muted-foreground">{t('AgentsPage.register.fields.websocketUrl')}</label>
                 <div className="flex gap-2">
                   <Input value={registrationResult.websocket_url} readOnly className="font-mono text-sm" />
-                  <Button variant="outline" size="icon" onClick={() => copyToClipboard(registrationResult.websocket_url)}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
+                  <CopyButton
+                    value={registrationResult.websocket_url}
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    aria-label={t('AgentsPage.register.copyField', { label: t('AgentsPage.register.fields.websocketUrl') })}
+                  />
                 </div>
               </div>
 
@@ -221,15 +231,13 @@ function RegisterAgentDialog({
 FREESDN_AGENT_KEY=${registrationResult.agent_key}
 FREESDN_SERVER_URL=${registrationResult.websocket_url}`}
                 </pre>
-                <Button
+                <CopyButton
+                  value={`FREESDN_AGENT_ID=${registrationResult.agent_id}\nFREESDN_AGENT_KEY=${registrationResult.agent_key}\nFREESDN_SERVER_URL=${registrationResult.websocket_url}`}
+                  label={t('AgentsPage.register.copyAll')}
                   variant="outline"
                   size="sm"
                   className="mt-2"
-                  onClick={() => copyToClipboard(`FREESDN_AGENT_ID=${registrationResult.agent_id}\nFREESDN_AGENT_KEY=${registrationResult.agent_key}\nFREESDN_SERVER_URL=${registrationResult.websocket_url}`)}
-                >
-                  <Copy className="mr-2 h-3 w-3" />
-                  {t('AgentsPage.register.copyAll')}
-                </Button>
+                />
               </div>
             </div>
 
@@ -348,6 +356,7 @@ export default function AgentsPage() {
   const { t } = useTranslation('agents');
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirmAction = useConfirm();
   const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -414,7 +423,7 @@ export default function AgentsPage() {
       queryClient.invalidateQueries({ queryKey: ['agent-stats'] });
     },
     onError: (err: any) => {
-      toast({ title: t('AgentsPage.toasts.approveFailed.title'), description: err?.response?.data?.detail || t('AgentsPage.toasts.approveFailed.description'), variant: 'destructive' });
+      toast({ title: t('AgentsPage.toasts.approveFailed.title'), description: getApiErrorMessage(err, t('AgentsPage.toasts.approveFailed.description')), variant: 'destructive' });
     },
   });
 
@@ -425,7 +434,7 @@ export default function AgentsPage() {
       queryClient.invalidateQueries({ queryKey: ['agent-stats'] });
     },
     onError: (err: any) => {
-      toast({ title: t('AgentsPage.toasts.disconnectFailed.title'), description: err?.response?.data?.detail || t('AgentsPage.toasts.disconnectFailed.description'), variant: 'destructive' });
+      toast({ title: t('AgentsPage.toasts.disconnectFailed.title'), description: getApiErrorMessage(err, t('AgentsPage.toasts.disconnectFailed.description')), variant: 'destructive' });
     },
   });
 
@@ -600,10 +609,16 @@ export default function AgentsPage() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
-                onClick={() => {
-                  if (confirm(t('AgentsPage.actions.disconnectConfirm'))) {
-                    disconnectMutation.mutate(agent.id);
-                  }
+                onClick={async () => {
+                  const ok = await confirmAction({
+                    title: t('AgentsPage.actions.disconnectTitle', { name: agent.name }),
+                    description: t('AgentsPage.actions.disconnectBody'),
+                    items: [agent.name],
+                    confirmLabel: t('AgentsPage.actions.disconnectAction'),
+                    destructive: true,
+                  });
+                  if (!ok) return;
+                  disconnectMutation.mutate(agent.id);
                 }}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -845,13 +860,15 @@ export default function AgentsPage() {
             icon: Trash2,
             variant: 'destructive',
             onClick: async () => {
-              if (
-                !confirm(
-                  t('AgentsPage.bulk.delete.confirm', { count: selectedAgents.length }),
-                )
-              ) {
-                return;
-              }
+              const confirmed = await confirmAction({
+                title: t('AgentsPage.bulk.delete.confirmTitle', { count: selectedAgents.length }),
+                description: t('AgentsPage.bulk.delete.confirmBody'),
+                count: selectedAgents.length,
+                items: selectedAgents.map((a) => a.name),
+                confirmLabel: t('AgentsPage.bulk.delete.confirmAction', { count: selectedAgents.length }),
+                destructive: true,
+              });
+              if (!confirmed) return;
               const results = await Promise.allSettled(
                 selectedAgents.map((a) => agentsApi.disconnect(a.id)),
               );

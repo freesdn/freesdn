@@ -159,15 +159,20 @@ async def _get_device_detail(
 async def _get_vlans(
     user: Any, db: AsyncSession, site_id: str | None = None, **kwargs
 ) -> dict[str, Any]:
+    from app.models.core import Site
     from app.modules.network.models import Network
 
     if not getattr(user, "organization_id", None):
         return {"error": "Organization context required", "vlans": []}
+    # Network has no organization_id column: tenant-scope through its site,
+    # like Device. ``Network.organization_id`` raised AttributeError, so this
+    # tool failed on every call.
     q = select(Network).where(
-        Network.organization_id == user.organization_id,
+        Network.site_id.in_(select(Site.id).where(Site.organization_id == user.organization_id)),
         # per-user site grant — without this a site-limited user could
         # enumerate every org VLAN by omitting site_id.
         site_scope_filter(user, Network.site_id),
+        Network.deleted_at.is_(None),
     )
     if site_id:
         try:
@@ -184,7 +189,7 @@ async def _get_vlans(
                 "vlan_id": n.vlan_id,
                 "subnet": n.subnet,
                 "purpose": n.purpose,
-                "is_enabled": n.is_enabled,
+                "is_enabled": n.is_active,
             }
             for n in networks
         ],

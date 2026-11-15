@@ -169,21 +169,21 @@ def test_base_adapter_push_vpn_config_is_a_failing_stub() -> None:
 
 
 def test_provisioning_reads_the_push_result() -> None:
-    src = _code(vpn_orchestration)
-    assert "push_result" in src, "the adapter's AdapterResult is discarded again"
-    assert 'getattr(push_result, "success", True) is False' in src
+    """The push goes through a change group, whose outcome decides "provisioned".
 
-
-def test_a_failed_push_marks_the_tunnel_unprovisioned() -> None:
-    """
-    The whole point: a refused push must not leave the operator looking at an
-    'active' tunnel that does not exist.
+    The group records a refused AdapterResult as a failed member (see
+    tests/services/test_change_groups.py), so the guard is now that the push
+    uses the group and reads its outcome, not a hand-written success check.
     """
     src = _code(vpn_orchestration)
-    start = src.index("push_result")
-    block = src[start : start + 900]
-    assert "provisioned = False" in block
-    assert "tunnel.error_message" in block
+    assert "apply_group_through_staging" in src, "the push no longer goes through staging"
+    assert "if outcome.applied:" in src, "the group's answer is discarded again"
+
+
+# The whole point, that a refused push must not leave the operator looking at an
+# 'active' tunnel that does not exist, is now pinned by behaviour rather than by
+# source text: tests/services/test_vpn_tunnel_status_honesty.py drives create,
+# reprovision, the Enable/Disable action and the health check with fake gateways.
 
 
 def test_the_stub_result_shape_is_what_the_check_expects() -> None:

@@ -57,7 +57,9 @@ def _hikvision_adapter(transport: _CountingTransport):
     ad._breaker = _Breaker()
     # `_http` is a property on the class; bind the fake on the instance's type
     # would leak across tests, so patch via __dict__ of a throwaway subclass.
-    ad.__class__ = type("_TestAdapter", (HikvisionAdapter,), {"_http": property(lambda _self: transport)})
+    ad.__class__ = type(
+        "_TestAdapter", (HikvisionAdapter,), {"_http": property(lambda _self: transport)}
+    )
     return ad
 
 
@@ -87,26 +89,65 @@ async def test_a_mutation_is_transmitted_once_on_read_timeout(method: str) -> No
 
 
 @pytest.mark.asyncio
-async def test_a_read_still_retries_on_read_timeout() -> None:
-    """The guard must not cost a legitimate read its retries."""
+async def test_a_read_is_not_retried_on_read_timeout() -> None:
+    """io_policy: a timeout is never replayed, not even for a GET.
+
+    This test used to assert the opposite (3 transmissions). An NVR that did not
+    answer within the read timeout is slow or wedged; asking twice more only
+    triples the wait and its load (2026-11 soak, see app/adapters/io_policy.py).
+    """
     from app.adapters.exceptions import AdapterConnectionError
 
     transport = _CountingTransport(httpx.ReadTimeout("no response"))
     adapter = _hikvision_adapter(transport)
 
     with pytest.raises(AdapterConnectionError):
-        await adapter._request("GET", "https://camera.example/ISAPI/System/deviceInfo", retry_delay=0)
+        await adapter._request(
+            "GET", "https://camera.example/ISAPI/System/deviceInfo", retry_delay=0
+        )
 
-    assert len(transport.calls) == 3, (
-        "a GET is safe to replay and must keep its retry budget; "
-        f"got {len(transport.calls)} transmission(s)"
+    assert len(transport.calls) == 1, (
+        f"a timed-out GET must not be replayed; got {len(transport.calls)} transmission(s)"
     )
 
 
 @pytest.mark.asyncio
+async def test_a_read_still_retries_after_a_dropped_connection() -> None:
+    """The guard must not cost a legitimate read the retry that can help it."""
+    from app.adapters.exceptions import AdapterConnectionError
+
+    transport = _CountingTransport(httpx.RemoteProtocolError("server disconnected"))
+    adapter = _hikvision_adapter(transport)
+
+    with pytest.raises(AdapterConnectionError):
+        await adapter._request(
+            "GET", "https://camera.example/ISAPI/System/deviceInfo", retry_delay=0
+        )
+
+    assert len(transport.calls) == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["PUT", "POST"])
+async def test_a_dropped_connection_on_a_mutation_is_sent_once_and_propagates(method) -> None:
+    """Ambiguous: the camera may have acted. Unchanged, raw, for the staging path."""
+    transport = _CountingTransport(httpx.RemoteProtocolError("server disconnected"))
+    adapter = _hikvision_adapter(transport)
+
+    with pytest.raises(httpx.RemoteProtocolError):
+        await adapter._request(method, "https://camera.example/ISAPI/System/reboot", retry_delay=0)
+
+    assert len(transport.calls) == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["PUT", "GET"])
-async def test_connect_phase_failure_still_retries_for_any_method(method: str) -> None:
-    """A ConnectError never left us, so replaying it is safe even for a write."""
+async def test_connect_phase_failure_is_not_retried(method: str) -> None:
+    """io_policy: a refused or unreachable camera will not recover in a second.
+
+    This used to retry 3 times for any method ("nothing was sent", so it was
+    safe) -- safe, but useless: 3 x the 8 s connect cap for a camera that is off.
+    """
     from app.adapters.exceptions import AdapterConnectionError
 
     transport = _CountingTransport(httpx.ConnectError("refused"))
@@ -115,7 +156,6 @@ async def test_connect_phase_failure_still_retries_for_any_method(method: str) -
     with pytest.raises(AdapterConnectionError):
         await adapter._request(method, "https://camera.example/ISAPI/System/reboot", retry_delay=0)
 
-    assert len(transport.calls) == 3, (
-        f"{method} after a ConnectError should retry (nothing was sent); "
-        f"got {len(transport.calls)}"
+    assert len(transport.calls) == 1, (
+        f"{method} after a ConnectError must not be retried; got {len(transport.calls)}"
     )

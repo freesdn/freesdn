@@ -23,7 +23,7 @@ func prepare() error {
 	if err != nil {
 		return err
 	}
-	if !bytes.Contains(modules, []byte("# github.com/netbirdio/netbird v0.82.0\n")) || bytes.Contains(modules, []byte("github.com/netbirdio/netbird =>")) {
+	if !bytes.Contains(modules, []byte("# github.com/netbirdio/netbird v0.82.1\n")) || bytes.Contains(modules, []byte("github.com/netbirdio/netbird =>")) {
 		return fmt.Errorf("review the transport changes before updating the released NetBird source")
 	}
 	data, err := os.ReadFile(target + "relay.go")

@@ -31,6 +31,22 @@ from app.modules.firewall.models import GatewayConnection
 
 VENDORS = ["opnsense", "pfsense", "mikrotik", "openwrt"]
 OPTIONS = {"use_ssl": True, "timeout": 7, "api_version": "v2"}
+
+
+def forwarded_options(vendor):
+    """The part of OPTIONS the vendor's adapter reads, which is what may reach it.
+
+    Gateway settings are filtered by a per-vendor allow-list
+    (app/modules/firewall/adapter_settings.py): pfSense reads ``api_version``,
+    the other three do not, and OpenWrt has no ``use_ssl``.
+    """
+    from app.modules.firewall.adapter_settings import GATEWAY_ADAPTER_SETTINGS
+
+    return {k: v for k, v in OPTIONS.items() if k in GATEWAY_ADAPTER_SETTINGS[vendor]}
+
+
+def options_in(call):
+    return {k: call[k] for k in OPTIONS if k in call}
 UNTRUSTED = {
     "host": "192.168.99.99",
     "port": 9999,
@@ -129,7 +145,7 @@ async def test_saved_test_retains_transport_settings_and_explicit_trust_override
     calls, adapter = factory
     assert result["success"] and len(calls) == 1
     assert_identity(calls[0], vendor, trust=override is not False)
-    assert all(calls[0].get(key) == value for key, value in OPTIONS.items())
+    assert options_in(calls[0]) == forwarded_options(vendor)
     adapter.disconnect.assert_awaited_once()
     await db_session.refresh(gateway)
     assert gateway.settings == OPTIONS and gateway.verify_ssl is True
@@ -151,7 +167,7 @@ async def test_settings_cannot_replace_stored_destination_credentials_or_write_p
     calls, _ = factory
     assert len(calls) == 1
     assert_identity(calls[0], vendor)
-    assert all(calls[0].get(key) == value for key, value in OPTIONS.items())
+    assert options_in(calls[0]) == forwarded_options(vendor)
     assert gateway.settings == settings  # Existing JSON is projected, not rewritten.
 
 
@@ -171,7 +187,9 @@ def test_raw_options_cannot_override_adapter_identity_or_write_controls(factory,
     calls, _ = factory
     assert len(calls) == 1
     assert_identity(calls[0], vendor)
-    assert calls[0]["use_ssl"] is True
+    assert options_in(calls[0]) == {
+        k: v for k, v in forwarded_options(vendor).items() if k == "use_ssl"
+    }
 
 
 @pytest.mark.asyncio

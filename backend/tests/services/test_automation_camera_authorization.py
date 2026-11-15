@@ -60,7 +60,29 @@ def camera_authorization(monkeypatch):
     )
     connect = AsyncMock(return_value=(adapter, 1))
     monkeypatch.setattr("app.modules.cameras.api._get_adapter_for_camera", connect)
+    # These tests are about who may act; model a read-write install. Camera
+    # configuration actions are staged writes (b7ee3133), so the fail-safe
+    # read-only default would refuse them before authorization is reached.
+    import app.core.runtime_flags as rf
+
+    mode = {"read_only": False}
+    monkeypatch.setattr(rf, "is_adapter_read_only", lambda: mode["read_only"])
+    # The database is a mock, so a permitted write runs straight through the
+    # chokepoint (covered by tests/api/test_direct_writes_are_staged.py and
+    # test_automation_camera_writes_staged.py). In read-only mode the real
+    # chokepoint runs: it refuses before any I/O.
+    import app.services.device_writes as device_writes
+
+    real_write = device_writes.write_through_staging
+
+    async def _write(db, **kwargs):
+        if mode["read_only"]:
+            return await real_write(db, **kwargs)
+        return await kwargs["perform"]()
+
+    monkeypatch.setattr(device_writes, "write_through_staging", _write)
     return SimpleNamespace(
+        mode=mode,
         engine=AutomationEngine(),
         actor=actor,
         camera=camera,
@@ -202,3 +224,22 @@ async def test_camera_automation_honors_site_permission_ceiling(
     allowed = level == "read" and action_type == ActionType.CAMERA_SNAPSHOT
     assert result.success is allowed
     assert f.connect.await_count == int(allowed)
+
+
+async def test_read_only_mode_refuses_an_automation_camera_configuration_change(
+    camera_authorization,
+):
+    """Turning motion detection on or off is a configuration write: while
+    read-only mode is on, an automation rule cannot make it, and the camera is
+    not asked."""
+    f = camera_authorization
+    f.mode["read_only"] = True
+    result = await f.engine._execute_action(
+        Action(
+            action_type=ActionType.CAMERA_MOTION_DETECTION,
+            params={"camera_id": str(f.camera.id), "actor_id": str(uuid4()), "enabled": True},
+        ),
+        f.context,
+    )
+    assert result.success is False
+    f.adapter.set_motion_detection.assert_not_awaited()

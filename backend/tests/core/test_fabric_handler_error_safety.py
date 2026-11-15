@@ -16,6 +16,17 @@ from app.core.fabric.executor import OperationExecutor
 from app.modules.network.module import NetworkModule
 from app.modules.voip.module import VoIPModule
 
+
+@pytest.fixture(autouse=True)
+def _writes_unlocked(monkeypatch):
+    """These cases pin handler error privacy, not the read-only gate, which now
+    refuses live actions (voip.pbx.originate_call) before the handler runs; that
+    gate is pinned in test_fabric_truthfulness.py."""
+    import app.core.runtime_flags as flags
+
+    monkeypatch.setattr(flags, "is_adapter_read_only", lambda: False)
+
+
 CANARY = "qualification-only-handler-private-detail"
 DETAIL = "synthetic service connection failed: credential=" + CANARY
 CASES = [

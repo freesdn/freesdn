@@ -364,7 +364,8 @@
     "empty": {
       "noOpenPorts": "未检测到开放端口",
       "noDriverMatch": "未找到驱动匹配"
-    }
+    },
+    "copyValue": "复制{{label}}"
   },
   "CameraHealthPanel": {
     "chart": {
@@ -448,7 +449,9 @@
     "searchPlaceholder": "搜索...",
     "selectAllRows": "选择所有行",
     "selectRow": "选择行",
+    "selectRowNamed": "选择 {{name}}",
     "tableAriaLabel": "{{itemName}}数据表",
+    "loading": "正在加载{{itemName}}",
     "empty": {
       "title": "未找到{{itemName}}",
       "description": "暂无{{itemName}}。添加后将显示在此处。",
@@ -462,6 +465,11 @@
       "previousPage": "上一页",
       "nextPage": "下一页",
       "lastPage": "末页"
+    },
+    "columns": {
+      "button": "选择列",
+      "title": "列",
+      "reset": "恢复默认"
     }
   },
   "ModuleGuard": {
@@ -764,7 +772,8 @@
       "statusEnabledDescription": "您的账户已受双因素认证保护",
       "statusDisabledDescription": "为您的账户增加一层额外的安全保护",
       "disable": "禁用 MFA",
-      "enable": "启用 MFA"
+      "enable": "启用 MFA",
+      "copyKey": "复制手动输入密钥"
     },
     "messages": {
       "profileUpdated": "个人资料更新成功",
@@ -805,7 +814,10 @@
     "morePorts": "+{{count}} 个更多",
     "driverLabel": "驱动：",
     "manageable": "可管理",
-    "deviceAdopted": "设备已纳管"
+    "deviceAdopted": "设备已纳管",
+    "toast": {
+      "ipCopied": "IP 地址已复制"
+    }
   },
   "RecordingTimeline": {
     "zoomIn": "放大",
@@ -919,8 +931,60 @@
     },
     "cancel": "取消",
     "readOnly": {
-      "message": "只读模式已开启 — 此更改将被拒绝。",
+      "message": "只读模式已开启，此更改将被拒绝。",
       "link": "在设置中关闭"
+    }
+  },
+  "ConfirmDialog": {
+    "confirm": "确认",
+    "cancel": "取消",
+    "affects_one": "这将影响 {{count}} 个项目。",
+    "affects_other": "这将影响 {{count}} 个项目。",
+    "moreItems": "以及其他 {{count}} 个",
+    "itemsLabel": "受影响的项目",
+    "typePrompt": "输入 {{text}} 以确认"
+  },
+  "CopyButton": {
+    "copy": "复制",
+    "copied": "已复制",
+    "failed": "复制失败",
+    "failedHint": "无法复制到剪贴板。请选中文本后手动复制。"
+  },
+  "CapabilityMaturityBadge": {
+    "stable": "稳定",
+    "beta": "测试版",
+    "experimental": "实验性",
+    "experimentalNote": "已实现，但尚未在真实基础设施上完成端到端验证。请将其视为实验性功能。"
+  },
+  "MaturityBadge": {
+    "readsVerified": "读取：已验证",
+    "experimental": "实验性",
+    "experimentalNote": "已实现，但尚未在真实硬件上验证。请反馈结果。",
+    "write": {
+      "live_validated": {
+        "label": "写入：实机验证",
+        "note": "写入路径已在真实硬件上验证，并保留了证据。"
+      },
+      "partial": {
+        "label": "写入：部分验证",
+        "note": "部分写入路径已实机验证；其余仅通过模拟单元测试。"
+      },
+      "mock_tested": {
+        "label": "写入：模拟测试",
+        "note": "写入代码已受控并通过单元测试，但尚未在真实硬件上验证。"
+      },
+      "disabled": {
+        "label": "写入：按设计关闭",
+        "note": "写入已有意禁用；此集成以只读方式运行。"
+      },
+      "not_implemented": {
+        "label": "写入：未实现",
+        "note": "写入通道尚未构建。"
+      },
+      "experimental": {
+        "label": "写入：实验性",
+        "note": "实验性适配器：写入未经验证。"
+      }
     }
   },
   "Sheet": {
@@ -931,6 +995,21 @@
   },
   "MainLayout": {
     "skipToMainContent": "跳转到主要内容"
+  },
+  "SiteRequiredGate": {
+    "title": "选择站点",
+    "description": "此页面一次只处理一个站点。请选择要查看的站点；您可以随时通过站点菜单切换回“所有站点”。",
+    "noSites": "尚无站点。",
+    "manageSites": "创建站点",
+    "listLabel": "站点"
+  },
+  "FormatValue": {
+    "yes": "是",
+    "no": "否",
+    "entries_one": "{{count}} 个条目",
+    "entries_other": "{{count}} 个条目",
+    "fields_one": "{{count}} 个字段",
+    "fields_other": "{{count}} 个字段"
   },
   "PendingChangesDrawer": {
     "title": "待处理更改",
@@ -1139,7 +1218,8 @@
       "updateFailed": "更新授权失败",
       "granted": "已授予访问权限",
       "grantFailed": "授予访问权限失败（可能已存在）"
-    }
+    },
+    "confirmRevokeBody": "其对此摄像头的访问权限将恢复为其角色或摄像头组授权所允许的范围。"
   },
   "AgentDiscoveriesTab": {
     "title": "代理发现",
@@ -1413,7 +1493,10 @@
     "toasts": {
       "created": "计划已创建",
       "createFailed": "创建失败",
-      "deleted": "计划已删除"
+      "deleted": "计划已删除",
+      "deleteFailed": "无法删除该计划",
+      "enableFailed": "无法启用 {{name}}",
+      "disableFailed": "无法停用 {{name}}"
     },
     "actions": {
       "newSchedule": "新建计划",
@@ -1421,7 +1504,8 @@
       "create": "创建",
       "viewHistory": "查看运行历史",
       "disable": "禁用",
-      "enable": "启用"
+      "enable": "启用",
+      "delete": "删除计划"
     },
     "dialog": {
       "title": "新建扫描计划"
@@ -1458,7 +1542,8 @@
         "devices": "设备",
         "error": "错误"
       }
-    }
+    },
+    "confirmDeleteDescription": "将通知该站点的代理停止运行此扫描。已发现的设备仍保留在清单中。"
   },
   "CameraLiveViewModal": {
     "rec": "REC",
@@ -1469,17 +1554,18 @@
       "panDown": "向下",
       "panLeft": "向左",
       "panRight": "向右",
-      "home": "返回初始位置",
       "zoom": "缩放",
       "zoomIn": "放大",
-      "zoomOut": "缩小"
+      "zoomOut": "缩小",
+      "gotoPreset1": "转到预置位 1",
+      "gotoPreset1Named": "转到预置位 1（{{name}}）",
+      "noPreset1": "此摄像头没有预置位 1，无处可转。",
+      "failed": "摄像头未移动：{{reason}}"
     },
     "presets": {
       "title": "预设",
-      "entrance": "入口",
-      "parking": "停车场",
-      "wideView": "广角视图",
-      "zoom": "变焦"
+      "none": "此摄像头未保存预置位。",
+      "presetName": "预置位 {{id}}"
     },
     "stream": {
       "connecting": "正在连接视频流...",
@@ -2009,8 +2095,11 @@
     "actions": {
       "start": "启动",
       "stop": "停止",
-      "saveTour": "保存巡航"
-    }
+      "saveTour": "保存巡航",
+      "edit": "编辑巡航",
+      "delete": "删除巡航"
+    },
+    "confirmDeleteDescription": "“{{name}}”将从摄像头中删除，所有使用者都会受到影响。"
   },
   "ErrorBoundary": {
     "root": {
@@ -2209,7 +2298,8 @@
       "active": "活动",
       "created": "创建时间",
       "updated": "更新时间"
-    }
+    },
+    "copyValue": "复制{{label}}"
   },
   "RegisterPage": {
     "tagline": "厂商无关的网络管理",
@@ -2609,6 +2699,17 @@
       "loadGeneric": "加载组织失败",
       "create": "创建组织失败（{{status}}）",
       "createGeneric": "创建组织失败"
+    },
+    "confirm": {
+      "delete": {
+        "title": "删除组织“{{name}}”？",
+        "description": "该组织将从 FreeSDN 中移除，且无法通过界面恢复。其站点的计划任务（例如配置备份）将停止。"
+      },
+      "deleteMany": {
+        "title": "删除所选组织？",
+        "description": "这些组织将从 FreeSDN 中移除，且无法通过界面恢复。其站点的计划任务（例如配置备份）将停止。",
+        "confirmLabel": "删除组织"
+      }
     }
   },
   "changeLanguage": "切换语言",
@@ -2620,5 +2721,26 @@
     "minutesAgo": "{{n}} 分钟前",
     "hoursAgo": "{{n}} 小时前",
     "daysAgo": "{{n}} 天前"
+  },
+  "CameraPermissions": {
+    "needsPtz": "移动此摄像头和转到预置位需要 cameras.ptz 权限，操作员及以上角色拥有该权限。",
+    "needsPtzTour": "启动和停止巡航需要 cameras.ptz 权限，操作员及以上角色拥有该权限。",
+    "needsManagePtzTour": "编辑和删除巡航需要 cameras.manage_ptz 权限，站点管理员及以上角色拥有该权限。"
+  },
+  "LiveRead": {
+    "asOf": "截至 {{time}}",
+    "asOfBusy": "截至 {{time}}，设备繁忙",
+    "asOfTitle": "设备最近一次返回的数据，读取于 {{when}}。",
+    "asOfBusyTitle": "设备最近一次返回的数据，读取于 {{when}}。设备繁忙，因此没有向其发出新的请求。此信息会自动刷新。",
+    "busyRetrying": "设备繁忙，正在重试",
+    "stillBusy": "设备仍然繁忙",
+    "retry": "重试"
+  },
+  "BulkDelete": {
+    "allDeleted_one": "已删除 {{count}} 项。",
+    "allDeleted_other": "已删除 {{count}} 项。",
+    "noneDeleted_one": "未删除任何项：{{reason}}",
+    "noneDeleted_other": "未删除任何项（{{count}} 项失败）：{{reason}}",
+    "someFailed": "已删除 {{deleted}} 项，{{failed}} 项未删除：{{reason}}"
   }
 }

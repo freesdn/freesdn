@@ -835,6 +835,7 @@ export default function SitesPage() {
         isLoading={isLoading}
         selectable
         onSelectionChange={setSelectedSites}
+        selectedRows={selectedSites}
         searchable={false}
         itemName="sites"
         getRowId={(s) => s.id}

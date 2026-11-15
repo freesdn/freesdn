@@ -82,7 +82,9 @@
       "warningMany": "警告：当前有 {{count}} 个用户已分配到此角色。"
     },
     "matrix": {
-      "permissionHeader": "权限"
+      "permissionHeader": "权限",
+      "granted": "已授予",
+      "notGranted": "未授予"
     },
     "levels": {
       "superAdmin": "超级管理员",

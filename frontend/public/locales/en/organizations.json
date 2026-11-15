@@ -39,7 +39,8 @@
     "settingsTab": {
       "title": "Organization Settings",
       "description": "Configure billing, plan limits, SSO providers, and module enablement for this organization.",
-      "action": "Go to Settings"
+      "action": "Go to Settings",
+      "statusSuperAdminOnly": "Only a super admin can deactivate or reactivate an organization, because deactivating signs out all of its members."
     },
     "backToOrganizations": "Back to Organizations",
     "error": {

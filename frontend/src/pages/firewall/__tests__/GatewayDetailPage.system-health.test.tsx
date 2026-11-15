@@ -61,7 +61,12 @@ it.each(kinds)('hides stale %s data during refresh and after failure', async kin
   await act(async () => { pending = view.queryClient.refetchQueries({ queryKey: ['gateways', ID, kind], exact: true }); });
   expect(await within(panel(kind)).findByText(/Loading gateway status/)).toBeInTheDocument();
   expect(within(panel(kind)).queryByText(marker(kind))).not.toBeInTheDocument();
-  if (kind === 'firmware') expect(screen.queryByText('owned-stored-version')).not.toBeInTheDocument();
+  // The version card used to show "-" here although a version was stored. It
+  // now shows the stored one, marked as stored, and never passes it off as live.
+  if (kind === 'firmware') {
+    expect(screen.queryByText('owned-stored-version')).not.toBeInTheDocument();
+    expect(screen.getByText('owned-stored-version (stored)')).toBeInTheDocument();
+  }
   await act(async () => { reject(new Error('owned-private-health-error')); await pending; });
   expect(await within(panel(kind)).findByText(/Gateway status is unavailable/)).toBeInTheDocument();
   expect(within(panel(kind)).queryByText(marker(kind))).not.toBeInTheDocument();
@@ -86,6 +91,12 @@ it.each([[null, 'Unknown'], [false, 'No'], [true, 'Yes (?)']] as const)('preserv
   state.firmware.mockResolvedValue({ data: { ...envelope('firmware'), firmware: { ...firmware(), update_available: available } } });
   await show('firmware');
   expect(field('Update Available')).toHaveTextContent(expected);
+});
+it('shows the stored version, marked as stored, when the live firmware read fails', async () => {
+  state.firmware.mockRejectedValue(new Error('owned-private-health-error'));
+  await show('firmware');
+  expect(await screen.findByText('owned-stored-version (stored)')).toBeInTheDocument();
+  expect(screen.queryByText('owned-stored-version')).not.toBeInTheDocument();
 });
 it('does not invent a latest firmware version from the current version', async () => {
   await show('firmware');

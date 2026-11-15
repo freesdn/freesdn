@@ -26,10 +26,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters import AdapterError, get_adapter
 from app.adapters.validation import validate_id, validate_mac
 from app.core.crypto import decrypt_credential, decrypt_dict, is_encrypted
+from app.core.device_slot import controller_slot_key
 from app.core.security_utils import resolve_and_pin_host, validate_target_host
 from app.core.site_access import assert_site_access_for_request
 from app.models.core import Controller, Site
 from app.services.adapter_staging import AdapterStagingService
+from app.services.device_live_read import take_device_turn
 
 if TYPE_CHECKING:
     from app.core.dependencies import CurrentUser
@@ -525,6 +527,37 @@ class GatewayServiceBase:
     # is allowed — useful for shared services that dispatch by feature.
     SUPPORTED_CONTROLLER_TYPE: str | None = None
 
+    async def _refuse_deleted(self, controller: Controller) -> None:
+        """No client for a soft-deleted controller or gateway.
+
+        A firewall gateway staged through the vendor services is paired with a
+        Controller row of the same id (``_pair_gateway_controller``). Deleting
+        the gateway soft-deletes the GatewayConnection only, so the paired row
+        stayed live and a change staged before the delete could still be
+        applied to a gateway the operator had removed. Every staged applier
+        builds its client here, so this is where that stops.
+        """
+        from app.modules.firewall.models import GatewayConnection
+
+        if getattr(controller, "deleted_at", None) is not None:
+            raise HTTPException(404, detail="controller not found")
+        controller_id = getattr(controller, "id", None)
+        # Only the firewall vendors have GatewayConnection rows to be paired with.
+        if controller_id is None or controller.controller_type not in (
+            "opnsense",
+            "pfsense",
+            "mikrotik",
+            "openwrt",
+        ):
+            return
+        gateway_deleted = (
+            await self.db.execute(
+                select(GatewayConnection.deleted_at).where(GatewayConnection.id == controller_id)
+            )
+        ).scalar_one_or_none()
+        if gateway_deleted is not None:
+            raise HTTPException(404, detail="gateway not found")
+
     async def _get_client(self, controller: Controller) -> Any:
         """Build (or reuse) the underlying vendor client and ensure it
         has a session.
@@ -543,6 +576,7 @@ class GatewayServiceBase:
         is set on the subclass, refuses controllers of other types
         with a 400. Cloud-mode kwargs are still Omada-specific.
         """
+        await self._refuse_deleted(controller)
         if (
             self.SUPPORTED_CONTROLLER_TYPE is not None
             and controller.controller_type != self.SUPPORTED_CONTROLLER_TYPE
@@ -555,6 +589,9 @@ class GatewayServiceBase:
                     f"got {controller.controller_type!r}"
                 ),
             )
+        # A page's live read waits briefly for the device's turn, or is
+        # answered with its last response (app/services/device_live_read.py).
+        await take_device_turn(controller_slot_key(controller))
         # Belt-and-suspenders SSRF gate: even if a controller row was
         # somehow inserted with a forbidden host (DB seed, migration,
         # historical record before the validator existed), refuse to
@@ -676,6 +713,7 @@ class GatewayServiceBase:
                     f"got {controller.controller_type!r}"
                 ),
             )
+        await take_device_turn(controller_slot_key(controller))
         effective_host = self._pin_controller_host(controller)
         common_kwargs: dict[str, Any] = {
             "port": controller.port,

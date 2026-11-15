@@ -45,6 +45,7 @@ import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -479,7 +480,7 @@ function GovernancePanel() {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      setPolicyError(err?.response?.data?.detail || t('AISettingsPage.errors.governanceUpdateFailed'));
+      setPolicyError(getApiErrorMessage(err, t('AISettingsPage.errors.governanceUpdateFailed')));
     },
   });
 

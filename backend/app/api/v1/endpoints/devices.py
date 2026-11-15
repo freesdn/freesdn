@@ -46,7 +46,8 @@ from app.schemas import (
     DeviceWithStats,
     PaginatedResponse,
 )
-from app.services.adapter_factory import build_adapter_for_controller
+from app.services.adapter_factory import adapter_device_id, build_adapter_for_controller
+from app.services.device_writes import device_action, within, write_device_config
 
 logger = logging.getLogger(__name__)
 
@@ -407,6 +408,12 @@ async def _get_adapter_for_device(device: Device) -> Any:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Device has no controller",
         )
+    # A page's live read waits briefly for the controller's turn, or is answered
+    # with its last response (app/services/device_live_read.py).
+    from app.core.device_slot import controller_slot_key
+    from app.services.device_live_read import take_device_turn
+
+    await take_device_turn(controller_slot_key(ctrl))
     try:
         return build_adapter_for_controller(ctrl)
     except AdapterError:
@@ -523,6 +530,34 @@ async def batch_upgrade_firmware(
         )
     return await _batch_action(
         data.device_ids, "upgrade_firmware", current_user, session, permission="firmware:upgrade"
+    )
+
+
+async def _batch_device_write(
+    session: AsyncSession, device: Device, action: str, method: Any, actor_id: UUID
+) -> Any:
+    """One device of a batch: a reboot is audited, a firmware upgrade is staged.
+
+    The staged write is refused with an HTTPException while read-only mode is
+    on, which the batch reports as "rejected" for that device.
+    """
+    if action == "reboot_device":
+        return await device_action(
+            session,
+            device,
+            actor_id=actor_id,
+            action="reboot_device",
+            parameters={"batch": True},
+            perform=lambda: method(device.mac_address),
+        )
+    return await write_device_config(
+        session,
+        device,
+        actor_id=actor_id,
+        feature=f"device.batch.{action}",
+        operation="update",
+        payload={"batch": True},
+        perform=lambda: method(device.mac_address),
     )
 
 
@@ -660,7 +695,9 @@ async def _batch_action(
                         try:
                             method = getattr(adapter, action)
                             invoked = True
-                            result = await method(device.mac_address)
+                            result = await _batch_device_write(
+                                session, device, action, method, current_user.id
+                            )
                             if isinstance(result, AdapterResult) and result.success is True:
                                 item = outcome(
                                     device, "accepted", "Command accepted by controller."
@@ -682,6 +719,7 @@ async def _batch_action(
                             AdapterReadOnlyError,
                             AdapterConfirmationRequiredError,
                             CapabilityNotSupportedError,
+                            HTTPException,
                         ):
                             item = outcome(
                                 device,
@@ -760,8 +798,16 @@ async def reboot_device(
 
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.reboot_device(device.mac_address)
+        result = await device_action(
+            session,
+            device,
+            actor_id=current_user.id,
+            action="reboot_device",
+            parameters={},
+            perform=lambda: within(adapter, lambda: adapter.reboot_device(device.mac_address)),
+        )
+    except HTTPException:
+        raise
     except AdapterError:
         raise  # middleware maps AdapterReadOnlyError->403, ConfirmationRequired->409, conn/auth->502/503
     except Exception as e:
@@ -819,8 +865,19 @@ async def set_device_led(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.set_device_led(device.mac_address, data.setting)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=current_user.id,
+            feature="device.led",
+            operation="update",
+            payload={"setting": data.setting},
+            perform=lambda: within(
+                adapter, lambda: adapter.set_device_led(device.mac_address, data.setting)
+            ),
+        )
+    except HTTPException:
+        raise
     except AdapterError:
         raise  # middleware maps AdapterReadOnlyError->403, ConfirmationRequired->409, conn/auth->502/503
     except Exception as e:
@@ -856,8 +913,17 @@ async def adopt_device(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.adopt_device(device.mac_address)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=current_user.id,
+            feature="device.adopt",
+            operation="create",
+            payload={},
+            perform=lambda: within(adapter, lambda: adapter.adopt_device(device.mac_address)),
+        )
+    except HTTPException:
+        raise
     except AdapterError:
         raise  # middleware maps AdapterReadOnlyError->403, ConfirmationRequired->409, conn/auth->502/503
     except Exception as e:
@@ -899,8 +965,17 @@ async def forget_device(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.forget_device(device.mac_address)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=current_user.id,
+            feature="device.forget",
+            operation="delete",
+            payload={},
+            perform=lambda: within(adapter, lambda: adapter.forget_device(device.mac_address)),
+        )
+    except HTTPException:
+        raise
     except AdapterError:
         raise  # middleware maps AdapterReadOnlyError->403, ConfirmationRequired->409, conn/auth->502/503
     except Exception as e:
@@ -944,8 +1019,17 @@ async def upgrade_device_firmware(
     adapter = await _get_adapter_for_device(device)
 
     try:
-        async with adapter:
-            result = await adapter.upgrade_firmware(device.mac_address)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=current_user.id,
+            feature="device.firmware_upgrade",
+            operation="update",
+            payload={},
+            perform=lambda: within(adapter, lambda: adapter.upgrade_firmware(device.mac_address)),
+        )
+    except HTTPException:
+        raise
     except AdapterError:
         raise  # middleware maps AdapterReadOnlyError->403, ConfirmationRequired->409, conn/auth->502/503
     except Exception as e:
@@ -995,7 +1079,9 @@ async def get_device_metrics(
 
     try:
         async with adapter:
-            metrics = await adapter.get_device_metrics(device.mac_address)
+            metrics = await adapter.get_device_metrics(
+                adapter_device_id(device, device.controller.controller_type) or ""
+            )
     except AdapterError:
         raise  # middleware maps AdapterReadOnlyError->403, ConfirmationRequired->409, conn/auth->502/503
     except Exception as e:

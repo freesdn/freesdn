@@ -139,6 +139,11 @@ async def _call_create_task(
         return SimpleNamespace(get_connection_for_site=lambda _site: None)
 
     _RecordingAgentService.created = []
+    # These tests are about the confirmation gate; read-only mode, which also
+    # refuses a device task, is covered in tests/services/test_agent_task_write_gate.py.
+    monkeypatch.setattr(
+        agents_mod.AdapterStagingService, "is_read_only", staticmethod(lambda: False)
+    )
     monkeypatch.setattr(agents_mod, "_verify_agent_org", _verify)
     monkeypatch.setattr(agents_mod, "PersistentAgentService", _RecordingAgentService)
     monkeypatch.setattr(agents_mod, "get_agent_registry", _registry)
@@ -147,7 +152,10 @@ async def _call_create_task(
         await agents_mod.create_task(
             agent_id=agent_id,
             data=TaskCreate(task_type=task_type, task_data=task_data),
-            current_user=SimpleNamespace(organization_id=org_id),
+            # The site ceiling has its own tests (test_agent_task_write_gate).
+            current_user=SimpleNamespace(
+                id=uuid4(), organization_id=org_id, has_site_permission=lambda *_a: True
+            ),
             session=SimpleNamespace(commit=_noop_commit),
         )
     return excinfo.value, list(_RecordingAgentService.created)

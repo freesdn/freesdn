@@ -28,6 +28,8 @@ def test_application_images_have_blocking_full_inventory_gates(workflow):
         "frontend",
         "nginx",
         "tailscale-access",
+        # The runtime container every tier runs since 26.12 (docker-compose `tailscale`).
+        "tailscale",
         "backup-metrics",
         "postgres",
         "valkey",
@@ -45,6 +47,7 @@ def test_application_images_have_blocking_full_inventory_gates(workflow):
         "frontend": "caddy",
         "nginx": "production",
         "tailscale-access": "tailscale-access",
+        "tailscale": "tailscale-runtime",
     }.items():
         assert by_component[name]["target"] == target
     # Keep the production image contract in the gate, including optional profiles.

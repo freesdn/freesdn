@@ -19,7 +19,6 @@ import {
   CheckCircle,
   XCircle,
   ExternalLink,
-  Copy,
   TestTube,
   Loader2,
   Zap,
@@ -38,6 +37,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Search,
+  WifiOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/layout';
@@ -50,6 +50,9 @@ import { controllersApi, type TestConnectionResult, type ControllerMetadata } fr
 import { cn, formatRelativeTime, formatUptime, formatWatts } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
+import { CopyButton } from '@/components/ui/copy-button';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── Constants ────────────────────────────────────────────
 
@@ -71,24 +74,32 @@ const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle; labelKey: string
   disconnected: { icon: XCircle, labelKey: 'status.disconnected', className: 'bg-muted-foreground/10 text-muted-foreground' },
   error: { icon: AlertCircle, labelKey: 'status.error', className: 'bg-red-500/10 text-red-500' },
   syncing: { icon: RefreshCw, labelKey: 'status.syncing', className: 'bg-blue-500/10 text-blue-500' },
+  // The backend reports `unreachable` when the controller stops answering; it
+  // was missing here and fell through to an amber "Unknown".
+  unreachable: { icon: WifiOff, labelKey: 'status.unreachable', className: 'bg-red-500/10 text-red-500' },
   unknown: { icon: Clock, labelKey: 'status.unknown', className: 'bg-amber-500/10 text-amber-500' },
 };
+
+/** `host:port`, or just `host` when no port is known (never `host:undefined`). */
+function hostWithPort(host: string, port: number | null | undefined): string {
+  return port ? `${host}:${port}` : host;
+}
 
 // ─── Helper components ────────────────────────────────────
 
 function InfoRow({ label, value, copyable = false }: { label: string; value: React.ReactNode; copyable?: boolean }) {
-  const handleCopy = () => {
-    if (typeof value === 'string') navigator.clipboard.writeText(value);
-  };
+  const { t } = useTranslation('controllers');
   return (
     <div className="flex items-start justify-between py-1.5">
       <span className="text-sm text-muted-foreground">{label}</span>
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-right max-w-[280px] truncate">{value}</span>
         {copyable && typeof value === 'string' && (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCopy}>
-            <Copy className="h-3 w-3" />
-          </Button>
+          <CopyButton
+            value={value}
+            className="h-6 w-6 shrink-0"
+            aria-label={t('ControllerDetailPage.copyValue', { label })}
+          />
         )}
       </div>
     </div>
@@ -129,7 +140,7 @@ interface Controller {
   controller_type: string;
   host: string;
   port: number;
-  status: 'connected' | 'disconnected' | 'error' | 'syncing' | 'unknown';
+  status: 'connected' | 'disconnected' | 'error' | 'syncing' | 'unreachable' | 'unknown';
   last_sync: string | null;
   last_error: string | null;
   is_active: boolean;
@@ -151,6 +162,7 @@ export default function ControllerDetailPage() {
   const activeTab = tab && ['overview', 'devices', 'firmware', 'settings'].includes(tab) ? tab : 'overview';
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirmAction = useConfirm();
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
   const [showErrorHistory, setShowErrorHistory] = useState(false);
 
@@ -200,7 +212,7 @@ export default function ControllerDetailPage() {
       setTestResult({
         success: false,
         message: t('ControllerDetailPage.test.failedMessage'),
-        error: axiosErr.response?.data?.detail || err.message,
+        error: getApiErrorMessage(axiosErr),
       });
     },
   });
@@ -241,7 +253,7 @@ export default function ControllerDetailPage() {
 
   const statusConfig = STATUS_CONFIG[controller.status] || STATUS_CONFIG.unknown;
   const StatusIcon = statusConfig.icon;
-  const controllerUrl = `http${controller.use_ssl ? 's' : ''}://${controller.host}:${controller.port}`;
+  const controllerUrl = `http${controller.use_ssl ? 's' : ''}://${hostWithPort(controller.host, controller.port)}`;
   const runtime = meta?.runtime_status || {};
   const dc = meta?.device_counts;
   const poe = meta?.poe_budget;
@@ -254,7 +266,7 @@ export default function ControllerDetailPage() {
       <PageHeader
         icon={Server}
         title={controller.name}
-        description={`${TYPE_LABELS[controller.controller_type] || controller.controller_type} · ${controller.host}:${controller.port}${runtime.version ? ` · v${runtime.version}` : ''}`}
+        description={`${TYPE_LABELS[controller.controller_type] || controller.controller_type} · ${hostWithPort(controller.host, controller.port)}${runtime.version ? ` · v${runtime.version}` : ''}`}
         breadcrumbs={
           <Link to="/controllers" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -520,7 +532,10 @@ export default function ControllerDetailPage() {
                       : <><ToggleLeft className="h-4 w-4 text-muted-foreground" /> {t('ControllerDetailPage.sync.disabled')}</>}
                   </span>
                 } />
-                <InfoRow label={t('ControllerDetailPage.sync.interval')} value={`${controller.sync_interval_seconds}s`} />
+                <InfoRow
+                  label={t('ControllerDetailPage.sync.interval')}
+                  value={controller.sync_interval_seconds ? `${controller.sync_interval_seconds}s` : '-'}
+                />
                 <InfoRow label={t('ControllerDetailPage.sync.lastSync')} value={
                   <span title={controller.last_sync ? new Date(controller.last_sync).toLocaleString() : undefined}>
                     {formatRelativeTime(controller.last_sync)}
@@ -714,7 +729,7 @@ export default function ControllerDetailPage() {
               </CardHeader>
               <CardContent className="space-y-1">
                 <InfoRow label={t('ControllerDetailPage.connection.host')} value={controller.host} copyable />
-                <InfoRow label={t('ControllerDetailPage.connection.port')} value={String(controller.port)} />
+                <InfoRow label={t('ControllerDetailPage.connection.port')} value={controller.port ? String(controller.port) : '-'} />
                 <InfoRow label={t('ControllerDetailPage.connection.ssl')} value={controller.use_ssl ? t('ControllerDetailPage.common.enabled') : t('ControllerDetailPage.common.disabled')} />
                 <InfoRow label={t('ControllerDetailPage.connection.verifyCertificate')} value={controller.verify_ssl ? t('ControllerDetailPage.common.yes') : t('ControllerDetailPage.common.no')} />
                 <InfoRow label={t('ControllerDetailPage.connection.connectionMode')} value={controller.connection_mode || 'local'} />
@@ -760,10 +775,20 @@ export default function ControllerDetailPage() {
                 </p>
                 <Button
                   variant="destructive"
-                  onClick={() => {
-                    if (window.confirm(t('ControllerDetailPage.dangerZone.confirm', { name: controller.name, count: dc?.total ?? 0 }))) {
-                      deleteMutation.mutate(controller.id);
-                    }
+                  onClick={async () => {
+                    const ok = await confirmAction({
+                      title: t('ControllerDetailPage.dangerZone.confirmTitle', { name: controller.name }),
+                      // The device count comes from the controller metadata. When it is
+                      // missing (or zero), do not print "0 devices" as if it were known.
+                      description: dc?.total
+                        ? t('ControllerDetailPage.dangerZone.confirmBody', { count: dc.total })
+                        : t('ControllerDetailPage.dangerZone.confirmBodyNoCount'),
+                      items: [controller.name],
+                      confirmLabel: t('ControllerDetailPage.dangerZone.delete'),
+                      destructive: true,
+                    });
+                    if (!ok) return;
+                    deleteMutation.mutate(controller.id);
                   }}
                   disabled={deleteMutation.isPending}
                 >

@@ -24,7 +24,7 @@
       "eventTypes": {
         "label": "Event Types",
         "add": "Add",
-        "description": "Leave empty to receive all events"
+        "description": "Leave empty to receive every event except progress updates. device.* matches every device event."
       },
       "enabled": "Enabled",
       "verifySsl": "Verify SSL"
@@ -70,7 +70,10 @@
       "test": "Test Webhook",
       "viewDeliveries": "View Deliveries",
       "deleteConfirm": "Are you sure you want to delete this webhook?",
-      "delete": "Delete"
+      "delete": "Delete",
+      "deleteTitle": "Delete webhook \"{{name}}\"?",
+      "deleteBody": "FreeSDN stops sending events to it, and its delivery history is deleted. This cannot be undone.",
+      "deleteAction": "Delete webhook"
     },
     "header": {
       "title": "Webhooks",
@@ -122,7 +125,11 @@
       "delete": {
         "label": "Delete",
         "title": "Bulk Delete",
-        "description": "Please delete webhooks individually for safety."
+        "description": "Please delete webhooks individually for safety.",
+        "confirmTitle_one": "Delete {{count}} webhook?",
+        "confirmTitle_other": "Delete {{count}} webhooks?",
+        "confirmBody": "FreeSDN stops sending events to them, and their delivery history is deleted. This cannot be undone.",
+        "confirmAction": "Delete webhooks"
       }
     }
   }

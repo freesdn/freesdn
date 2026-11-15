@@ -172,6 +172,16 @@ updates:
     open-pull-requests-limit: 5
     labels: ["dependencies", "security"]
 
+  # Built from source since 26.10 (Dockerfile.redis-exporter) and was the one
+  # Go build directory with no entry, so its advisories raised no PR.
+  - package-ecosystem: "gomod"
+    directory: "/docker/redis-exporter-build"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "security"]
+
   - package-ecosystem: "gomod"
     directory: "/docker/prometheus-build"
     schedule:

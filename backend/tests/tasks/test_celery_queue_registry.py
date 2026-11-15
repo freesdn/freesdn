@@ -273,6 +273,11 @@ _UNDISPATCHED_BY_DESIGN: dict[str, str] = {
     "app.tasks.maintenance.refresh_materialized_views": "on-demand; no caller left",
     "app.tasks.maintenance.vacuum_database": "on-demand DBA action",
     "app.tasks.metrics.collect_controller_metrics": "per-controller; no caller left",
+    # Unscheduled on purpose: one controller login per device per run, result
+    # discarded. analytics.collect_device_metrics records the same synced values.
+    "app.tasks.metrics.collect_all_device_metrics": (
+        "redundant device load; analytics.collect_device_metrics stores the data"
+    ),
     "app.tasks.metrics.collect_site_metrics": "per-site; no caller left",
     "app.tasks.sync.sync_device_config": "per-device; no caller left",
     "backup.run_backup": "per-job; the API path runs backups inline",
@@ -291,7 +296,6 @@ _UNDISPATCHED_BY_DESIGN: dict[str, str] = {
         "fetches extension states and discards them, so a schedule would add "
         "load without adding a refresh"
     ),
-    "voip.sync_cdr": "per-PBX; needs a voip API route",
     "voip.sync_extensions": "per-PBX; needs a voip API route",
     "voip.sync_phones": "per-PBX; needs a voip API route",
 }

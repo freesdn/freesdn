@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { controllersApi, sitePickerQuery } from '@/lib/api';
+import { getApiErrorMessage, parseApiError } from '@/lib/api/errors';
 
 interface AddControllerModalProps {
   open: boolean;
@@ -284,15 +285,9 @@ export function AddControllerModal({ open, onOpenChange }: AddControllerModalPro
           setSiteMappings(initialMappings);
           return undefined;
         } catch (err: unknown) {
-          const axiosErr = err as import('axios').AxiosError<{
-            detail?: string;
-            error?: { message?: string };
-          }>;
           const errObj = err as { code?: string; message?: string };
-          const detail =
-            axiosErr.response?.data?.detail ||
-            axiosErr.response?.data?.error?.message;
-          if (detail) return detail;
+          const parsed = parseApiError(err);
+          if (parsed.kind === 'http') return parsed.message;
           if (errObj.code === 'ERR_NETWORK' || errObj.message?.includes('Network Error')) {
             return t('AddControllerModal.probe.networkError');
           }
@@ -500,9 +495,7 @@ function ConnectionDetailsStep({
         setTestError(response.data.error || response.data.message || t('AddControllerModal.testErrors.failed'));
       }
     } catch (err: unknown) {
-      const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-      const errObj = err as { message?: string };
-      const detail = axiosErr.response?.data?.detail || errObj.message || t('AddControllerModal.testErrors.failed');
+      const detail = getApiErrorMessage(err, t('AddControllerModal.testErrors.failed'));
       setTestResult({ success: false, message: detail, error: detail });
       setTestError(detail);
     } finally {

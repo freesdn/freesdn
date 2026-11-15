@@ -47,6 +47,7 @@ from app.models.devices import (
 )
 from app.modules.network.models import LinkAggregationGroup, Network, PortProfile
 from app.services.adapter_factory import get_adapter
+from app.services.device_writes import device_action, within, write_device_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -544,6 +545,13 @@ async def _get_adapter_for_device(device: Device) -> Any:
     # GatewayServiceBase so direct adapter callers stay consistent
     # with the gateway-feature path.
     GatewayServiceBase._validate_controller_host(ctrl.host or "")
+
+    # A page's live read waits briefly for the controller's turn, or is answered
+    # with its last response (app/services/device_live_read.py).
+    from app.core.device_slot import controller_slot_key
+    from app.services.device_live_read import take_device_turn
+
+    await take_device_turn(controller_slot_key(ctrl))
 
     cloud_kwargs: dict[str, Any] = {}
     if ctrl.connection_mode == "cloud":
@@ -1414,8 +1422,20 @@ async def update_switch_port(
             port.port_metadata = security_state
 
     try:
-        async with adapter:
-            cfg_result = await adapter.configure_switch_port(device.mac_address, port_index, config)
+        cfg_result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port.config",
+            operation="update",
+            payload={"port_index": port_index, "config": config},
+            perform=lambda: within(
+                adapter,
+                lambda: adapter.configure_switch_port(device.mac_address, port_index, config),
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to push port config to controller: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -1547,8 +1567,18 @@ async def cycle_port_poe(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            cycle_result = await adapter.cycle_poe_port(device.mac_address, port_index)
+        cycle_result = await device_action(
+            session,
+            device,
+            actor_id=_user.id,
+            action="cycle_poe_port",
+            parameters={"port_index": port_index},
+            perform=lambda: within(
+                adapter, lambda: adapter.cycle_poe_port(device.mac_address, port_index)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Controller communication error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -1650,8 +1680,19 @@ async def create_lag(
     adapter = await _get_adapter_for_device(device)
     config = data.model_dump(exclude_none=True)
     try:
-        async with adapter:
-            result = await adapter.create_switch_lag(device.mac_address, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.lag",
+            operation="create",
+            payload={"config": config},
+            perform=lambda: within(
+                adapter, lambda: adapter.create_switch_lag(device.mac_address, config)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("LAG create error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -1676,8 +1717,19 @@ async def update_lag(
     adapter = await _get_adapter_for_device(device)
     config = data.model_dump(exclude_none=True)
     try:
-        async with adapter:
-            result = await adapter.update_switch_lag(device.mac_address, lag_id, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.lag",
+            operation="update",
+            payload={"lag_id": lag_id, "config": config},
+            perform=lambda: within(
+                adapter, lambda: adapter.update_switch_lag(device.mac_address, lag_id, config)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("LAG update error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -1703,8 +1755,19 @@ async def delete_lag(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.delete_switch_lag(device.mac_address, lag_id)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.lag",
+            operation="delete",
+            payload={"lag_id": lag_id},
+            perform=lambda: within(
+                adapter, lambda: adapter.delete_switch_lag(device.mac_address, lag_id)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("LAG delete error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -1848,10 +1911,16 @@ async def bulk_vlan_port_assignment(
                 if assignment.tagged_vlans:
                     port_config["taggedNetworkIds"] = assignment.tagged_vlans
                 try:
-                    result = await adapter.update_switch_port_overrides(
-                        device.mac_address,
-                        assignment.port_index,
-                        port_config,
+                    result = await write_device_config(
+                        session,
+                        device,
+                        actor_id=_user.id,
+                        feature="switch.port.vlan.bulk",
+                        operation="update",
+                        payload={"port_index": assignment.port_index, "config": port_config},
+                        perform=lambda adapter=adapter, mac=device.mac_address, port_index=assignment.port_index, cfg=port_config: (
+                            adapter.update_switch_port_overrides(mac, port_index, cfg)
+                        ),
                     )
                     results.append(
                         {
@@ -1911,8 +1980,17 @@ async def update_stp_config(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.update_switch_stp_config(config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.stp",
+            operation="update",
+            payload={"config": config},
+            perform=lambda: within(adapter, lambda: adapter.update_switch_stp_config(config)),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("STP config update error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -1952,8 +2030,19 @@ async def create_acl_rule(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.create_switch_acl_rule(device.mac_address, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.acl_rule",
+            operation="create",
+            payload={"config": config},
+            perform=lambda: within(
+                adapter, lambda: adapter.create_switch_acl_rule(device.mac_address, config)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("ACL rule create error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -1973,8 +2062,19 @@ async def update_acl_rule(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.update_switch_acl_rule(device.mac_address, rule_id, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.acl_rule",
+            operation="update",
+            payload={"rule_id": rule_id, "config": config},
+            perform=lambda: within(
+                adapter, lambda: adapter.update_switch_acl_rule(device.mac_address, rule_id, config)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("ACL rule update error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -1992,8 +2092,19 @@ async def delete_acl_rule(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.delete_switch_acl_rule(device.mac_address, rule_id)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.acl_rule",
+            operation="delete",
+            payload={"rule_id": rule_id},
+            perform=lambda: within(
+                adapter, lambda: adapter.delete_switch_acl_rule(device.mac_address, rule_id)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("ACL rule delete error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2033,8 +2144,19 @@ async def update_igmp_config(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.update_switch_igmp_config(device.mac_address, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.igmp",
+            operation="update",
+            payload={"config": config},
+            perform=lambda: within(
+                adapter, lambda: adapter.update_switch_igmp_config(device.mac_address, config)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("IGMP config update error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2056,10 +2178,22 @@ async def set_port_isolation(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.set_switch_port_isolation(
-                device.mac_address, port_index, data.enabled
-            )
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port.isolation",
+            operation="update",
+            payload={"port_index": port_index, "enabled": data.enabled},
+            perform=lambda: within(
+                adapter,
+                lambda: adapter.set_switch_port_isolation(
+                    device.mac_address, port_index, data.enabled
+                ),
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Port isolation error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2099,8 +2233,19 @@ async def update_mirror_config(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.update_switch_mirror_config(device.mac_address, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.mirror",
+            operation="update",
+            payload={"config": config},
+            perform=lambda: within(
+                adapter, lambda: adapter.update_switch_mirror_config(device.mac_address, config)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Mirror config update error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2179,8 +2324,17 @@ async def update_dhcp_snooping_config(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.update_dhcp_snooping_config(config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.dhcp_snooping",
+            operation="update",
+            payload={"config": config},
+            perform=lambda: within(adapter, lambda: adapter.update_dhcp_snooping_config(config)),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("DHCP snooping update error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2220,8 +2374,17 @@ async def update_qos_config(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.update_qos_config(config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.qos",
+            operation="update",
+            payload={"config": config},
+            perform=lambda: within(adapter, lambda: adapter.update_qos_config(config)),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("QoS config update error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2272,7 +2435,8 @@ async def get_lldp_neighbors(
             neighbors.append(
                 {
                     "port_index": port.port_number,
-                    "port_name": port.port_name or f"Port {port.port_number}",
+                    # DevicePort's label is ``name`` (there is no port_name).
+                    "port_name": port.name or f"Port {port.port_number}",
                     "neighbor_device": neighbor_device,
                     "neighbor_port": meta.get("lldpNeighborPort"),
                     "neighbor_ip": meta.get("lldpNeighborIp"),
@@ -2300,10 +2464,20 @@ async def set_port_lldp(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.set_switch_port_lldp(
-                device.mac_address, port_index, data.enabled
-            )
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port.lldp",
+            operation="update",
+            payload={"port_index": port_index, "enabled": data.enabled},
+            perform=lambda: within(
+                adapter,
+                lambda: adapter.set_switch_port_lldp(device.mac_address, port_index, data.enabled),
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Port LLDP toggle error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2325,10 +2499,22 @@ async def set_port_flow_control(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.set_switch_port_flow_control(
-                device.mac_address, port_index, data.enabled
-            )
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port.flow_control",
+            operation="update",
+            payload={"port_index": port_index, "enabled": data.enabled},
+            perform=lambda: within(
+                adapter,
+                lambda: adapter.set_switch_port_flow_control(
+                    device.mac_address, port_index, data.enabled
+                ),
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Port flow control error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2355,10 +2541,22 @@ async def set_port_speed_duplex(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.set_switch_port_speed_duplex(
-                device.mac_address, port_index, data.speed, data.duplex
-            )
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port.speed_duplex",
+            operation="update",
+            payload={"port_index": port_index, "speed": data.speed, "duplex": data.duplex},
+            perform=lambda: within(
+                adapter,
+                lambda: adapter.set_switch_port_speed_duplex(
+                    device.mac_address, port_index, data.speed, data.duplex
+                ),
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Port speed/duplex error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2380,10 +2578,22 @@ async def set_port_loopback_detect(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.set_switch_port_loopback_detect(
-                device.mac_address, port_index, data.enabled
-            )
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port.loopback_detect",
+            operation="update",
+            payload={"port_index": port_index, "enabled": data.enabled},
+            perform=lambda: within(
+                adapter,
+                lambda: adapter.set_switch_port_loopback_detect(
+                    device.mac_address, port_index, data.enabled
+                ),
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Port loopback detect error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2535,8 +2745,20 @@ async def set_port_bandwidth(
         if data.egress_rate is not None:
             config["bandCtrl"]["egressRate"] = data.egress_rate
     try:
-        async with adapter:
-            result = await adapter.set_switch_port_bandwidth(device.mac_address, port_index, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port.bandwidth",
+            operation="update",
+            payload={"port_index": port_index, "config": config},
+            perform=lambda: within(
+                adapter,
+                lambda: adapter.set_switch_port_bandwidth(device.mac_address, port_index, config),
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Bandwidth control error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2579,10 +2801,22 @@ async def set_port_storm_control(
     if data.unknown_unicast_rate is not None:
         config["unknownUnicastRate"] = data.unknown_unicast_rate
     try:
-        async with adapter:
-            result = await adapter.set_switch_port_storm_control(
-                device.mac_address, port_index, config
-            )
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port.storm_control",
+            operation="update",
+            payload={"port_index": port_index, "config": config},
+            perform=lambda: within(
+                adapter,
+                lambda: adapter.set_switch_port_storm_control(
+                    device.mac_address, port_index, config
+                ),
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Storm control error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2622,8 +2856,17 @@ async def create_switch_poe_schedule(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.create_poe_schedule(config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.poe_schedule",
+            operation="create",
+            payload={"config": config},
+            perform=lambda: within(adapter, lambda: adapter.create_poe_schedule(config)),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("PoE schedule create error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2642,8 +2885,19 @@ async def update_switch_poe_schedule(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.update_poe_schedule(schedule_id, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.poe_schedule",
+            operation="update",
+            payload={"schedule_id": schedule_id, "config": config},
+            perform=lambda: within(
+                adapter, lambda: adapter.update_poe_schedule(schedule_id, config)
+            ),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("PoE schedule update error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2661,8 +2915,17 @@ async def delete_switch_poe_schedule(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.delete_poe_schedule(schedule_id)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.poe_schedule",
+            operation="delete",
+            payload={"schedule_id": schedule_id},
+            perform=lambda: within(adapter, lambda: adapter.delete_poe_schedule(schedule_id)),
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("PoE schedule delete error: %s", e, exc_info=True)
         raise HTTPException(502, detail="Controller error")
@@ -2895,10 +3158,16 @@ async def apply_oui_vlan_assignment(
             applied = 0
             for change in changes:
                 try:
-                    result = await adapter.update_switch_port_overrides(
-                        device.mac_address,
-                        change["port"],
-                        {"nativeNetworkId": str(change["vlan_id"])},
+                    result = await write_device_config(
+                        session,
+                        device,
+                        actor_id=_user.id,
+                        feature="switch.port.vlan.mapping",
+                        operation="update",
+                        payload={"port_index": change["port"], "vlan_id": change["vlan_id"]},
+                        perform=lambda adapter=adapter, mac=device.mac_address, port_index=change["port"], cfg={"nativeNetworkId": str(change["vlan_id"])}: (
+                            adapter.update_switch_port_overrides(mac, port_index, cfg)
+                        ),
                     )
                     if result.success:
                         applied += 1
@@ -2992,8 +3261,15 @@ async def create_port_profile(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.create_port_profile(config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port_profile",
+            operation="create",
+            payload={"config": config},
+            perform=lambda: within(adapter, lambda: adapter.create_port_profile(config)),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return getattr(result, "value", result) or {"success": True}
@@ -3017,8 +3293,17 @@ async def update_port_profile(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.update_port_profile(profile_id, config)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port_profile",
+            operation="update",
+            payload={"profile_id": profile_id, "config": config},
+            perform=lambda: within(
+                adapter, lambda: adapter.update_port_profile(profile_id, config)
+            ),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return getattr(result, "value", result) or {"success": True}
@@ -3040,8 +3325,15 @@ async def delete_port_profile(
     device = await _get_switch(session, switch_id, _org_id(_user), _user)
     adapter = await _get_adapter_for_device(device)
     try:
-        async with adapter:
-            result = await adapter.delete_port_profile(profile_id)
+        result = await write_device_config(
+            session,
+            device,
+            actor_id=_user.id,
+            feature="switch.port_profile",
+            operation="delete",
+            payload={"profile_id": profile_id},
+            perform=lambda: within(adapter, lambda: adapter.delete_port_profile(profile_id)),
+        )
         if not getattr(result, "success", True):
             raise HTTPException(502, detail=getattr(result, "message", "Adapter error"))
         return {"success": True}
@@ -3104,10 +3396,16 @@ async def apply_cli_profile(
         async with adapter:
             for port_idx in data.port_indices:
                 try:
-                    result = await adapter.update_switch_port_overrides(
-                        device.mac_address,
-                        port_idx,
-                        data.config,
+                    result = await write_device_config(
+                        session,
+                        device,
+                        actor_id=_user.id,
+                        feature="switch.port.profile.cli",
+                        operation="update",
+                        payload={"port_index": port_idx, "config": data.config},
+                        perform=lambda adapter=adapter, mac=device.mac_address, port_index=port_idx, cfg=data.config: (
+                            adapter.update_switch_port_overrides(mac, port_index, cfg)
+                        ),
                     )
                     results.append(
                         {

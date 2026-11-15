@@ -558,7 +558,9 @@
       "rxSum": "Suma RX",
       "actions": "Acciones",
       "trunk": "Troncal",
-      "access": "Acceso"
+      "access": "Acceso",
+      "itemName": "puertos",
+      "traffic": "Tráfico"
     },
     "poe": {
       "enabled": "Habilitado",
@@ -581,7 +583,8 @@
       "enable": "Habilitar",
       "disablePoe": "Deshabilitar PoE",
       "enablePoe": "Habilitar PoE",
-      "controlNotSupported": "Control de puerto no compatible"
+      "controlNotSupported": "Control de puerto no compatible",
+      "menuFor": "Acciones para {{port}}"
     }
   },
   "ProfilesTab": {

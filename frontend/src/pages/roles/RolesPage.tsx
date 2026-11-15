@@ -8,7 +8,7 @@
  * the standard PageHeader / StatsGrid / PageToolbar / BulkActionsBar.
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { Fragment, useState, useMemo, useEffect } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -295,8 +295,8 @@ function PermissionMatrix({ roles }: { roles: Role[] }) {
           </TableHeader>
           <TableBody>
             {Object.entries(PERMISSION_CATEGORIES).map(([category, perms]) => (
-              <>
-                <TableRow key={`cat-${category}`} className="bg-muted/50">
+              <Fragment key={`cat-${category}`}>
+                <TableRow className="bg-muted/50">
                   <TableCell colSpan={sortedRoles.length + 1} className="py-2">
                     <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t(`RolesPage.${CATEGORY_LABEL_KEYS[category]}`)}</span>
                   </TableCell>
@@ -315,11 +315,13 @@ function PermissionMatrix({ roles }: { roles: Role[] }) {
                         <TableCell key={role.id} className="text-center">
                           {has ? (
                             <div className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-success/10">
-                              <Check className="h-3 w-3 text-success" />
+                              <Check className="h-3 w-3 text-success" aria-hidden="true" />
+                              <span className="sr-only">{t('RolesPage.matrix.granted')}</span>
                             </div>
                           ) : (
                             <div className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted">
-                              <X className="h-3 w-3 text-muted-foreground/40" />
+                              <X className="h-3 w-3 text-muted-foreground/40" aria-hidden="true" />
+                              <span className="sr-only">{t('RolesPage.matrix.notGranted')}</span>
                             </div>
                           )}
                         </TableCell>
@@ -327,7 +329,7 @@ function PermissionMatrix({ roles }: { roles: Role[] }) {
                     })}
                   </TableRow>
                 ))}
-              </>
+              </Fragment>
             ))}
           </TableBody>
         </Table>

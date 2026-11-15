@@ -62,7 +62,11 @@
     },
     "confirm": {
       "deleteRule": "删除规则“{{name}}”？",
-      "deleteRules": "删除 {{count}} 条规则？"
+      "deleteRules": "删除 {{count}} 条规则？",
+      "deleteRuleDescription": "该规则将不再产生新告警。已产生的告警仍保留在告警列表中。",
+      "deleteRuleAction": "删除规则",
+      "deleteRulesDescription": "这些规则将不再产生新告警。已产生的告警仍保留在告警列表中。",
+      "deleteRulesAction": "删除规则"
     },
     "emptyRules": {
       "title": "未找到规则",
@@ -704,6 +708,13 @@
       "createRule": "创建关联规则失败",
       "triggerCorrelation": "触发关联失败",
       "loadFailed": "加载事故数据失败"
+    },
+    "confirm": {
+      "deleteRule": {
+        "title": "删除关联规则“{{name}}”？",
+        "description": "该规则将不再把新事件归并为事故。已创建的事故会被保留。",
+        "confirmLabel": "删除规则"
+      }
     }
   },
   "LifecyclePage": {
@@ -875,7 +886,9 @@
       "verify": "验证",
       "disable": "禁用",
       "delete": "删除",
-      "confirmDelete": "删除 {{count}} 个提供商？"
+      "confirmDelete": "删除 {{count}} 个提供商？",
+      "confirmDeleteDescription": "这些提供商及其存储的凭据将被永久删除。使用它们的活动通知将会失败。",
+      "confirmDeleteAction": "删除提供商"
     },
     "deleteDialog": {
       "title": "删除提供商",
@@ -1103,10 +1116,18 @@
       "deviceGroups": "设备分组"
     },
     "confirm": {
-      "deleteSiteGroup": "删除站点分组“{{name}}”？成员站点将保留，仅删除该分组。",
-      "deleteDeviceGroup": "删除设备分组“{{name}}”？成员设备将保留，仅删除该分组。",
+      "deleteSiteGroup": "删除站点分组“{{name}}”？",
+      "deleteDeviceGroup": "删除设备分组“{{name}}”？",
       "bulkDeleteSiteGroups": "删除 {{count}} 个站点分组？",
-      "bulkDeleteDeviceGroups": "删除 {{count}} 个设备分组？"
+      "bulkDeleteDeviceGroups": "删除 {{count}} 个设备分组？",
+      "deleteSiteGroupDescription": "其站点将与该分组解除关联（不会被删除），其子分组将移至顶层。",
+      "deleteSiteGroupAction": "删除站点分组",
+      "bulkDeleteSiteGroupsDescription": "其站点将与这些分组解除关联（不会被删除），其子分组将移至顶层。",
+      "bulkDeleteSiteGroupsAction": "删除站点分组",
+      "deleteDeviceGroupDescription": "其设备将移出该分组。不会删除或重新配置任何设备。",
+      "deleteDeviceGroupAction": "删除设备分组",
+      "bulkDeleteDeviceGroupsDescription": "其设备将移出这些分组。不会删除或重新配置任何设备。",
+      "bulkDeleteDeviceGroupsAction": "删除设备分组"
     },
     "dialogs": {
       "siteGroup": {
@@ -1203,7 +1224,8 @@
     "tabs": {
       "overview": "概览",
       "policies": "策略（{{count}}）",
-      "breaches": "违规（{{count}}）"
+      "breaches": "违规（{{count}}）",
+      "reports": "报告"
     },
     "overview": {
       "worstPerforming": "表现最差的 SLA"
@@ -1281,6 +1303,19 @@
       "uptimePercentMin": "最低正常运行率 %",
       "latencyMsMax": "最大延迟（毫秒）",
       "optional": "可选"
+    },
+    "measurementScope": "合规计算需要每个已配置目标的数据。站点和组织策略目前衡量设备健康状况；摄像头和 NVR 策略可使用采样的在线时间。缺失的观测显示为 N/A，而不是成功。历史报告不构成合同意义上的可用性保证。",
+    "confirm": {
+      "deleteOne": {
+        "title": "删除 SLA 策略“{{name}}”？",
+        "description": "其违规历史和合规快照将一并删除。此操作无法撤销。",
+        "confirmLabel": "删除策略"
+      },
+      "deleteMany": {
+        "title": "删除所选 SLA 策略？",
+        "description": "这些策略的违规历史和合规快照将一并删除。此操作无法撤销。",
+        "confirmLabel": "删除策略"
+      }
     }
   },
   "ConfigTemplatesPage": {
@@ -1346,8 +1381,12 @@
       "copyName": "{{name}}（副本）"
     },
     "confirm": {
-      "deleteOne": "删除模板“{{name}}”？此操作无法撤销。",
-      "deleteMany": "删除 {{count}} 个模板？"
+      "deleteOne": "删除模板“{{name}}”？",
+      "deleteMany": "删除 {{count}} 个模板？",
+      "deleteOneDescription": "该模板将从 FreeSDN 中移除且无法恢复。设备保留其当前配置。",
+      "deleteOneAction": "删除模板",
+      "deleteManyDescription": "这些模板将从 FreeSDN 中移除且无法恢复。设备保留其当前配置。",
+      "deleteManyAction": "删除模板"
     },
     "dialog": {
       "createTitle": "创建模板",
@@ -1456,7 +1495,9 @@
       "quickActions": "快捷操作"
     },
     "confirm": {
-      "reboot": "重启 {{label}}？设备将在约 30-90 秒内无法访问。"
+      "reboot": "重启 {{label}}？",
+      "rebootDescription": "重启命令将立即通过其控制器发送到设备。设备将在约 30 到 90 秒内无法访问，通过它连接的所有设备也是如此。",
+      "rebootAction": "重启设备"
     },
     "toast": {
       "unknownError": "未知错误",
@@ -1495,6 +1536,119 @@
       "iot": "IoT",
       "sensor": "传感器",
       "other": "其他"
+    }
+  },
+  "SLAReportsPanel": {
+    "intro": "报告遵循你所在组织和站点的权限。日期输入使用 UTC；显示的时间使用浏览器所在时区。计划任务使用其配置的时区，并在下一次每小时生成时运行。",
+    "pagination": {
+      "previous": "上一页",
+      "next": "下一页",
+      "none": "0 条结果",
+      "range": "第 {{from}}-{{to}} 条，共 {{total}} 条"
+    },
+    "generate": {
+      "title": "生成报告",
+      "start": "开始（含）",
+      "startAria": "报告开始日期",
+      "end": "结束（不含）",
+      "endAria": "报告结束日期",
+      "policies": "策略",
+      "policiesAria": "报告策略",
+      "policiesHint": "不选择则包含你有权访问的全部策略。",
+      "format": "格式",
+      "formatAria": "报告格式",
+      "submit": "生成"
+    },
+    "archive": {
+      "title": "报告归档",
+      "lastRefreshed": "上次刷新：{{time}}",
+      "waiting": "正在等待响应",
+      "loading": "正在加载报告…",
+      "empty": "尚未生成任何报告。",
+      "downloadLinked": "下载链接中的报告",
+      "columns": {
+        "report": "报告",
+        "generated": "生成时间",
+        "actions": "操作"
+      },
+      "period": "{{start}} 至 {{end}}",
+      "download": "下载 {{format}}",
+      "deliveryStatus": "投递状态"
+    },
+    "delivery": {
+      "title": "邮件投递状态",
+      "explain": "“已接受”表示 SMTP 服务器接受了通知，并不证明已送达收件箱。“未知”表示无法确认是否被接受。请用投递 ID 检查中继日志；FreeSDN 不会自动重发。",
+      "loading": "正在加载投递状态…",
+      "empty": "此报告没有安排邮件投递。",
+      "attempts_one": "{{count}} 次尝试",
+      "attempts_other": "{{count}} 次尝试",
+      "id": "投递 ID：{{id}}",
+      "code": "代码：{{code}}",
+      "nextAttempt": "下次尝试：{{time}}",
+      "cancel": "取消待投递"
+    },
+    "deliveryStates": {
+      "pending": "待投递",
+      "sending": "发送中",
+      "retry": "重试中",
+      "accepted": "已接受",
+      "unknown": "未知",
+      "failed": "失败",
+      "skipped": "已跳过",
+      "cancelled": "已取消"
+    },
+    "frequencies": {
+      "weekly": "每周",
+      "monthly": "每月",
+      "quarterly": "每季度"
+    },
+    "weekdays": {
+      "monday": "星期一",
+      "tuesday": "星期二",
+      "wednesday": "星期三",
+      "thursday": "星期四",
+      "friday": "星期五",
+      "saturday": "星期六",
+      "sunday": "星期日"
+    },
+    "schedules": {
+      "title": "报告计划",
+      "loading": "正在加载计划…",
+      "empty": "没有报告计划。",
+      "enabled": "已启用",
+      "paused": "已暂停",
+      "cadence": "{{frequency}} {{time}}（{{timezone}}）",
+      "runs": "下次：{{next}} · 上次生成：{{last}} · 邮件：{{email}}",
+      "emailOn": "已开启",
+      "emailOff": "关闭",
+      "needsReview": "需要审核：{{error}}",
+      "edit": "编辑并审核",
+      "pause": "暂停",
+      "reapprove": "重新批准并启用"
+    },
+    "form": {
+      "createTitle": "创建计划",
+      "reviewTitle": "审核计划",
+      "name": "名称",
+      "frequency": "频率",
+      "dayOfWeek": "星期几",
+      "dayOfMonth": "每月第几天",
+      "timezone": "时区",
+      "localTime": "本地时间",
+      "policyIds": "策略 ID（以逗号分隔；留空表示全部策略）",
+      "policyHint": "仅限部分站点的操作员必须明确选择策略。编辑计划会替换其投递批准；旧的待发通知将在处理时取消。",
+      "enableGeneration": "启用报告生成",
+      "sendEmail": "为今后的计划报告发送邮件通知",
+      "emailExplain": "邮件默认关闭。通知包含登录链接，而不是附件。收件人必须是本组织中可访问该报告的活跃用户。请先配置 HTTPS 的 FRONTEND_URL 并验证你的 SMTP 提供商。",
+      "recipients": "收件人（以逗号分隔）",
+      "provider": "已验证的 SMTP 提供商",
+      "providerPlaceholder": "选择提供商",
+      "create": "创建计划",
+      "saveReapprove": "保存并重新批准",
+      "cancelEdit": "取消编辑"
+    },
+    "errors": {
+      "fallback": "请求失败。请刷新后重试。"
     }
   }
 }

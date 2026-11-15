@@ -118,7 +118,9 @@
       "triggered": "Regla activada correctamente"
     },
     "confirm": {
-      "delete": "¿Seguro que quieres eliminar esta regla?"
+      "delete": "¿Eliminar la regla \"{{name}}\"?",
+      "deleteDescription": "La regla deja de ejecutarse y su historial de ejecuciones se elimina con ella.",
+      "deleteAction": "Eliminar regla"
     },
     "errors": {
       "loadFailed": "No se pudieron cargar los datos de automatización"

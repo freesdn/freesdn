@@ -11,6 +11,7 @@ import ssl
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from httpx import URL, ASGITransport, AsyncClient
 
@@ -88,7 +89,8 @@ def ipv6_outgoing_client(f):
         def __init__(self, *, verify, timeout, trust_env):
             assert isinstance(verify, ssl.SSLContext)
             assert verify.verify_mode == ssl.CERT_REQUIRED and verify.check_hostname
-            assert timeout == 10 and trust_env is False
+            # build_async_client keeps the 10s budget and bounds connect at 8s.
+            assert timeout == httpx.Timeout(10, connect=8.0) and trust_env is False
 
         async def __aenter__(self):
             return self

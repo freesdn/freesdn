@@ -105,9 +105,15 @@ class TestEnforceHelper:
             _enforce_read_only(force=False, action="test")
 
     @patch("app.adapters.onvif.adapter._is_adapter_read_only", lambda: True)
-    def test_enforce_passes_with_force(self) -> None:
-        # No raise.
-        _enforce_read_only(force=True, action="test")
+    def test_enforce_passes_with_force_for_live_controls(self) -> None:
+        # A PTZ move changes no stored camera config: allowed with force.
+        _enforce_read_only(force=True, action="PTZ control")
+
+    @patch("app.adapters.onvif.adapter._is_adapter_read_only", lambda: True)
+    def test_enforce_refuses_config_even_with_force(self) -> None:
+        # 26.12.0: force alone does not lift read-only for a config change.
+        with pytest.raises(AdapterReadOnlyError):
+            _enforce_read_only(force=True, action="reboot")
 
     @patch("app.adapters.onvif.adapter._is_adapter_read_only", lambda: False)
     def test_enforce_passes_when_read_only_off(self) -> None:

@@ -27,7 +27,7 @@ import {
   ScrollText, Download, RefreshCw, AlertTriangle, AlertCircle,
   Info, CheckCircle, Bug, Clock, Server, User, Globe, Database,
   Shield, Activity, TrendingUp, ChevronDown, ChevronRight,
-  Copy, Pause, Play, X, Eye, ShieldAlert, Flame, Lock,
+  Pause, Play, X, Eye, ShieldAlert, Flame, Lock,
   HeartPulse, Gauge, ArrowUpRight, ArrowDownRight,
   LayoutDashboard, List, Ban, Skull, Zap, Radio,
   Fingerprint, ExternalLink, CheckCircle2,
@@ -35,8 +35,10 @@ import {
 import { cn } from '@/lib/utils';
 import { SearchBar } from '@/components/ui/search-bar';
 import { useToast } from '@/hooks/use-toast';
+import { CopyButton } from '@/components/ui/copy-button';
 import { api } from '@/lib/api';
 import { format, formatDistanceToNow, parseISO, isValid } from 'date-fns';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ----------------------------------------------------------------
 // Constants & Types
@@ -420,15 +422,15 @@ function OverviewTab() {
       </div>
 
       {/* 7-Day Trend + Needs Attention */}
-      <div className="grid lg:grid-cols-5 gap-4">
-        <Card className="border-border/50 lg:col-span-3">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <Card className="min-w-0 border-border/50 lg:col-span-3">
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
                 <CardTitle className="text-base flex items-center gap-2"><HeartPulse className="h-4 w-4 text-primary" /> {t('LogsPage.overview.activity.title')}</CardTitle>
                 <CardDescription>{t('LogsPage.overview.activity.description')}</CardDescription>
               </div>
-              <div className="flex items-center gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-3 text-xs">
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-primary/30" /> {t('LogsPage.overview.activity.legendTotal')}</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-500/50" /> {t('LogsPage.overview.activity.legendErrors')}</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-500/30" /> {t('LogsPage.overview.activity.legendWarnings')}</span>
@@ -440,7 +442,7 @@ function OverviewTab() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 lg:col-span-2">
+        <Card className="min-w-0 border-border/50 lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <Eye className="h-4 w-4 text-amber-500" />
@@ -624,8 +626,11 @@ function LogEntryRow({ entry }: { entry: LogEntry }) {
               <div className="flex items-center gap-1">
                 <span className="text-muted-foreground">{t('LogsPage.entry.request')}</span>
                 <span className="font-mono text-[10px] truncate max-w-[120px]">{entry.request_id}</span>
-                <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(entry.request_id!); }}
-                  className="text-muted-foreground hover:text-foreground"><Copy className="h-3 w-3" /></button>
+                <CopyButton
+                  value={entry.request_id}
+                  className="h-5 w-5 text-muted-foreground hover:text-foreground data-[copy-state=copied]:text-success data-[copy-state=failed]:text-destructive"
+                  aria-label={t('LogsPage.entry.copyRequestId')}
+                />
               </div>
             )}
             {entry.device_name && (
@@ -723,11 +728,10 @@ function AllLogsTab({ initialLevel, initialSource, initialSearch }: {
       URL.revokeObjectURL(url);
       toast({ title: t('common:success') });
     } catch (err) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const detail = (err as any)?.response?.data?.detail;
+      const detail = getApiErrorMessage(err, t('LogsPage.allLogs.loadError'));
       toast({
         title: t('common:error'),
-        description: detail || t('LogsPage.allLogs.loadError'),
+        description: detail,
         variant: 'destructive',
       });
     } finally {

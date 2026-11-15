@@ -302,7 +302,9 @@ class _FlakyCtx:
 
     async def __aenter__(self):
         if self._call_n <= self._session.fail_times:
-            raise aiohttp.ClientError("transient blip")
+            # A dropped connection: the transient blip io_policy replays for a
+            # read. (A bare ClientError is not a real failure mode.)
+            raise self._session.exc
         return _Resp(200, '{"data": {"ok": 1}}')
 
     async def __aexit__(self, *a):
@@ -310,9 +312,10 @@ class _FlakyCtx:
 
 
 class _FlakySession:
-    def __init__(self, fail_times: int):
+    def __init__(self, fail_times: int, exc: BaseException | None = None):
         self.fail_times = fail_times
         self.calls = 0
+        self.exc = exc if exc is not None else aiohttp.ServerDisconnectedError()
 
     def post(self, *a, **k):
         self.calls += 1
@@ -352,6 +355,18 @@ async def test_graphql_idempotent_read_retries_transient(monkeypatch):
     data = await client._graphql("{ ok }", idempotent=True)
     assert data == {"ok": 1}
     assert session.calls == REST_MAX_RETRIES  # retried up to the cap
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exc", [TimeoutError(), aiohttp.ServerTimeoutError("slow")])
+async def test_graphql_idempotent_read_is_not_retried_on_timeout(monkeypatch, exc):
+    """io_policy: a PBX that timed out is not asked again (old code: 3 sends)."""
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    session = _FlakySession(fail_times=REST_MAX_RETRIES, exc=exc)
+    client = _client_with_session(session)
+    with pytest.raises(FreePBXConnectionError):
+        await client._graphql("{ ok }", idempotent=True)
+    assert session.calls == 1
 
 
 @pytest.mark.asyncio

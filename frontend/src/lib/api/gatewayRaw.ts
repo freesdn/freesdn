@@ -4,8 +4,9 @@
  * Omada raw passthrough, escape hatch for any controller API we
  * haven't typed yet. Power-users / debugging only.
  *
- * Reads run live. Writes refused unless OMADA_READ_ONLY=false AND
- * force=true. Both gates must be down.
+ * Read-only: only GET is forwarded and secrets in the response are
+ * masked. Writes are refused (use the staged Omada pages), and users
+ * limited to some sites are refused.
  */
 
 import { api } from './client';

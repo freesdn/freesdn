@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useConfirm } from '@/hooks';
 
 export interface GatewaySystemTabProps {
   gatewayId: string;
@@ -113,6 +114,7 @@ export function GatewaySystemTab({
   onHaltGateway,
 }: GatewaySystemTabProps) {
   const { t } = useTranslation('firewall');
+  const confirm = useConfirm();
   return (
     <>
       <div className="flex items-center gap-2">
@@ -122,9 +124,14 @@ export function GatewaySystemTab({
         <Button variant="outline" size="sm" onClick={onDownloadConfig} disabled={isDownloadingConfig} aria-busy={isDownloadingConfig}>
           <Archive className="h-4 w-4 mr-1" /> {t('GatewaySystemTab.actions.downloadConfig')}
         </Button>
-        <Button variant="destructive" size="sm" onClick={() => {
-          if (window.confirm(t('GatewaySystemTab.actions.haltConfirm')))
-            onHaltGateway();
+        <Button variant="destructive" size="sm" onClick={async () => {
+          const ok = await confirm({
+            title: t('GatewaySystemTab.actions.haltTitle'),
+            description: t('GatewaySystemTab.actions.haltBody'),
+            confirmLabel: t('GatewaySystemTab.actions.haltAction'),
+            destructive: true,
+          });
+          if (ok) onHaltGateway();
         }}>
           <Power className="h-4 w-4 mr-1" /> {t('GatewaySystemTab.actions.halt')}
         </Button>

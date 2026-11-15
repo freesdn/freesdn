@@ -122,6 +122,12 @@ async def build_proxmox_adapter(ctrl: Controller) -> ProxmoxAdapter:
     ``controller.config`` so API-token auth works alongside the
     legacy username/password mode.
     """
+    # A page's live read waits briefly for the cluster's turn, or is answered
+    # with its last response (app/services/device_live_read.py).
+    from app.core.device_slot import controller_slot_key
+    from app.services.device_live_read import take_device_turn
+
+    await take_device_turn(controller_slot_key(ctrl))
     config = ctrl.config or {}
 
     token_id = config.get("token_id", "")
@@ -607,6 +613,9 @@ class GatewayProxmoxVmService(GatewayServiceBase):
         }
 
     async def get_next_vmid(self, controller_id: UUID, organization_id: UUID) -> dict[str, Any]:
+        from app.services.device_live_read import uncacheable_read
+
+        uncacheable_read()  # a remembered "next free id" may already be taken
         ctrl = await self._get_controller(controller_id, organization_id)
         adapter = await self._get_proxmox_adapter(ctrl)
         try:

@@ -143,6 +143,33 @@ describe('FormDialog', () => {
     expect(await screen.findByText('port: must be between 1 and 65535')).toBeInTheDocument();
   });
 
+  it('puts each 422 field message under its own input', async () => {
+    const onSubmit = vi.fn().mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          error: {
+            code: 422,
+            message: 'Validation error',
+            details: [
+              { field: 'body.name', message: 'Value error, name already in use', type: 'value_error' },
+              { field: 'body.unknown_field', message: 'Extra inputs are not permitted', type: 'extra_forbidden' },
+            ],
+          },
+        },
+      },
+    });
+    const user = userEvent.setup();
+    render(<Harness onSubmit={onSubmit} defaultValues={{ name: 'core-sw', port: 22 }} />);
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    // The banner lists everything; the field the form knows gets its own message.
+    expect(
+      await screen.findByText('name: name already in use; unknown_field: Extra inputs are not permitted'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('name already in use')).toBeInTheDocument();
+    expect(screen.getByLabelText(/name/i)).toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('calls onOpenChange(false) when Cancel is clicked', async () => {
     const onOpenChange = vi.fn();
     const user = userEvent.setup();

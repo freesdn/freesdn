@@ -23,6 +23,11 @@ from uuid import UUID
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.organization_access import (
+    close_retired_organization_sockets,
+    organization_holds_last_super_admin,
+    sign_out_organization_members,
+)
 from app.models import Controller, Device, Organization, Site, User
 
 logger = logging.getLogger(__name__)
@@ -253,6 +258,12 @@ class DuplicateSlugError(OrganizationError):
 # =============================================================================
 
 
+class LastSuperAdminOrganizationError(OrganizationError):
+    """The organization holds the appliance's last active super admin."""
+
+    pass
+
+
 class OrganizationService:
     """
     Service for managing organizations.
@@ -301,13 +312,15 @@ class OrganizationService:
         if existing:
             raise DuplicateSlugError(f"Slug '{slug}' already exists")
 
-        # Create organization
+        # Create organization. ``tier`` is not a column: it lives in
+        # settings["tier"], which is where _check_quota reads it. A new
+        # organization is active (is_active defaults to True); there is no
+        # status column either, and passing tier=/status= to the constructor
+        # raised TypeError (tests/models/test_orm_constructor_kwargs.py).
         org = Organization(
             name=name,
             slug=slug,
-            tier=tier.value,
-            status=OrganizationStatus.ACTIVE.value,
-            settings=settings or {},
+            settings={**(settings or {}), "tier": tier.value},
         )
 
         self.db.add(org)
@@ -343,19 +356,40 @@ class OrganizationService:
         """
         Update organization fields.
 
-        Allowed fields: name, settings, tier, status
+        Allowed fields: name, settings, tier (stored in settings["tier"]) and
+        status (ACTIVE / TRIAL set is_active, any other status clears it).
         """
         org = await self.get_organization(org_id)
         if not org:
             raise OrganizationNotFoundError(f"Organization {org_id} not found")
 
-        allowed_fields = {"name", "settings", "tier", "status"}
-        for field_name, value in updates.items():
-            if field_name in allowed_fields:
-                setattr(org, field_name, value)
+        # tier and status are not columns. setattr() of either used to land on
+        # a plain Python attribute that was never persisted.
+        if "name" in updates:
+            org.name = updates["name"]
+        if "settings" in updates:
+            org.settings = dict(updates["settings"] or {})
+        if "tier" in updates:
+            org.settings = {**(org.settings or {}), "tier": str(updates["tier"])}
+        retired = False
+        if "status" in updates:
+            was_active = org.is_active
+            org.is_active = str(updates["status"]) in {
+                OrganizationStatus.ACTIVE,
+                OrganizationStatus.TRIAL,
+            }
+            if was_active != org.is_active:
+                # Inactive organizations' members are refused at sign-in; revoke
+                # their live sessions too (app.core.organization_access). On
+                # reactivation, revoke the sessions from before it, which an
+                # older release may have left live when it retired the org.
+                await sign_out_organization_members(self.db, org.id)
+                retired = True
 
         org.updated_at = datetime.now(UTC)
         await self.db.commit()
+        if retired:
+            await close_retired_organization_sockets(org.id)
         await self.db.refresh(org)
 
         return org
@@ -372,13 +406,21 @@ class OrganizationService:
         if not org:
             return False
 
+        if await organization_holds_last_super_admin(self.db, org.id):
+            raise LastSuperAdminOrganizationError(
+                f"Organization {org_id} holds the last active super admin account"
+            )
+
         if soft:
             org.deleted_at = datetime.now(UTC)
-            org.status = OrganizationStatus.CANCELLED.value
+            org.is_active = False  # there is no status column to mark CANCELLED
+            await sign_out_organization_members(self.db, org.id)
         else:
             await self.db.delete(org)
 
         await self.db.commit()
+        # A hard delete retires the members too (their organization is gone).
+        await close_retired_organization_sockets(org_id)
         logger.info("Deleted organization: %s (soft=%s)", org_id, soft)
         return True
 

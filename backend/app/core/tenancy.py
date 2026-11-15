@@ -55,6 +55,10 @@ TENANT_EXEMPT: dict[str, str] = {
     # This classification grants no permission to read or mutate the state.
     "app.models.security_audit:AuditChainState": "global: internal audit-chain position and retention state",
     "app.models.sync_lock:DeviceSyncLock": "global: process concurrency lock",
+    # Installation-wide switches (the Settings read-only switch). Only an
+    # unscoped super administrator may change one; reads go through the
+    # write-safety gate, never a tenant-facing collection.
+    "app.models.platform_settings:PlatformSetting": "global: installation-wide settings",
     "app.models.analytics:MetricDefinitionRecord": "global: shared metric catalog",
     "app.models.marketplace:MarketplaceCatalogState": "global: marketplace anti-rollback state",
     "app.models.marketplace:MarketplacePlugin": "global: marketplace catalog (cross-org by design)",
@@ -139,6 +143,43 @@ def _columns(model: Any) -> set[str]:
     return {c.name for c in model.__table__.columns}
 
 
+#: The table every tenant-owning foreign key points at.
+_ORGANIZATION_PK = "core.organizations.id"
+
+
+def _org_attribute(model: Any) -> str | None:
+    """The mapped attribute holding the row's owning organization, if it has one.
+
+    ``organization_id`` is the convention, but it is a convention, not a rule:
+    ``firewall.gateway_connections`` names its owner ``org_id``. Matching on the
+    column NAME alone classified that table as "site_id only", so
+    ``tenant_filter(GatewayConnection, user)`` reached the org through the Site
+    join -- and a gateway with no site (``site_id`` is nullable) silently vanished
+    from its own organization's queries. ``DeviceSyncService`` already had to learn
+    the same lesson (FSDN-SG-002). So recognise the owner by what it IS, a foreign
+    key to ``core.organizations.id``.
+
+    ``organization_id`` wins when present. Two or more organization foreign keys
+    under other names are ambiguous, and that is not a guess to make in a tenancy
+    predicate: return None and let the caller fall back to the site rules (or to
+    ``UnregisteredTenantModel``), exactly as before.
+    """
+    table = model.__table__
+    if "organization_id" in table.columns:
+        column = table.columns["organization_id"]
+    else:
+        owners = [
+            c
+            for c in table.columns
+            if any(fk.target_fullname == _ORGANIZATION_PK for fk in c.foreign_keys)
+        ]
+        if len(owners) != 1:
+            return None
+        column = owners[0]
+    key: str = model.__mapper__.get_property_by_column(column).key
+    return key
+
+
 def tenant_filter(model: Any, user: Any) -> Any:
     """Return a SQLAlchemy predicate scoping a query on ``model`` to the rows
     ``user`` may see. ``AND`` it into the WHERE clause of any collection query::
@@ -151,12 +192,16 @@ def tenant_filter(model: Any, user: Any) -> Any:
       - SCOPED super_admin key (no org) -> ``false()`` (fail closed, matches no rows)
 
     Shape (by column introspection):
-      - has organization_id : ``organization_id == <org>``  (+ site grant if it also has site_id)
+      - has an org column   : ``<org column> == <org>``  (+ site grant if it also has site_id).
+                              The org column is ``organization_id``, or else the one
+                              foreign key to ``core.organizations.id`` (see
+                              :func:`_org_attribute`).
       - site_id only        : ``site_id IN (sites in <org>)``  + site grant  (reach org via Site)
       - neither column      : ``true()`` if in TENANT_EXEMPT, else raise
     """
     cols = _columns(model)
-    has_org = "organization_id" in cols
+    org_attr = _org_attribute(model)
+    has_org = org_attr is not None
     has_site = "site_id" in cols
 
     if not has_org and not has_site:
@@ -177,9 +222,9 @@ def tenant_filter(model: Any, user: Any) -> Any:
         return false()  # scoped/no-org principal: see nothing (fail closed)
 
     preds: list[Any] = []
-    if has_org:
+    if org_attr is not None:
         if org is not None:
-            preds.append(model.organization_id == org)
+            preds.append(getattr(model, org_attr) == org)
     elif has_site:
         # via_site: reach the org through the Site join.
         if org is not None:

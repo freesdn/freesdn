@@ -26,7 +26,9 @@
     "status": {
       "online": "Online",
       "offline": "Offline",
-      "adopting": "Adopting"
+      "adopting": "Adopting",
+      "degraded": "Degraded",
+      "provisioning": "Provisioning"
     },
     "header": {
       "title": "Access Points",
@@ -54,7 +56,20 @@
       "clearFilters": "Clear filters",
       "loading": "Loading access points...",
       "emptyTitle": "No access points found",
-      "emptyDescription": "Run a discovery to find access points on your network."
+      "emptyDescription": "Run a discovery to find access points on your network.",
+      "itemName": "access points",
+      "actionsFor": "Actions for {{name}}",
+      "columns": {
+        "name": "Name",
+        "status": "Status",
+        "ip": "IP Address",
+        "mac": "MAC Address",
+        "site": "Site",
+        "radios": "Radios",
+        "clients": "Clients",
+        "uptime": "Uptime",
+        "actions": "Actions"
+      }
     },
     "card": {
       "clients": "Clients",

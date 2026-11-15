@@ -43,6 +43,11 @@ _DOWN_STATES = {"down", "unreachable"}
 # applies). Kept well under the task soft-time-limit.
 _READ_TIMEOUT = 15.0
 
+#: The reachability probe (the adapter's connect; for OPNsense one status GET).
+#: Short on purpose: a box that cannot answer its status page in 20 s is in
+#: trouble, and waiting longer only holds one more of its workers.
+_PROBE_TIMEOUT = 20.0
+
 
 def _fw_event(
     event_type: str, priority: Any, payload: dict[str, Any], gw: GatewayConnection
@@ -140,13 +145,44 @@ def _fw_snapshot(reachable: bool, cur: dict[str, Any] | None) -> dict[str, Any]:
     return snap
 
 
-async def _read_current(adapter: Any) -> dict[str, Any]:
-    """Guarded reads — a vendor lacking a method just contributes nothing."""
+def _note_failure(failures: list[str] | None, what: str, res: Any = None, exc: Any = None) -> None:
+    """Remember a read that failed because the DEVICE did not answer."""
+    if failures is None:
+        return
+    from app.adapters import io_policy
+
+    if exc is not None:
+        if io_policy.is_device_failure(exc):
+            failures.append(f"{what}: {type(exc).__name__}")
+    elif res is not None and not getattr(res, "success", False):
+        error = str(getattr(res, "error", "") or "")
+        if io_policy.is_device_failure_text(error):
+            failures.append(f"{what}: {error[:100]}")
+
+
+async def _guarded(call: Any, what: str, failures: list[str] | None) -> Any:
+    try:
+        res = await asyncio.wait_for(call(), timeout=_READ_TIMEOUT)
+    except Exception as exc:  # noqa: BLE001 - a missing signal must not fail the poll
+        _note_failure(failures, what, exc=exc)
+        return None
+    _note_failure(failures, what, res=res)
+    return res
+
+
+async def _read_current(adapter: Any, failures: list[str] | None = None) -> dict[str, Any]:
+    """Guarded reads — a vendor lacking a method just contributes nothing.
+
+    ``failures`` (optional) collects the reads that failed because the device
+    did not answer (timeout, dropped connection), as opposed to a refused or
+    unsupported read. The poll counts those against the device's breaker, and
+    once one has failed the remaining reads are not sent.
+    """
     cur: dict[str, Any] = {"gateways": {}, "critical_sids": []}
 
     if hasattr(adapter, "get_gateway_status"):
+        res = await _guarded(adapter.get_gateway_status, "gateway_status", failures)
         with contextlib.suppress(Exception):
-            res = await asyncio.wait_for(adapter.get_gateway_status(), timeout=_READ_TIMEOUT)
             if getattr(res, "success", False):
                 gateways = (getattr(res, "data", {}) or {}).get("gateways") or []
                 cur["gateways"] = {
@@ -155,9 +191,9 @@ async def _read_current(adapter: Any) -> dict[str, Any]:
                     if isinstance(g, dict) and g.get("name")
                 }
 
-    if hasattr(adapter, "get_ids_alerts"):
+    if hasattr(adapter, "get_ids_alerts") and not failures:
+        res = await _guarded(adapter.get_ids_alerts, "ids_alerts", failures)
         with contextlib.suppress(Exception):
-            res = await asyncio.wait_for(adapter.get_ids_alerts(), timeout=_READ_TIMEOUT)
             if getattr(res, "success", False):
                 alerts = (getattr(res, "data", {}) or {}).get("alerts") or []
                 crit = [
@@ -178,11 +214,29 @@ async def _read_current(adapter: Any) -> dict[str, Any]:
 
 
 async def _poll_firewall_health() -> dict[str, Any]:
+    """Poll every sync-enabled gateway; emit transitions.
+
+    Gentle by construction (2026-11 soak: this poll and the full sync kept
+    hitting an OPNsense whose PHP/configd backend had wedged):
+
+    * a gateway whose shared breaker is OPEN is not contacted at all until its
+      cooldown ends; then ONE poll probes it;
+    * the probe is the adapter's connect (OPNsense: one status GET), bounded by
+      ``_PROBE_TIMEOUT``; only if it answers do the gateway-status and IDS
+      reads follow, and a read the device did not answer stops the rest;
+    * no database transaction is open while any device is contacted: the
+      gateways are loaded and that session closed first, and the snapshots are
+      written afterwards in one short transaction.
+    """
+    from types import SimpleNamespace
+
+    from app.core.device_breaker import gateway_breaker, gateway_key
+    from app.core.device_slot import device_slots, gateway_slot_key
     from app.modules.firewall.gateway_service import GatewayService
+    from app.modules.poll_gate import module_not_disabled
 
-    polled = 0
-    pending_events: list[Any] = []
-
+    # 1. load, then close the session before any device I/O
+    targets: list[tuple[Any, Any, dict[str, Any]]] = []
     async with CelerySessionLocal() as session:
         svc = GatewayService(session)
         gateways = list(
@@ -191,36 +245,89 @@ async def _poll_firewall_health() -> dict[str, Any]:
                     select(GatewayConnection).where(
                         GatewayConnection.deleted_at.is_(None),
                         GatewayConnection.sync_enabled.is_(True),
+                        # Disabling the Firewall module stops its polling.
+                        module_not_disabled(GatewayConnection.org_id, "firewall"),
                     )
                 )
             )
             .scalars()
             .all()
         )
-
         for gw in gateways:
-            polled += 1
-            prev = gw.fabric_health or {}
-            reachable = True
-            cur: dict[str, Any] | None = None
-            adapter = None
+            ident = SimpleNamespace(
+                id=gw.id, name=gw.name, vendor=gw.vendor, host=gw.host, org_id=gw.org_id
+            )
             try:
                 adapter = svc._build_adapter(gw)
-                await adapter.connect()
-                cur = await _read_current(adapter)
-            except Exception as exc:  # noqa: BLE001 — one bad gateway must not abort the rest
-                reachable = False
-                logger.warning("Firewall poll: %s (%s) unreachable: %s", gw.name, gw.host, exc)
-            finally:
-                if adapter is not None:
-                    with contextlib.suppress(Exception):
-                        await adapter.disconnect()
+            except Exception as exc:  # noqa: BLE001 - one bad row must not abort the rest
+                logger.warning("Firewall poll: cannot build adapter for %s: %s", gw.name, exc)
+                continue
+            targets.append((ident, adapter, dict(gw.fabric_health or {})))
 
-            pending_events.extend(_fw_transitions(prev, cur, reachable, gw))
-            gw.fabric_health = _fw_snapshot(reachable, cur)
-            flag_modified(gw, "fabric_health")
+    # 2. talk to the devices, with no transaction open
+    polled = skipped = busy = 0
+    pending_events: list[Any] = []
+    snapshots: dict[Any, dict[str, Any]] = {}
+    for ident, adapter, prev in targets:
+        key = gateway_key(ident.id)
+        gate = gateway_breaker.check(key)
+        if not gate.allowed:
+            skipped += 1
+            logger.info("Firewall poll: %s skipped: %s", ident.name, gate.skip_message())
+            continue
+        # One request group per device: while the full sync, a drift check, a
+        # config backup or a UI read is talking to this box, skip this cycle.
+        slot_key = gateway_slot_key(ident)
+        lease = await device_slots.acquire(slot_key, "firewall health poll")
+        if lease is None:
+            busy += 1
+            if gate.probe:
+                gateway_breaker.release_probe(key)
+            logger.info(
+                "Firewall poll: %s skipped: %s",
+                ident.name,
+                await device_slots.abusy_reason(slot_key),
+            )
+            continue
+        polled += 1
+        reachable = True
+        cur: dict[str, Any] | None = None
+        failures: list[str] = []
+        try:
+            await asyncio.wait_for(adapter.connect(), timeout=_PROBE_TIMEOUT)
+            cur = await _read_current(adapter, failures)
+        except Exception as exc:  # noqa: BLE001 — one bad gateway must not abort the rest
+            reachable = False
+            failures.append(f"connect: {type(exc).__name__}")
+            logger.warning("Firewall poll: %s (%s) unreachable: %s", ident.name, ident.host, exc)
+        finally:
+            with contextlib.suppress(Exception):
+                await adapter.disconnect()
+            await device_slots.arelease(lease)
 
-        await session.commit()
+        if failures:
+            gateway_breaker.record_failure(key, failures[0])
+        else:
+            gateway_breaker.record_success(key)
+        pending_events.extend(_fw_transitions(prev, cur, reachable, ident))
+        snapshots[ident.id] = _fw_snapshot(reachable, cur)
+
+    # 3. write the snapshots in one short transaction
+    if snapshots:
+        async with CelerySessionLocal() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(GatewayConnection).where(GatewayConnection.id.in_(list(snapshots)))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for gw in rows:
+                gw.fabric_health = snapshots[gw.id]
+                flag_modified(gw, "fabric_health")
+            await session.commit()
 
     emitted = 0
     for ev in pending_events:
@@ -232,13 +339,19 @@ async def _poll_firewall_health() -> dict[str, Any]:
         except Exception:
             logger.debug("firewall event publish skipped", exc_info=True)
 
-    return {"success": True, "polled": polled, "events_emitted": emitted}
+    return {
+        "success": True,
+        "polled": polled,
+        "skipped": skipped,
+        "busy": busy,
+        "events_emitted": emitted,
+    }
 
 
 @celery_app.task(bind=True, name="firewall.poll_health", soft_time_limit=240, time_limit=300)
 def poll_health(self) -> dict[str, Any]:
     """Periodic firewall/gateway health poll → firewall.event.* transitions."""
-    lock_token = acquire_solo_lock("firewall.poll_health", ttl_seconds=180)
+    lock_token = acquire_solo_lock("firewall.poll_health", ttl_seconds=300)
     if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:

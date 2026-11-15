@@ -13,7 +13,8 @@ from app.core import crypto
 HELPERS = [
     ("app.services.adapter_factory", "_decrypt_secret"),
     ("app.services.radius", "_safe_decrypt"),
-    ("app.services.roaming", "_safe_decrypt"),
+    # app.services.roaming builds its adapter with build_adapter_for_controller
+    # (5878a071), so it decrypts through adapter_factory._decrypt_secret above.
     ("app.services.vpn_orchestration", "_safe_decrypt"),
     ("app.api.v1.endpoints.unifi_deps", "_decrypt_if_needed"),
     ("app.api.v1.endpoints.poe", "_decrypt_if_needed"),

@@ -13,7 +13,8 @@
       "untitled": "Nueva conversación",
       "empty": "Aún no hay conversaciones",
       "loadError": "No se pudo cargar la conversación",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "showList": "Conversaciones"
     },
     "provider": {
       "label": "Proveedor",
@@ -38,7 +39,7 @@
     },
     "input": {
       "placeholder": "Pregunta sobre tu red...",
-      "hint": "Pulsa Enter para enviar · Mayús+Enter para una nueva línea"
+      "hint": "Pulsa Enter para enviar"
     },
     "deleteDialog": {
       "title": "¿Eliminar conversación?",

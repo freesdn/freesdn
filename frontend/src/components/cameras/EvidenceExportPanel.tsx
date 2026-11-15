@@ -15,6 +15,7 @@ import { evidenceApi, getApiErrorMessage, type EvidenceArchive } from '@/lib/api
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 
 const DURATIONS = [
   { v: 30, label: '30s' },
@@ -50,6 +51,7 @@ export function EvidenceExportPanel({
   const { t } = useTranslation('cameras');
   const qc = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   const [open, setOpen] = useState(false);
   const [startInput, setStartInput] = useState('');
@@ -241,8 +243,16 @@ export function EvidenceExportPanel({
                         className="h-7 w-7 text-destructive"
                         title={t('CameraDetailPage.recordings.evidence.release')}
                         disabled={deleteMut.isPending}
-                        onClick={() => {
-                          if (window.confirm(t('CameraDetailPage.recordings.evidence.confirmRelease'))) {
+                        onClick={async () => {
+                          const timeWindow = `${new Date(h.start_time).toLocaleString()} → ${new Date(h.end_time).toLocaleTimeString()}`;
+                          const ok = await confirm({
+                            title: t('CameraDetailPage.recordings.evidence.confirmReleaseTitle'),
+                            description: t('CameraDetailPage.recordings.evidence.confirmReleaseBody'),
+                            items: [h.camera_name ? `${h.camera_name}: ${timeWindow}` : timeWindow],
+                            confirmLabel: t('CameraDetailPage.recordings.evidence.releaseAction'),
+                            destructive: true,
+                          });
+                          if (ok) {
                             deleteMut.mutate(h.id);
                           }
                         }}

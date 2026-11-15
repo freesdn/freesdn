@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 # Third-Party Licenses — FreeSDN Backend
 
-This inventory matches the locked main dependency group on 2026-11-11.
+This inventory matches the locked main dependency group on 2026-11-14.
 Development tools are excluded; platform markers determine what is installed.
 Version and license metadata were read from the matching installed distributions,
 with the conditional Windows-only package read from its exact PyPI version.
@@ -14,6 +14,7 @@ VPN source licenses and modification notices are included in the image under
 |---|---|---|---|
 | aiohappyeyeballs | 2.7.1 | Python Software Foundation License | https://github.com/aio-libs/aiohappyeyeballs |
 | aiohttp | 3.14.5 | Apache-2.0 AND MIT | https://github.com/aio-libs/aiohttp |
+| aiohttp-socks | 0.12.0 | Apache-2.0 | https://github.com/romis2012/aiohttp-socks |
 | aiosignal | 1.4.0 | Apache Software License | https://github.com/aio-libs/aiosignal |
 | alembic | 1.20.1 | MIT | https://alembic.sqlalchemy.org |
 | amqp | 5.4.2 | BSD | http://github.com/celery/py-amqp |
@@ -103,6 +104,7 @@ VPN source licenses and modification notices are included in the image under
 | python-dateutil | 2.9.0.post0 | BSD License | https://github.com/dateutil/dateutil |
 | python-dotenv | 1.2.4 | BSD-3-Clause | https://github.com/theskumar/python-dotenv |
 | python-multipart | 0.0.33 | Apache-2.0 | https://github.com/Kludex/python-multipart |
+| python-socks | 3.2.1 | Apache-2.0 | https://github.com/romis2012/python-socks |
 | pytz | 2026.6 | MIT | http://pythonhosted.org/pytz |
 | pywebpush | 2.5.0 | MPL-2.0 | https://github.com/web-push-libs/pywebpush |
 | pyyaml | 6.0.3 | MIT License | https://pyyaml.org/ |
@@ -114,10 +116,11 @@ VPN source licenses and modification notices are included in the image under
 | requests-toolbelt | 1.0.0 | Apache Software License | https://github.com/requests/toolbelt |
 | s3transfer | 0.19.3 | Apache License 2.0 | https://github.com/boto/s3transfer |
 | six | 1.17.0 | MIT License | https://github.com/benjaminp/six |
+| socksio | 1.0.0 | MIT License | https://github.com/sethmlarson/socksio |
 | sqlalchemy | 2.1.8 | MIT | https://www.sqlalchemy.org |
 | starlette | 1.10.0 | BSD-3-Clause | https://github.com/Kludex/starlette |
 | stone | 3.5.5 | MIT | https://github.com/dropbox/stone |
-| tornado | 6.6 | Apache-2.0 | http://www.tornadoweb.org/ |
+| tornado | 6.6.1 | Apache-2.0 | http://www.tornadoweb.org/ |
 | typing-extensions | 4.16.0 | PSF-2.0 | https://github.com/python/typing_extensions |
 | typing-inspection | 0.4.5 | MIT | https://github.com/pydantic/typing-inspection |
 | tzdata | 2026.6 | Apache-2.0 | https://github.com/python/tzdata |

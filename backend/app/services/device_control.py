@@ -14,6 +14,7 @@ Unified interface for device control operations including:
 """
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -497,6 +498,56 @@ class DeviceControlService:
         if interrupted is not None:
             raise interrupted
 
+    async def _audited_device_action(
+        self,
+        device: Device,
+        action: str,
+        parameters: dict[str, Any],
+        *,
+        perform: Callable[[], Awaitable[AdapterResult]],
+    ) -> AdapterResult:
+        """An operational action: audited once the device accepts it."""
+        from app.services.device_writes import device_action, request_actor_id
+
+        return await device_action(
+            self.db,
+            device,
+            actor_id=request_actor_id(),
+            action=action,
+            parameters=parameters,
+            perform=perform,
+        )
+
+    async def _staged_device_write(
+        self,
+        device: Device,
+        feature: str,
+        payload: dict[str, Any],
+        *,
+        perform: Callable[[], Awaitable[AdapterResult]],
+    ) -> AdapterResult:
+        """A configuration write, through the staging chokepoint.
+
+        Refused while read-only mode is on; recorded in the staging ledger. A
+        refusal comes back as the failed result the caller already maps.
+        """
+        from fastapi import HTTPException
+
+        from app.services.device_writes import request_actor_id, write_device_config
+
+        try:
+            return await write_device_config(
+                self.db,
+                device,
+                actor_id=request_actor_id(),
+                feature=feature,
+                operation="update",
+                payload=payload,
+                perform=perform,
+            )
+        except HTTPException as exc:
+            return AdapterResult(success=False, error=str(exc.detail), error_code="READ_ONLY")
+
     async def _execute_action_with_adapter(
         self,
         adapter: BaseAdapter,
@@ -514,7 +565,9 @@ class DeviceControlService:
         match action_type:
             # General actions
             case ActionType.REBOOT:
-                return await adapter.reboot_device(device_id)
+                return await self._audited_device_action(
+                    device, "reboot_device", {}, perform=lambda: adapter.reboot_device(device_id)
+                )
             case ActionType.LOCATE:
                 duration = params.get("duration", 30)
                 return await adapter.locate_device(device_id, duration)
@@ -537,7 +590,9 @@ class DeviceControlService:
                         error="Factory reset requires confirmation",
                         error_code="CONFIRMATION_REQUIRED",
                     )
-                return await adapter.factory_reset(device_id)
+                return await self._audited_device_action(
+                    device, "factory_reset", {}, perform=lambda: adapter.factory_reset(device_id)
+                )
 
             # PoE actions
             case ActionType.POE_ENABLE:
@@ -546,14 +601,24 @@ class DeviceControlService:
                     return AdapterResult(
                         success=False, error="Port required", error_code="INVALID_CONFIG"
                     )
-                return await adapter.set_port_poe(device_id, port, True)
+                return await self._staged_device_write(
+                    device,
+                    "device.port.poe",
+                    {"port": port, "enabled": True},
+                    perform=lambda: adapter.set_port_poe(device_id, port, True),
+                )
             case ActionType.POE_DISABLE:
                 port = params.get("port")
                 if port is None:
                     return AdapterResult(
                         success=False, error="Port required", error_code="INVALID_CONFIG"
                     )
-                return await adapter.set_port_poe(device_id, port, False)
+                return await self._staged_device_write(
+                    device,
+                    "device.port.poe",
+                    {"port": port, "enabled": False},
+                    perform=lambda: adapter.set_port_poe(device_id, port, False),
+                )
             case ActionType.POE_CYCLE:
                 port = params.get("port")
                 duration = params.get("duration", 5)
@@ -561,7 +626,12 @@ class DeviceControlService:
                     return AdapterResult(
                         success=False, error="Port required", error_code="INVALID_CONFIG"
                     )
-                return await adapter.cycle_poe_port(device_id, port, duration)
+                return await self._audited_device_action(
+                    device,
+                    "cycle_poe_port",
+                    {"port": port, "duration": duration},
+                    perform=lambda: adapter.cycle_poe_port(device_id, port, duration),
+                )
 
             # Port actions
             case ActionType.PORT_ENABLE:
@@ -570,14 +640,24 @@ class DeviceControlService:
                     return AdapterResult(
                         success=False, error="Port required", error_code="INVALID_CONFIG"
                     )
-                return await adapter.set_port_enabled(device_id, port, True)
+                return await self._staged_device_write(
+                    device,
+                    "device.port.enabled",
+                    {"port": port, "enabled": True},
+                    perform=lambda: adapter.set_port_enabled(device_id, port, True),
+                )
             case ActionType.PORT_DISABLE:
                 port = params.get("port")
                 if port is None:
                     return AdapterResult(
                         success=False, error="Port required", error_code="INVALID_CONFIG"
                     )
-                return await adapter.set_port_enabled(device_id, port, False)
+                return await self._staged_device_write(
+                    device,
+                    "device.port.enabled",
+                    {"port": port, "enabled": False},
+                    perform=lambda: adapter.set_port_enabled(device_id, port, False),
+                )
             case ActionType.PORT_CONFIGURE:
                 port = params.get("port")
                 config = params.get("config")
@@ -605,14 +685,24 @@ class DeviceControlService:
                     return AdapterResult(
                         success=False, error="SSID ID required", error_code="INVALID_CONFIG"
                     )
-                return await adapter.toggle_ssid(ssid_id, True)
+                return await self._staged_device_write(
+                    device,
+                    "device.ssid.toggle",
+                    {"ssid_id": ssid_id, "enabled": True},
+                    perform=lambda: adapter.toggle_ssid(ssid_id, True),
+                )
             case ActionType.SSID_DISABLE:
                 ssid_id = params.get("ssid_id")
                 if not ssid_id:
                     return AdapterResult(
                         success=False, error="SSID ID required", error_code="INVALID_CONFIG"
                     )
-                return await adapter.toggle_ssid(ssid_id, False)
+                return await self._staged_device_write(
+                    device,
+                    "device.ssid.toggle",
+                    {"ssid_id": ssid_id, "enabled": False},
+                    perform=lambda: adapter.toggle_ssid(ssid_id, False),
+                )
             case ActionType.SSID_UPDATE:
                 ssid_id = params.get("ssid_id")
                 if not ssid_id:
@@ -636,21 +726,36 @@ class DeviceControlService:
                     return AdapterResult(
                         success=False, error="Client MAC required", error_code="INVALID_CONFIG"
                     )
-                return await adapter.kick_client(client_mac)
+                return await self._audited_device_action(
+                    device,
+                    "kick_client",
+                    {"client_mac": client_mac},
+                    perform=lambda: adapter.kick_client(client_mac),
+                )
             case ActionType.CLIENT_BLOCK:
                 client_mac = params.get("client_mac")
                 if not client_mac:
                     return AdapterResult(
                         success=False, error="Client MAC required", error_code="INVALID_CONFIG"
                     )
-                return await adapter.block_client(client_mac)
+                return await self._staged_device_write(
+                    device,
+                    "device.client.block",
+                    {"client_mac": client_mac},
+                    perform=lambda: adapter.block_client(client_mac),
+                )
             case ActionType.CLIENT_UNBLOCK:
                 client_mac = params.get("client_mac")
                 if not client_mac:
                     return AdapterResult(
                         success=False, error="Client MAC required", error_code="INVALID_CONFIG"
                     )
-                return await adapter.unblock_client(client_mac)
+                return await self._staged_device_write(
+                    device,
+                    "device.client.unblock",
+                    {"client_mac": client_mac},
+                    perform=lambda: adapter.unblock_client(client_mac),
+                )
 
             # Camera actions
             case ActionType.CAMERA_SNAPSHOT:
@@ -660,7 +765,9 @@ class DeviceControlService:
                 speed = params.get("speed", 50)
                 return await adapter.ptz_control(device_id, command, speed)
             case ActionType.CAMERA_REBOOT:
-                return await adapter.reboot_device(device_id)
+                return await self._audited_device_action(
+                    device, "reboot_device", {}, perform=lambda: adapter.reboot_device(device_id)
+                )
 
             # Firmware actions
             case ActionType.FIRMWARE_CHECK:

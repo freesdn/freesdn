@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from uuid import UUID
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -78,7 +79,9 @@ def outgoing_client(f):
         async def stream(self, method, url, *, auth, follow_redirects):
             assert method == "GET"
             assert auth == ("owned-http-user", "owned-credential-default-secret")
-            assert follow_redirects is False and self.verify is True and self.timeout == 10
+            # build_async_client keeps the 10s budget and bounds connect at 8s.
+            assert follow_redirects is False and self.verify is True
+            assert self.timeout == httpx.Timeout(10, connect=8.0)
             f.outgoing.append(
                 {
                     "scheme": url.split(":", 1)[0],

@@ -1704,6 +1704,7 @@ export type TailscaleSetupState =
   | 'daemon_stopped'
   | 'needs_login'
   | 'awaiting_auth'
+  | 'disconnected'
   | 'connected'
   | 'error';
 

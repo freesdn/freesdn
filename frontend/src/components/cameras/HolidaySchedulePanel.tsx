@@ -268,7 +268,8 @@ export default function HolidaySchedulePanel({ cameraId, nvrId }: HolidaySchedul
                   }}
                 >
                   {(_item, index, { remove }) => (
-                    <div className="flex items-center gap-3 py-2 px-3 rounded-md border bg-muted/20">
+                    // Wraps on a phone: the start and end dates moved off-screen.
+                    <div className="flex flex-wrap items-center gap-3 py-2 px-3 rounded-md border bg-muted/20">
                       <Controller
                         control={holidaysForm.control}
                         name={`holidays.${index}.enabled` as const}
@@ -288,7 +289,7 @@ export default function HolidaySchedulePanel({ cameraId, nvrId }: HolidaySchedul
                             value={field.value}
                             onChange={field.onChange}
                             placeholder={t("HolidaySchedulePanel.definitions.namePlaceholder")}
-                            className="h-8 text-sm flex-1 min-w-0"
+                            className="h-8 text-sm flex-1 min-w-[8rem]"
                           />
                         )}
                       />

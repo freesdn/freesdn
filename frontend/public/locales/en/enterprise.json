@@ -62,7 +62,11 @@
     },
     "confirm": {
       "deleteRule": "Delete rule \"{{name}}\"?",
-      "deleteRules": "Delete {{count}} rule(s)?"
+      "deleteRules": "Delete {{count}} rule(s)?",
+      "deleteRuleDescription": "It stops raising new alerts. Alerts it already raised stay in the Alerts list.",
+      "deleteRuleAction": "Delete rule",
+      "deleteRulesDescription": "They stop raising new alerts. Alerts they already raised stay in the Alerts list.",
+      "deleteRulesAction": "Delete rules"
     },
     "emptyRules": {
       "title": "No Rules Found",
@@ -704,6 +708,13 @@
       "createRule": "Create correlation rule failed",
       "triggerCorrelation": "Trigger correlation failed",
       "loadFailed": "Failed to load incidents data"
+    },
+    "confirm": {
+      "deleteRule": {
+        "title": "Delete correlation rule \"{{name}}\"?",
+        "description": "It stops grouping new events into incidents. Incidents it already opened are kept.",
+        "confirmLabel": "Delete rule"
+      }
     }
   },
   "LifecyclePage": {
@@ -875,7 +886,9 @@
       "verify": "Verify",
       "disable": "Disable",
       "delete": "Delete",
-      "confirmDelete": "Delete {{count}} provider(s)?"
+      "confirmDelete": "Delete {{count}} provider(s)?",
+      "confirmDeleteDescription": "They are permanently deleted with their stored credentials. Active notifications that use them will fail.",
+      "confirmDeleteAction": "Delete providers"
     },
     "deleteDialog": {
       "title": "Delete Provider",
@@ -1103,10 +1116,18 @@
       "deviceGroups": "device groups"
     },
     "confirm": {
-      "deleteSiteGroup": "Delete site group \"{{name}}\"? Member sites stay; only the group is removed.",
-      "deleteDeviceGroup": "Delete device group \"{{name}}\"? Member devices stay; only the group is removed.",
+      "deleteSiteGroup": "Delete site group \"{{name}}\"?",
+      "deleteDeviceGroup": "Delete device group \"{{name}}\"?",
       "bulkDeleteSiteGroups": "Delete {{count}} site group(s)?",
-      "bulkDeleteDeviceGroups": "Delete {{count}} device group(s)?"
+      "bulkDeleteDeviceGroups": "Delete {{count}} device group(s)?",
+      "deleteSiteGroupDescription": "Its sites are unlinked from the group, not deleted, and its child groups move to the top level.",
+      "deleteSiteGroupAction": "Delete site group",
+      "bulkDeleteSiteGroupsDescription": "Their sites are unlinked from the groups, not deleted, and their child groups move to the top level.",
+      "bulkDeleteSiteGroupsAction": "Delete site groups",
+      "deleteDeviceGroupDescription": "Its devices leave the group. No device is deleted or reconfigured.",
+      "deleteDeviceGroupAction": "Delete device group",
+      "bulkDeleteDeviceGroupsDescription": "Their devices leave the groups. No device is deleted or reconfigured.",
+      "bulkDeleteDeviceGroupsAction": "Delete device groups"
     },
     "dialogs": {
       "siteGroup": {
@@ -1203,7 +1224,8 @@
     "tabs": {
       "overview": "Overview",
       "policies": "Policies ({{count}})",
-      "breaches": "Breaches ({{count}})"
+      "breaches": "Breaches ({{count}})",
+      "reports": "Reports"
     },
     "overview": {
       "worstPerforming": "Worst Performing SLA"
@@ -1281,6 +1303,19 @@
       "uptimePercentMin": "Uptime % Min",
       "latencyMsMax": "Latency ms Max",
       "optional": "optional"
+    },
+    "measurementScope": "Compliance requires data for every configured target. Site and organization policies currently measure device health; sampled uptime is available for camera and NVR policies. Missing observations show N/A, not success. Historical reports are not a contractual availability guarantee.",
+    "confirm": {
+      "deleteOne": {
+        "title": "Delete SLA policy \"{{name}}\"?",
+        "description": "Its breach history and compliance snapshots are deleted with it. This cannot be undone.",
+        "confirmLabel": "Delete policy"
+      },
+      "deleteMany": {
+        "title": "Delete the selected SLA policies?",
+        "description": "Their breach history and compliance snapshots are deleted with them. This cannot be undone.",
+        "confirmLabel": "Delete policies"
+      }
     }
   },
   "ConfigTemplatesPage": {
@@ -1346,8 +1381,12 @@
       "copyName": "{{name}} (copy)"
     },
     "confirm": {
-      "deleteOne": "Delete template \"{{name}}\"? This cannot be undone.",
-      "deleteMany": "Delete {{count}} template(s)?"
+      "deleteOne": "Delete template \"{{name}}\"?",
+      "deleteMany": "Delete {{count}} template(s)?",
+      "deleteOneDescription": "The template is removed from FreeSDN and cannot be restored. Devices keep their current configuration.",
+      "deleteOneAction": "Delete template",
+      "deleteManyDescription": "The templates are removed from FreeSDN and cannot be restored. Devices keep their current configuration.",
+      "deleteManyAction": "Delete templates"
     },
     "dialog": {
       "createTitle": "Create Template",
@@ -1456,7 +1495,9 @@
       "quickActions": "Quick Actions"
     },
     "confirm": {
-      "reboot": "Reboot {{label}}? The device will be unreachable for ~30-90s."
+      "reboot": "Reboot {{label}}?",
+      "rebootDescription": "The reboot is sent to the device through its controller now. The device is unreachable for about 30 to 90 seconds, and so is anything that connects through it.",
+      "rebootAction": "Reboot device"
     },
     "toast": {
       "unknownError": "Unknown error",
@@ -1495,6 +1536,119 @@
       "iot": "IoT",
       "sensor": "Sensor",
       "other": "Other"
+    }
+  },
+  "SLAReportsPanel": {
+    "intro": "Reports follow your organization and site permissions. Date inputs use UTC; displayed timestamps use your browser's timezone. Scheduled runs use their configured timezone and run during the next hourly generation pass.",
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "none": "0 results",
+      "range": "{{from}}-{{to}} of {{total}}"
+    },
+    "generate": {
+      "title": "Generate a report",
+      "start": "Start (inclusive)",
+      "startAria": "Report start",
+      "end": "End (exclusive)",
+      "endAria": "Report end",
+      "policies": "Policies",
+      "policiesAria": "Report policies",
+      "policiesHint": "No selection means all accessible policies.",
+      "format": "Format",
+      "formatAria": "Report format",
+      "submit": "Generate"
+    },
+    "archive": {
+      "title": "Report archive",
+      "lastRefreshed": "Last refreshed: {{time}}",
+      "waiting": "Waiting for response",
+      "loading": "Loading reports…",
+      "empty": "No reports have been generated.",
+      "downloadLinked": "Download linked report",
+      "columns": {
+        "report": "Report",
+        "generated": "Generated",
+        "actions": "Actions"
+      },
+      "period": "{{start}} to {{end}}",
+      "download": "Download {{format}}",
+      "deliveryStatus": "Delivery status"
+    },
+    "delivery": {
+      "title": "Email delivery status",
+      "explain": "Accepted means the SMTP server accepted the notice; it does not prove inbox delivery. Unknown means acceptance could not be confirmed. Check relay logs using the delivery ID; FreeSDN will not automatically resend it.",
+      "loading": "Loading delivery status…",
+      "empty": "No email deliveries were scheduled for this report.",
+      "attempts_one": "{{count}} attempt",
+      "attempts_other": "{{count}} attempts",
+      "id": "Delivery ID: {{id}}",
+      "code": "Code: {{code}}",
+      "nextAttempt": "Next attempt: {{time}}",
+      "cancel": "Cancel pending delivery"
+    },
+    "deliveryStates": {
+      "pending": "Pending",
+      "sending": "Sending",
+      "retry": "Retrying",
+      "accepted": "Accepted",
+      "unknown": "Unknown",
+      "failed": "Failed",
+      "skipped": "Skipped",
+      "cancelled": "Cancelled"
+    },
+    "frequencies": {
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "quarterly": "Quarterly"
+    },
+    "weekdays": {
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "sunday": "Sunday"
+    },
+    "schedules": {
+      "title": "Report schedules",
+      "loading": "Loading schedules…",
+      "empty": "No report schedules.",
+      "enabled": "Enabled",
+      "paused": "Paused",
+      "cadence": "{{frequency}} at {{time}} ({{timezone}})",
+      "runs": "Next: {{next}} · Last generated: {{last}} · Email: {{email}}",
+      "emailOn": "Opted in",
+      "emailOff": "Off",
+      "needsReview": "Needs review: {{error}}",
+      "edit": "Edit and review",
+      "pause": "Pause",
+      "reapprove": "Reapprove and enable"
+    },
+    "form": {
+      "createTitle": "Create schedule",
+      "reviewTitle": "Review schedule",
+      "name": "Name",
+      "frequency": "Frequency",
+      "dayOfWeek": "Day of the week",
+      "dayOfMonth": "Day of month",
+      "timezone": "Timezone",
+      "localTime": "Local time",
+      "policyIds": "Policy IDs (comma-separated; blank means all policies)",
+      "policyHint": "Site-limited operators must choose explicit policies. Editing a schedule replaces its delivery approval; old pending notices will be cancelled when processed.",
+      "enableGeneration": "Enable report generation",
+      "sendEmail": "Send email notices for future scheduled reports",
+      "emailExplain": "Email is off by default. Notices contain a sign-in link, not an attachment. Recipients must be active users in this organization with access to the report. Configure an HTTPS FRONTEND_URL and verify your SMTP provider first.",
+      "recipients": "Recipients (comma-separated)",
+      "provider": "Verified SMTP provider",
+      "providerPlaceholder": "Choose a provider",
+      "create": "Create schedule",
+      "saveReapprove": "Save and reapprove",
+      "cancelEdit": "Cancel edit"
+    },
+    "errors": {
+      "fallback": "The request failed. Refresh and try again."
     }
   }
 }

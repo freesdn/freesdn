@@ -98,7 +98,7 @@ export function PBXOverviewTab({
 
       {/* Secondary Stats Row */}
       <StatsGrid
-        columns={4}
+        columns={5}
         stats={[
           { title: t('PBXOverviewTab.stats.callsToday'), value: dash?.calls_today ?? 0, icon: Phone, variant: 'info' },
           { title: t('PBXOverviewTab.stats.ringGroups'), value: dash?.ring_groups ?? 0, icon: Users, variant: 'warning' },

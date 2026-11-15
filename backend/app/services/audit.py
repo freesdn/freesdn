@@ -419,9 +419,13 @@ class AuditService:
         error_message: str | None = None,
         tags: list[str] | None = None,
         extra_metadata: dict[str, Any] | None = None,
+        strict: bool = False,
     ) -> AuditEntry:
         """
         Create an audit log entry.
+
+        ``strict=True`` raises when the row cannot be written, for a caller
+        that must not proceed without its record (handing out a credential).
 
         Args:
             action: The action performed
@@ -491,7 +495,7 @@ class AuditService:
         self._sanitize_entry(entry)
 
         # Store
-        await self._store_entry(entry)
+        await self._store_entry(entry, strict=strict)
 
         logger.debug(
             f"Audit: {entry.action} {entry.resource_type} "
@@ -568,7 +572,7 @@ class AuditService:
         entry.new_state = sanitize_dict(entry.new_state)
         entry.extra_metadata = sanitize_dict(entry.extra_metadata) or {}
 
-    async def _store_entry(self, entry: AuditEntry) -> None:
+    async def _store_entry(self, entry: AuditEntry, *, strict: bool = False) -> None:
         """Persist a single audit entry to the database immediately.
 
         SECURITY: entries are written directly (not buffered) so
@@ -618,6 +622,8 @@ class AuditService:
             # The shared path already reports the loss. This API remains best
             # effort because the caller may already have applied a device action.
             # Other writers use the strict API and retain their original errors.
+            if strict:
+                raise
             return
 
     async def persist_record(self, record: AuditLogRecord) -> AuditLogRecord:

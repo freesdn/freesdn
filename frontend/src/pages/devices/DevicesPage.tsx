@@ -348,9 +348,12 @@ export default function DevicesPage() {
     setIsBulkDeleting(false);
     setBulkDeleteOpen(false);
     queryClient.invalidateQueries({ queryKey: ['devices'] });
+    // The result used to reuse the filter bar's "Showing X of Y" string.
     toast({
-      title: t('common:delete'),
-      description: t('DevicesPage.filters.countFiltered', { shown: ok, total: results.length }),
+      title: failed > 0
+        ? t('DevicesPage.bulkDelete.partialTitle', { failed, total: results.length })
+        : t('DevicesPage.bulkDelete.doneTitle', { n: ok }),
+      description: t('DevicesPage.bulkDelete.resyncNote'),
       variant: failed > 0 ? 'destructive' : undefined,
     });
     setSelectedDevices([]);
@@ -640,6 +643,7 @@ export default function DevicesPage() {
     {
       id: 'memory',
       header: t('DevicesPage.columns.memory'),
+      defaultHidden: true,
       accessorFn: (d) => d.memory_usage_percent ?? -1,
       cell: (d) => <MetricBar value={d.memory_usage_percent} />,
     },
@@ -749,7 +753,6 @@ export default function DevicesPage() {
             <LastUpdated timestamp={dataUpdatedAt} hideOnMobile />
             <Button
               variant="outline"
-              size="sm"
               onClick={() => exportCsv(filteredDevices)}
               disabled={filteredDevices.length === 0}
             >
@@ -1019,6 +1022,9 @@ export default function DevicesPage() {
         isLoading={isLoading}
         selectable
         onSelectionChange={setSelectedDevices}
+        selectedRows={selectedDevices}
+        enableColumnVisibility
+        columnVisibilityKey="devices"
         searchable={false}
         onRowClick={handleRowClick}
         itemName={t('DevicesPage.itemNamePlural')}
@@ -1051,8 +1057,10 @@ export default function DevicesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>{t('DevicesPage.actions.reboot')}</AlertDialogTitle>
             <AlertDialogDescription>
+              {/* The multi-device case used to show the post-action toast
+                  ("Rebooting N device(s).") as if it were the question. */}
               {rebootTargets.length > 1
-                ? t('DevicesPage.toasts.rebootInitiated.description', { n: rebootTargets.length })
+                ? t('DevicesPage.bulkReboot.confirm', { n: rebootTargets.length })
                 : t('actions.rebootConfirm')}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1066,9 +1074,11 @@ export default function DevicesPage() {
       <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('DevicesPage.toasts.bulkDelete.title')}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t('DevicesPage.bulkDelete.confirmTitle', { n: selectedDevices.length })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {t('actions.forgetConfirm')}
+              {t('DevicesPage.bulkDelete.confirmDescription', { n: selectedDevices.length })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

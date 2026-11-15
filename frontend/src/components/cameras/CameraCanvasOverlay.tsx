@@ -73,7 +73,6 @@ export function CameraCanvasOverlay({
   aspectRatio = 16 / 9,
 }: CameraCanvasOverlayProps) {
   const { t } = useTranslation('common');
-  const height = Math.round(width / aspectRatio);
   const [snapshotUrl, setSnapshotUrl] = useState('');
 
   // Fetch a short-lived stream token for the snapshot URL
@@ -89,17 +88,23 @@ export function CameraCanvasOverlay({
   }, [cameraId]);
 
   return (
+    // `width` is the largest size; on a narrower screen the overlay scales down
+    // at its aspect ratio (it used to stay 560px wide and run off a phone).
+    // The SVG works in normalised viewBox units, so editing is scale-free.
     <div
-      className={cn('relative inline-block bg-muted rounded overflow-hidden select-none', className)}
-      style={{ width, height }}
+      className={cn('relative block w-full bg-muted rounded overflow-hidden select-none', className)}
+      style={{ maxWidth: width, aspectRatio: String(aspectRatio) }}
     >
-      {/* Camera snapshot background */}
-      <img
-        src={snapshotUrl}
-        alt={t('CameraCanvasOverlay.snapshotAlt')}
-        className="absolute inset-0 w-full h-full object-cover"
-        draggable={false}
-      />
+      {/* Camera snapshot background. Not rendered until the tokenised URL
+          exists: src="" makes the browser re-request the current page. */}
+      {snapshotUrl && (
+        <img
+          src={snapshotUrl}
+          alt={t('CameraCanvasOverlay.snapshotAlt')}
+          className="absolute inset-0 w-full h-full object-cover"
+          draggable={false}
+        />
+      )}
 
       {/* SVG overlay */}
       <svg

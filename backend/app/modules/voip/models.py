@@ -69,6 +69,11 @@ class ProvisionStatus(StrEnum):
     STALE = "stale"  # Config out of date
 
 
+#: ``Phone.mac_review`` value: another live phone has the same MAC. Shown by the
+#: API on the phone, and provisioning is refused while the twin exists.
+MAC_REVIEW_DUPLICATE = "duplicate"
+
+
 class CallDirection(StrEnum):
     """Call direction."""
 
@@ -111,7 +116,15 @@ class Phone(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
         Index("ix_phones_site_id", "site_id"),
         Index("ix_phones_pbx_id", "pbx_id"),
         Index("ix_phones_status", "status"),
-        Index("ix_phones_mac_address", "mac_address", unique=True),
+        # One live phone per MAC (stored canonically, aa:bb:cc:dd:ee:ff). Phones
+        # flagged by migration 032 as sharing a MAC are exempt until the operator
+        # deletes one; provisioning refuses them meanwhile.
+        Index(
+            "ix_phones_mac_address",
+            "mac_address",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND mac_review IS NULL"),
+        ),
         Index("ix_phones_lifecycle_state", "lifecycle_state"),
         Index("ix_phones_template_id", "config_template_id"),
         {"schema": "voip"},
@@ -151,6 +164,9 @@ class Phone(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
     # Connection
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     mac_address: Mapped[str | None] = mapped_column(String(17), nullable=True)
+    # MAC_REVIEW_DUPLICATE when another live phone has the same MAC (set by
+    # migration 032, which canonicalised MACs and found two spellings of one).
+    mac_review: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     # Device Info
     vendor: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -174,6 +174,10 @@ _ACCESS_BUS_EVENT_TYPE = {
     "door_unlocked": "access.door.unlocked",
     "door_locked": "access.door.locked",
     "alarm": "access.door.alarm",
+    # What lock_door / unlock_door actually store. Unmapped, so the two
+    # advertised triggers never fired.
+    "remote_lock": "access.door.locked",
+    "remote_unlock": "access.door.unlocked",
 }
 
 

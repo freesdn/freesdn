@@ -253,10 +253,13 @@ def test_the_tailscale_action_calls_the_real_service() -> None:
 
 def test_reconnect_re_passes_the_netfilter_mode() -> None:
     """
-    ``reconnect`` uses ``tailscale up --reset``, which wipes unspecified
-    prefs. Dropping --netfilter-mode silently reverts NetBird coexistence to
-    the default and breaks the overlay sharing 100.64.0.0/10. The resolver for
-    it already lives in this module.
+    The endpoint resolves the NetBird-coexistence netfilter mode and hands it
+    to ``reconnect``, which applies it with ``tailscale set`` on top of the
+    node's kept preferences: a NetBird connection added after the login still
+    gets --netfilter-mode=off, without which the two overlays fight over
+    100.64.0.0/10. (``reconnect`` no longer runs ``up --reset``, which wiped
+    every unspecified preference; see test_tailscale_reconnect_keeps_prefs.py.)
+    The resolver for it already lives in this module.
     """
     from app.api.v1.endpoints import vpn as vpn_api
 
@@ -329,3 +332,39 @@ def test_the_context_field_means_unrestricted_when_none() -> None:
 
     doc = inspect.getsource(OperationContext)
     assert "None = unrestricted" in doc
+
+
+NATIVE_TEMPLATE = {
+    "server": {"name": "wg0", "privkey": "owned-privkey", "pubkey": "public-ok"},
+    "peer": {"name": "b", "psk": "owned-psk", "pubkey": "peer-public"},
+    "presharedKey": "owned-camel-psk",
+    "PrivateKey": "owned-pascal-key",
+    "tunnel_address": "10.9.0.1/30",
+}
+
+
+def _tunnel_response(config: dict):
+    from uuid import uuid4
+
+    from app.api.v1.endpoints.vpn_orchestration import SiteToSiteTunnelResponse
+
+    return SiteToSiteTunnelResponse(
+        id=uuid4(),
+        organization_id=uuid4(),
+        site_a_id=uuid4(),
+        site_b_id=uuid4(),
+        config_a=config,
+        config_b={"servers": [config]},
+    )
+
+
+def test_native_wireguard_secrets_never_leave_a_template_or_tunnel() -> None:
+    """Fails on the old six-name redactor: OPNsense ``privkey`` / ``psk`` and the
+    camelCase aliases came back to any vpn:read caller."""
+    template = _template_response(dict(NATIVE_TEMPLATE)).config_template
+    tunnel = _tunnel_response(dict(NATIVE_TEMPLATE))
+    for body in (template, tunnel.config_a, tunnel.config_b):
+        assert "owned-" not in repr(body), body
+    assert template["server"]["pubkey"] == "public-ok"
+    assert template["tunnel_address"] == "10.9.0.1/30"
+    assert tunnel.config_b["servers"][0]["peer"]["pubkey"] == "peer-public"

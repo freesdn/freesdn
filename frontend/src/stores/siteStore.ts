@@ -33,7 +33,7 @@ interface SiteState {
   isGlobalView: () => boolean;
 }
 
-/** Site-only pages · redirect to dashboard when switching to global */
+/** Site-only pages · in the global view MainLayout shows a site picker instead */
 export const SITE_ONLY_PATHS = ['/topology', '/discovery'];
 
 /** Global-only pages · hidden in site mode (handled by sidebar visibility) */

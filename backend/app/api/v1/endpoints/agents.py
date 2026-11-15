@@ -11,6 +11,7 @@ task management, WebSocket connections, and cleanup utilities.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -29,7 +30,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import Integer, select
+from sqlalchemy import Integer, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -65,8 +66,11 @@ from app.schemas.agents import (
 )
 from app.schemas.core import MessageResponse, PaginatedResponse
 from app.services.adapter_preflight_common import payload_confirmed
+from app.services.adapter_staging import AdapterStagingService
 from app.services.release_signing_async import agent_release_operation
 from app.services.remote_agent import (
+    DEVICE_WRITE_TASK_TYPES,
+    REQUESTED_BY_KEY,
     AgentCommand,
     AgentCommandType,
     AgentNotFoundError,
@@ -520,6 +524,22 @@ async def delete_agent(
 
     await logdb.commit()
     await session.commit()
+
+    # Its key is dead from here on, but a socket it already holds was
+    # authenticated once at connect and never again, so commands for the site
+    # could still be routed to it. Drop it. The registry is per process, so the
+    # other API processes are told to drop theirs too (websocket_pubsub).
+    if _agent_registry is not None:
+        try:
+            await _agent_registry.unregister_connection(str(agent_id))
+        except Exception:
+            logger.warning("Could not drop the live socket of deleted agent %s", agent_id)
+    try:
+        from app.services.websocket_pubsub import get_ws_pubsub
+
+        await get_ws_pubsub().publish_control({"kind": "agent_deleted", "agent_id": str(agent_id)})
+    except Exception:
+        logger.warning("Could not tell the other processes to drop deleted agent %s", agent_id)
     return MessageResponse(message="Agent deleted successfully")
 
 
@@ -641,6 +661,13 @@ async def create_task(
     """Create a task for an agent to execute."""
     org_id = _org_id(current_user)
     agent = await _verify_agent_org(agent_id, org_id, session, current_user)
+    # A read-only grant on the agent's site sees the agent but may not send it
+    # work: the same ceiling the pending hand-out applies.
+    if not current_user.has_site_permission("agent:write", agent.site_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your access to this site is read-only: tasks for its agent are refused.",
+        )
 
     svc = PersistentAgentService(session)
 
@@ -672,10 +699,38 @@ async def create_task(
             ),
         )
 
+    device_write = str(data.task_type) in DEVICE_WRITE_TASK_TYPES
+    # A device change from an edge agent is refused while read-only mode is on,
+    # like every other device write (the same effective flag as staging);
+    # ``confirmed`` does not lift it. It is checked again when a queued task is
+    # handed out (PersistentAgentService.refusal_at_dispatch).
+    if device_write and AdapterStagingService.is_read_only():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Read-only mode is on: device writes are refused.",
+        )
+    # The shipped agent receives work only over its socket, when it is sent, and
+    # nothing sends a task when its time comes. A task scheduled for later was
+    # once sent straight away; it is refused rather than recorded and never run.
+    scheduled_at = data.scheduled_at
+    if scheduled_at is not None:
+        if scheduled_at.tzinfo is None:
+            scheduled_at = scheduled_at.replace(tzinfo=UTC)
+        if scheduled_at > datetime.now(UTC):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Scheduling an agent task for later is not supported: the agent "
+                    "receives a task only when it is sent. Send it when it should run."
+                ),
+            )
+
     task = await svc.create_task(
         agent_id=agent_id,
         task_type=data.task_type,
-        task_data=data.task_data,
+        # Who asked, so a task handed out later is re-authorized then. The
+        # command sent below carries the caller's own task_data only.
+        task_data={**(data.task_data or {}), REQUESTED_BY_KEY: str(current_user.id)},
         priority=data.priority,
         scheduled_at=data.scheduled_at,
         max_retries=data.max_retries,
@@ -694,8 +749,12 @@ async def create_task(
     # So a task created here sat at PENDING for ever. Confirmed against a live
     # daemon: POST /agents/{id}/tasks -> 200, and the task was still "pending"
     # thirty-six seconds later with the agent connected and heartbeating.
-    from app.models.agents import AgentTaskStatus
-    from app.services.remote_agent import AgentCommand, AgentCommandType
+    from app.models.agents import AgentTask, AgentTaskStatus
+    from app.services.remote_agent import (
+        AgentCommand,
+        AgentCommandType,
+        record_device_task_handout,
+    )
 
     registry = await get_agent_registry(session)
     connection = registry.get_connection_for_site(agent.site_id)
@@ -726,6 +785,54 @@ async def create_task(
     # scan_progress reports mirror back into the agent_tasks row -- without it
     # the command runs on the agent and the task sits at PENDING for ever, which
     # is indistinguishable from never having been dispatched at all.
+    if device_write and AdapterStagingService.is_read_only():
+        # Switched on while the task was being recorded.
+        task.status = AgentTaskStatus.FAILED
+        task.error_message = "Read-only mode is on: the device change was not sent."
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Read-only mode is on: device writes are refused.",
+        )
+    if device_write:
+        # Recorded before it is sent: without a committed audit record the
+        # device change does not leave.
+        task_id = task.id
+        try:
+            await record_device_task_handout(session, task, agent, current_user.id, "websocket")
+            await session.commit()
+        except Exception:
+            logger.error("Agent task %s withheld: its audit record could not be written", task_id)
+            with contextlib.suppress(Exception):
+                await session.rollback()
+            with contextlib.suppress(Exception):
+                await session.execute(
+                    update(AgentTask)
+                    .where(AgentTask.id == task_id)
+                    .values(
+                        status=AgentTaskStatus.FAILED,
+                        error_message="The audit record could not be written; not sent.",
+                    )
+                )
+                await session.commit()
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "The device change could not be recorded in the audit log, so it "
+                    "was not sent; try again."
+                ),
+            ) from None
+        # The audit write can wait (on the audit chain's lock) past a switch to
+        # read-only, so the switch is read again here, with nothing awaited
+        # between this check and the send.
+        if AdapterStagingService.is_read_only():
+            task.status = AgentTaskStatus.FAILED
+            task.error_message = "Read-only mode is on: the device change was not sent."
+            await session.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Read-only mode is on: device writes are refused.",
+            )
     registry.register_interactive_task(str(task.id))
     try:
         await connection.send_command(

@@ -82,6 +82,7 @@ import {
   DeleteControllerDialog,
 } from '@/components/controllers';
 import { useToast } from '@/hooks/use-toast';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ───────────────────────────────────────────────────────────────────
 // Types
@@ -202,7 +203,7 @@ export default function ControllersPage() {
     onError: (err: any) => {
       toast({
         title: t('ControllersPage.toast.syncFailed.title'),
-        description: err.response?.data?.detail || t('ControllersPage.toast.syncFailed.description'),
+        description: getApiErrorMessage(err, t('ControllersPage.toast.syncFailed.description')),
         variant: 'destructive',
       });
     },
@@ -243,7 +244,7 @@ export default function ControllersPage() {
     onError: (err: any) => {
       toast({
         title: t('ControllersPage.toast.connectionTestFailed.title'),
-        description: err.response?.data?.detail || err.message || t('ControllersPage.toast.connectionTestFailed.description'),
+        description: getApiErrorMessage(err, t('ControllersPage.toast.connectionTestFailed.description')),
         variant: 'destructive',
       });
     },
@@ -410,7 +411,7 @@ export default function ControllersPage() {
               {row.name}
             </button>
             <span className="text-xs text-muted-foreground font-mono truncate">
-              {row.host}:{row.port}
+              {row.port ? `${row.host}:${row.port}` : row.host}
             </span>
           </div>
         </div>
@@ -428,11 +429,18 @@ export default function ControllersPage() {
       accessorKey: 'status',
       cell: (row) => (
         <div className="flex flex-col gap-1">
-          <StatusBadge
-            variant={
-              syncingIds.has(row.id) ? 'syncing' : CONTROLLER_STATUS_VARIANT[row.status]
-            }
-          />
+          {/* An unmapped status used to fall back to the badge's own
+              "Neutral" label, and `unreachable` read as a generic "Error".
+              The label is now always the translated controller status. */}
+          {syncingIds.has(row.id) ? (
+            <StatusBadge variant="syncing">{t('ControllerDetailPage.status.syncing')}</StatusBadge>
+          ) : (
+            <StatusBadge variant={CONTROLLER_STATUS_VARIANT[row.status] ?? 'unknown'}>
+              {t(`ControllerDetailPage.status.${row.status}`, {
+                defaultValue: t('ControllerDetailPage.status.unknown'),
+              })}
+            </StatusBadge>
+          )}
           {!row.is_active && (
             <span className="text-xs text-muted-foreground flex items-center gap-1">
               <PowerOff className="h-3 w-3" /> {t('ControllersPage.status.disabled')}
@@ -720,6 +728,7 @@ export default function ControllersPage() {
         isLoading={isLoading}
         selectable
         onSelectionChange={setSelectedControllers}
+        selectedRows={selectedControllers}
         searchable={false}
         itemName={t('ControllersPage.itemNamePlural')}
         getRowId={(row) => row.id}

@@ -120,7 +120,7 @@
     "title": "Access Mode",
     "subtitle": "Choose how FreeSDN works with your devices. You can change this later in Settings.",
     "defaultBadge": "Default",
-    "hint": "Monitor only is the safe choice for a brand-new install — FreeSDN reads device state but never writes changes. Switch to Manage anytime once you're ready.",
+    "hint": "Monitor only is the safe choice for a brand-new install: FreeSDN reads device state but never writes changes. Switch to Manage anytime once you're ready.",
     "modes": {
       "manage": {
         "title": "Manage (read-write)",
@@ -425,12 +425,12 @@
     },
     "restore": {
       "toggle": "Restore from a backup instead",
-      "help": "Already have a Full backup (.fsdnvault) from another instance? Restore it here to rebuild this one — your sites, devices, accounts and credentials come back, and you log in with your existing password. (A config snapshot .fsdn can't be used here — it has no accounts.)",
+      "help": "Already have a Full backup (.fsdnvault) from another instance? Restore it here to rebuild this one: your sites, devices, accounts and credentials come back, and you log in with your existing password. (A config snapshot .fsdn can't be used here: it has no accounts.)",
       "fileLabel": "Backup file (.fsdnvault)",
       "passLabel": "Backup passphrase",
       "passPlaceholder": "The passphrase the backup was created with",
       "submit": "Restore this instance",
-      "failed": "Restore failed — check the file and passphrase.",
+      "failed": "Restore failed. Check the file and passphrase.",
       "unconfirmed": "Recovery was not confirmed. Review the server status before retrying."
     },
     "hero": {

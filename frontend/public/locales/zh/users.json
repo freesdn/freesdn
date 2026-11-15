@@ -121,6 +121,14 @@
         "username": "用户名为必填项",
         "password": "密码长度至少为 12 个字符"
       }
+    },
+    "deleteDialog": {
+      "titleOne": "删除用户？",
+      "titleMany": "删除 {{count}} 个用户？",
+      "descriptionMany": "将删除以下 {{count}} 个账户。此操作无法撤销。",
+      "more": "以及另外 {{count}} 个",
+      "confirmMany": "删除 {{count}} 个用户",
+      "cancel": "取消"
     }
   }
 }

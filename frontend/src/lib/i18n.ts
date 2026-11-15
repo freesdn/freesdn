@@ -10,49 +10,7 @@ import { initReactI18next } from 'react-i18next';
 // half-translated UI. The RTL plumbing below is retained so Hebrew can be
 // re-added later without re-architecting.
 export type SupportedLocale = 'en' | 'es' | 'zh';
-export type TranslationNamespace =
-  | 'common'
-  | 'auth'
-  | 'dashboard'
-  | 'devices'
-  | 'errors'
-  | 'settings'
-  | 'cameras'
-  | 'network'
-  | 'backup'
-  | 'sites'
-  | 'vpn'
-  | 'analytics'
-  | 'agents'
-  | 'alerts'
-  | 'accessPoints'
-  | 'firmware'
-  | 'roles'
-  | 'logs'
-  | 'integrations'
-  | 'poe'
-  | 'credentials'
-  | 'discovery'
-  | 'users'
-  | 'automation'
-  | 'webhooks'
-  | 'drivers'
-  | 'ai'
-  | 'access'
-  | 'pendingChanges'
-  | 'collector'
-  | 'security'
-  | 'controllers'
-  | 'organizations'
-  | 'marketplace'
-  | 'setup'
-  | 'switches'
-  | 'gateway'
-  | 'hypervisor'
-  | 'enterprise'
-  | 'voip'
-  | 'firewall'
-  | 'about';
+export type { TranslationNamespace } from './i18n-namespaces';
 
 const FALLBACK_LANGUAGE: SupportedLocale = 'en';
 const RTL_LANGUAGES = new Set<SupportedLocale>([]);

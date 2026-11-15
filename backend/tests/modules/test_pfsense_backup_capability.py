@@ -143,6 +143,14 @@ async def test_api_reports_unsupported_without_contacting_assumed_backup_endpoin
         f.body = {"message": PRIVATE}
     before = await snapshot(f)
     response = await f.client.post(f"/firewall/gateways/{f.gateway.id}/backups")
+    if read_only:
+        # Creating a backup is a gateway action, and read-only mode refuses
+        # every gateway action before the gateway is contacted.
+        assert response.status_code == 403
+        assert f.calls == [] and not f.requests
+        assert PRIVATE not in response.text and PRIVATE not in caplog.text
+        assert await snapshot(f) == before
+        return
     assert response.status_code == 501
     assert response.json() == {"error": {"code": 501, "message": UNSUPPORTED, "request_id": None}}
     assert f.calls == ["construct", "connect"] and not f.requests

@@ -47,6 +47,16 @@ import {
 } from '@/components/ui/dialog';
 import { FormDialog } from '@/components/ui/form-dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   FormControl,
   FormField,
   FormItem,
@@ -72,6 +82,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usersApi, sitesApi, api, type UserAccount, type UserUpdatePayload } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { escapeCell } from '@/lib/csv';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 type TFn = (key: string, options?: Record<string, unknown>) => string;
 
@@ -205,7 +216,7 @@ function SiteAccessDialog({
       handleOpenChange(false);
     },
     onError: (err: any) => {
-      toast({ title: t('UsersPage.toast.errorTitle'), description: err?.response?.data?.detail || t('UsersPage.siteAccess.saveError'), variant: 'destructive' });
+      toast({ title: t('UsersPage.toast.errorTitle'), description: getApiErrorMessage(err, t('UsersPage.siteAccess.saveError')), variant: 'destructive' });
     },
   });
 
@@ -612,6 +623,11 @@ export function UsersPage() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [siteAccessUser, setSiteAccessUser] = useState<UserAccount | null>(null);
+  // Account deletion is irreversible, so it is confirmed in an in-app dialog
+  // that names exactly who is being deleted. The bulk path used the browser's
+  // confirm() with the plural item name as the "name": 'Delete user "users"?',
+  // which never said how many accounts were about to go.
+  const [pendingDelete, setPendingDelete] = useState<{ users: UserAccount[]; bulk: boolean } | null>(null);
   const [editUser, setEditUser] = useState<UserAccount | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<UserAccount[]>([]);
@@ -658,7 +674,7 @@ export function UsersPage() {
       setAddOpen(false);
     },
     onError: (err: any) => {
-      toast({ title: t('UsersPage.toast.errorTitle'), description: err?.response?.data?.detail || t('UsersPage.toast.createError'), variant: 'destructive' });
+      toast({ title: t('UsersPage.toast.errorTitle'), description: getApiErrorMessage(err, t('UsersPage.toast.createError')), variant: 'destructive' });
     },
   });
 
@@ -670,7 +686,7 @@ export function UsersPage() {
       setEditUser(null);
     },
     onError: (err: any) => {
-      toast({ title: t('UsersPage.toast.errorTitle'), description: err?.response?.data?.detail || t('UsersPage.toast.updateError'), variant: 'destructive' });
+      toast({ title: t('UsersPage.toast.errorTitle'), description: getApiErrorMessage(err, t('UsersPage.toast.updateError')), variant: 'destructive' });
     },
   });
 
@@ -678,7 +694,7 @@ export function UsersPage() {
     mutationFn: (id: string) => usersApi.delete(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
     onError: (err: any) => {
-      toast({ title: t('UsersPage.toast.errorTitle'), description: err?.response?.data?.detail || t('UsersPage.toast.deleteError'), variant: 'destructive' });
+      toast({ title: t('UsersPage.toast.errorTitle'), description: getApiErrorMessage(err, t('UsersPage.toast.deleteError')), variant: 'destructive' });
     },
   });
 
@@ -687,7 +703,7 @@ export function UsersPage() {
       usersApi.update(id, { is_active }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
     onError: (err: any) => {
-      toast({ title: t('UsersPage.toast.errorTitle'), description: err?.response?.data?.detail || t('UsersPage.toast.updateError'), variant: 'destructive' });
+      toast({ title: t('UsersPage.toast.errorTitle'), description: getApiErrorMessage(err, t('UsersPage.toast.updateError')), variant: 'destructive' });
     },
   });
 
@@ -773,10 +789,20 @@ export function UsersPage() {
   };
 
   // Bulk delete: gated behind a confirm (matches the per-row delete convention).
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedUsers.length === 0) return;
-    if (!confirm(t('UsersPage.actions.deleteConfirm', { name: t('UsersPage.itemNamePlural') }))) return;
-    const results = await Promise.allSettled(selectedUsers.map((u) => usersApi.delete(u.id)));
+    setPendingDelete({ users: [...selectedUsers], bulk: true });
+  };
+
+  const confirmDelete = async () => {
+    const pending = pendingDelete;
+    setPendingDelete(null);
+    if (!pending || pending.users.length === 0) return;
+    if (!pending.bulk) {
+      deleteMutation.mutate(pending.users[0].id);
+      return;
+    }
+    const results = await Promise.allSettled(pending.users.map((u) => usersApi.delete(u.id)));
     const ok = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.length - ok;
     queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -891,11 +917,7 @@ export function UsersPage() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
-                onClick={() => {
-                  if (confirm(t('UsersPage.actions.deleteConfirm', { name: u.username || u.email }))) {
-                    deleteMutation.mutate(u.id);
-                  }
-                }}
+                onClick={() => setPendingDelete({ users: [u], bulk: false })}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 {t('UsersPage.actions.delete')}
@@ -1084,6 +1106,53 @@ export function UsersPage() {
           onSave={(id, values) => updateMutation.mutateAsync({ id, values })}
         />
       )}
+
+      {/* Delete confirmation (single and bulk) */}
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingDelete && pendingDelete.users.length > 1
+                ? t('UsersPage.deleteDialog.titleMany', { count: pendingDelete.users.length })
+                : t('UsersPage.deleteDialog.titleOne')}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  {pendingDelete && pendingDelete.users.length > 1
+                    ? t('UsersPage.deleteDialog.descriptionMany', { count: pendingDelete.users.length })
+                    : t('UsersPage.actions.deleteConfirm', {
+                        name: pendingDelete?.users[0]?.username || pendingDelete?.users[0]?.email || '',
+                      })}
+                </p>
+                {pendingDelete && pendingDelete.users.length > 1 && (
+                  <ul className="max-h-40 list-disc space-y-0.5 overflow-y-auto pl-5 text-foreground">
+                    {pendingDelete.users.slice(0, 10).map((u) => (
+                      <li key={u.id} className="break-all">{u.username || u.email}</li>
+                    ))}
+                    {pendingDelete.users.length > 10 && (
+                      <li className="list-none text-muted-foreground">
+                        {t('UsersPage.deleteDialog.more', { count: pendingDelete.users.length - 10 })}
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('UsersPage.deleteDialog.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void confirmDelete()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {pendingDelete && pendingDelete.users.length > 1
+                ? t('UsersPage.deleteDialog.confirmMany', { count: pendingDelete.users.length })
+                : t('UsersPage.actions.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Site Access Dialog */}
       {siteAccessUser && (

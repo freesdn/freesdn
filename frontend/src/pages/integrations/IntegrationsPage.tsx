@@ -16,6 +16,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { PageHeader, PageToolbar } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import {
   integrationsApi,
   webhooksApi,
@@ -567,7 +568,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ isOpen, onClose, onCreated })
           const e = err as any;
           toast({
             title: t('IntegrationsPage.toasts.createFailed'),
-            description: e.response?.data?.detail || e.message,
+            description: getApiErrorMessage(e),
             variant: 'destructive',
           });
           throw err;
@@ -933,7 +934,7 @@ const TemplatePickerDialog: React.FC<TemplatePickerDialogProps> = ({ isOpen, onC
     onError: (err: any) => {
       toast({
         title: t('IntegrationsPage.toasts.createFailed'),
-        description: err.response?.data?.detail || err.message,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },
@@ -1052,6 +1053,7 @@ export default function IntegrationsPage() {
   const { t } = useTranslation('integrations');
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [showWizard, setShowWizard] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1077,7 +1079,7 @@ export default function IntegrationsPage() {
     onError: (err: any) => {
       toast({
         title: t('IntegrationsPage.toasts.updateFailed'),
-        description: err.response?.data?.detail || err.message,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },
@@ -1089,7 +1091,7 @@ export default function IntegrationsPage() {
     onError: (err: any) => {
       toast({
         title: t('IntegrationsPage.toasts.deleteFailed'),
-        description: err.response?.data?.detail || err.message,
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },
@@ -1113,13 +1115,20 @@ export default function IntegrationsPage() {
       queryClient.invalidateQueries({ queryKey: ['integrations'] });
     },
     onError: (err: any) => {
-      toast({ title: t('IntegrationsPage.toasts.testFailed'), description: err.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('IntegrationsPage.toasts.testFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
-  const handleDelete = (id: string) => {
-    if (!window.confirm(t('IntegrationsPage.confirm.delete'))) return;
-    deleteMutation.mutate(id);
+  const handleDelete = async (integration: Integration) => {
+    const ok = await confirm({
+      title: t('IntegrationsPage.confirm.deleteTitle', { name: integration.name }),
+      description: t('IntegrationsPage.confirm.deleteBody'),
+      items: [integration.name],
+      confirmLabel: t('IntegrationsPage.confirm.deleteAction'),
+      destructive: true,
+    });
+    if (!ok) return;
+    deleteMutation.mutate(integration.id);
   };
 
   // ── Bulk actions ──
@@ -1154,8 +1163,16 @@ export default function IntegrationsPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (!window.confirm(t('IntegrationsPage.confirm.delete'))) return;
     const targets = [...selectedRows];
+    const ok = await confirm({
+      title: t('IntegrationsPage.confirm.bulkDeleteTitle', { count: targets.length }),
+      description: t('IntegrationsPage.confirm.bulkDeleteBody'),
+      count: targets.length,
+      items: targets.map((i) => i.name),
+      confirmLabel: t('IntegrationsPage.confirm.bulkDeleteAction'),
+      destructive: true,
+    });
+    if (!ok) return;
     const results = await Promise.allSettled(targets.map((i) => deleteMutation.mutateAsync(i.id)));
     const failed = results.filter((r) => r.status === 'rejected').length;
     summarize('IntegrationsPage.bulk.delete.title', failed);
@@ -1354,7 +1371,7 @@ export default function IntegrationsPage() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => handleDelete(i.id)}
+                onClick={() => handleDelete(i)}
                 className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -1376,7 +1393,7 @@ export default function IntegrationsPage() {
           icon={Plug}
         />
         <ErrorState
-          message={(error as any).response?.data?.detail || t('IntegrationsPage.errors.loadFailed')}
+          message={getApiErrorMessage(error, t('IntegrationsPage.errors.loadFailed'))}
           onRetry={() => refetch()}
         />
       </div>

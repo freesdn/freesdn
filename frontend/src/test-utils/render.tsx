@@ -23,6 +23,7 @@ import i18n, { type i18n as I18nInstance } from 'i18next';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ToastProvider } from '@/components/ui/toast';
+import { ConfirmProvider } from '@/components/ui/confirm-dialog';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 export function makeTestQueryClient(): QueryClient {
@@ -118,15 +119,17 @@ export function renderWithProviders(
         <I18nextProvider i18n={testI18n}>
           <MemoryRouter initialEntries={[initialPath]}>
             <ToastProvider>
-              <TooltipProvider>
-                {routePath ? (
-                  <Routes>
-                    <Route path={routePath} element={children} />
-                  </Routes>
-                ) : (
-                  children
-                )}
-              </TooltipProvider>
+              <ConfirmProvider>
+                <TooltipProvider>
+                  {routePath ? (
+                    <Routes>
+                      <Route path={routePath} element={children} />
+                    </Routes>
+                  ) : (
+                    children
+                  )}
+                </TooltipProvider>
+              </ConfirmProvider>
             </ToastProvider>
           </MemoryRouter>
         </I18nextProvider>

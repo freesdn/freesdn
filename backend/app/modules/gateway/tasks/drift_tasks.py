@@ -43,8 +43,13 @@ async def _check_all_sites() -> dict[str, Any]:
     from app.modules.gateway.services.drift_service import DriftService
 
     async with AsyncSessionLocal() as session:
-        # Get all sites that have a role map
-        stmt = select(SiteRoleMap.site_id)
+        # Get all sites that have a role map, minus organizations that
+        # switched the Firewall module off (disabling a module stops its polling)
+        from app.modules.poll_gate import module_not_disabled
+
+        stmt = select(SiteRoleMap.site_id).where(
+            module_not_disabled(SiteRoleMap.organization_id, "firewall")
+        )
         result = await session.execute(stmt)
         site_ids = [row[0] for row in result.all()]
 

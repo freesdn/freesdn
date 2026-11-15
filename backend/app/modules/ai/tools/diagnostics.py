@@ -61,18 +61,30 @@ async def _get_device_health(
         return {"error": exc.detail}
     from app.models.enterprise import DeviceHealth
 
-    result = await db.execute(select(DeviceHealth).where(DeviceHealth.device_id == did))
-    health = result.scalar_one_or_none()
-    if not health:
+    # CPU, memory, temperature and uptime are columns of Device (the sync
+    # writes them there). This read status/cpu_percent/memory_percent/
+    # uptime_seconds/temperature_celsius/last_check off DeviceHealth, which
+    # has none of them, so the tool raised AttributeError for any device with
+    # a health row and answered "No health data" for every other one.
+    result = await db.execute(
+        select(Device, DeviceHealth)
+        .outerjoin(DeviceHealth, DeviceHealth.device_id == Device.id)
+        .where(Device.id == did)
+    )
+    row = result.first()
+    if row is None:
         return {"error": f"No health data for device {device_id}"}
+    device, health = row
     return {
         "device_id": device_id,
-        "status": health.status,
-        "cpu_percent": health.cpu_percent,
-        "memory_percent": health.memory_percent,
-        "uptime_seconds": health.uptime_seconds,
-        "temperature_celsius": health.temperature_celsius,
-        "last_check": health.last_check.isoformat() if health.last_check else None,
+        "status": str(device.status) if device.status is not None else None,
+        "cpu_percent": device.cpu_usage_percent,
+        "memory_percent": device.memory_usage_percent,
+        "uptime_seconds": device.uptime_seconds,
+        "temperature_celsius": device.temperature_celsius,
+        "last_check": device.last_seen.isoformat() if device.last_seen else None,
+        "health_score": health.health_score if health else None,
+        "health_status": str(health.health_status) if health else None,
     }
 
 
@@ -120,31 +132,54 @@ async def _get_bandwidth_usage(
         return {"error": exc.detail}
     from datetime import datetime, timedelta
 
+    from app.db.session import get_logdb_factory
     from app.models.analytics import MetricDataPoint
+    from app.services.analytics import DEVICE_RX_BYTES, DEVICE_TX_BYTES
 
+    # Three defects made this tool unable to answer: it read names nothing
+    # writes ("bytes_rx"/"bytes_tx"), filtered on a column the model does not
+    # have (MetricDataPoint.timestamp; it is ``time``), and queried the primary
+    # database, while metric_data lives in the LogDB. It now reads the same
+    # registry names as the device traffic endpoint, from the LogDB.
+    try:
+        factory = get_logdb_factory()
+    except RuntimeError:
+        return {"device_id": device_id, "error": "Time-series database is not configured"}
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
-    result = await db.execute(
-        select(MetricDataPoint)
-        .where(
-            MetricDataPoint.device_id == did,
-            MetricDataPoint.metric_name.in_(["bytes_rx", "bytes_tx"]),
-            MetricDataPoint.timestamp >= cutoff,
-        )
-        .order_by(MetricDataPoint.timestamp.desc())
-        .limit(100)
-    )
-    points = result.scalars().all()
+    try:
+        async with factory() as logdb:
+            result = await logdb.execute(
+                select(MetricDataPoint.metric_name, MetricDataPoint.value)
+                .where(
+                    MetricDataPoint.device_id == did,
+                    MetricDataPoint.metric_name.in_([DEVICE_RX_BYTES, DEVICE_TX_BYTES]),
+                    MetricDataPoint.time >= cutoff,
+                )
+                .order_by(MetricDataPoint.time.desc())
+                .limit(100)
+            )
+            points = result.all()
+    except Exception:  # noqa: BLE001 - an AI tool answers; it does not raise
+        logger.warning("Bandwidth read failed for device %s", device_id, exc_info=True)
+        return {"device_id": device_id, "error": "Traffic metrics could not be read"}
 
-    bytes_rx = [p.value for p in points if p.metric_name == "bytes_rx"]
-    bytes_tx = [p.value for p in points if p.metric_name == "bytes_tx"]
+    bytes_rx = [value for name, value in points if name == DEVICE_RX_BYTES]
+    bytes_tx = [value for name, value in points if name == DEVICE_TX_BYTES]
 
-    return {
+    answer: dict[str, Any] = {
         "device_id": device_id,
         "period_hours": hours,
-        "avg_rx_bps": sum(bytes_rx) / len(bytes_rx) if bytes_rx else 0,
-        "avg_tx_bps": sum(bytes_tx) / len(bytes_tx) if bytes_tx else 0,
+        "avg_rx_bps": sum(bytes_rx) / len(bytes_rx) if bytes_rx else None,
+        "avg_tx_bps": sum(bytes_tx) / len(bytes_tx) if bytes_tx else None,
         "samples": len(bytes_rx),
     }
+    if not points:
+        # Say so, rather than an average of 0 that reads as an idle link.
+        answer["note"] = (
+            "No traffic samples are recorded for this device. FreeSDN does not "
+            "collect per-device traffic counters yet."
+        )
+    return answer
 
 
 register_tool(

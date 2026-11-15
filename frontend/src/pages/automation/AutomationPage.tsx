@@ -32,6 +32,7 @@ import type { EventCategory } from '@/lib/api';
 import { Zap, Plus, History } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 
 // --------------- Trigger / Action type metadata ---------------
 // `labelKey` is a suffix translated at the render site via
@@ -319,6 +320,19 @@ const RuleFormModal: React.FC<RuleFormModalProps> = ({ isOpen, onClose, onSubmit
     enabled: isOpen,
   });
 
+  // Actions work the same way: the engine reports which action types have a
+  // handler. This picker used to offer all fifteen below, and nine of them
+  // (device.*, network.*, script.run, api.call) have no handler, so choosing
+  // one ended in a refusal at save time. Until the answer arrives, or if the
+  // request fails, the full list is shown and the server still refuses.
+  const { data: implementedActions } = useQuery<Set<string>>({
+    queryKey: ['automation-action-types'],
+    queryFn: async () =>
+      new Set(((await automationApi.getActionTypes()).data.action_types ?? []).map((a) => String(a.value))),
+    staleTime: 5 * 60 * 1000,
+    enabled: isOpen,
+  });
+
   const { t } = useTranslation('automation');
   const isEdit = !!rule;
   const defaultValues: CreateRuleFormValues = rule
@@ -495,7 +509,10 @@ const RuleFormModal: React.FC<RuleFormModalProps> = ({ isOpen, onClose, onSubmit
                     <SelectTrigger><SelectValue /></SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {ACTION_TYPE_OPTIONS.map((a) => (
+                    {ACTION_TYPE_OPTIONS.filter(
+                      // Keep an existing rule's current action visible when editing.
+                      (a) => !implementedActions || implementedActions.has(a.value) || a.value === field.value,
+                    ).map((a) => (
                       <SelectItem key={a.value} value={a.value}>{t(`AutomationPage.actionTypes.${a.labelKey}`)}</SelectItem>
                     ))}
                   </SelectContent>
@@ -544,6 +561,7 @@ const AUTOMATION_TABS = ['rules', 'history'] as const;
 export default function AutomationPage() {
   const { t } = useTranslation('automation');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const { tab: urlTab } = useParams<{ tab?: string }>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -604,11 +622,19 @@ export default function AutomationPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('AutomationPage.confirm.delete'))) return;
+    const name = rules.find((r) => r.id === id)?.name ?? id;
+    const ok = await confirm({
+      title: t('AutomationPage.confirm.delete', { name }),
+      description: t('AutomationPage.confirm.deleteDescription'),
+      items: [name],
+      confirmLabel: t('AutomationPage.confirm.deleteAction'),
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       await automationApi.deleteRule(id);
-      setRules(rules.filter(r => r.id !== id));
+      setRules((current) => current.filter((r) => r.id !== id));
     } catch (err: unknown) {
       toast({ title: t('AutomationPage.toast.errorTitle'), description: t('AutomationPage.toast.deleteFailed', { error: getApiErrorMessage(err) }), variant: "destructive" });
     }

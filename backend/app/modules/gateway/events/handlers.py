@@ -399,6 +399,13 @@ async def _on_device_status_changed(event: Any) -> None:
                         category=EventCategory.SECURITY,
                         priority=EventPriority.HIGH,
                         source="gateway.event_handlers",
+                        # The role map owns the org; the inbound device event is
+                        # the fallback. Org-less events never reach the Fabric.
+                        organization_id=(
+                            str(assignment.role_map.organization_id)
+                            if assignment.role_map
+                            else getattr(event, "organization_id", None)
+                        ),
                         payload={
                             "device_id": str(device_id),
                             "site_id": str(site_id_value),

@@ -59,6 +59,27 @@ def _org_id(user: Any) -> UUID | None:
     return org_scope_or_platform(user)
 
 
+async def _replay_event_id(session: AsyncSession, dlq: Any) -> str:
+    """The id of the event a dead-lettered delivery carried, for its replay.
+
+    Webhooks are at-least-once and receivers drop duplicates by event id
+    (``X-Webhook-Event-Id`` and the body's ``id``). A replay used to get a fresh
+    random id, so the header disagreed with the body and a receiver that had in
+    fact processed the original could not recognise the replay as a duplicate.
+    """
+    from uuid import uuid4
+
+    from app.models.webhooks import WebhookDelivery
+
+    payload = dlq.payload if isinstance(dlq.payload, dict) else {}
+    if isinstance(payload.get("id"), str) and payload["id"]:
+        return str(payload["id"])[:64]
+    original = await session.get(WebhookDelivery, dlq.delivery_id) if dlq.delivery_id else None
+    if original is not None and original.event_id:
+        return str(original.event_id)
+    return str(uuid4())
+
+
 # =========================================================================
 # CRUD
 # =========================================================================
@@ -402,12 +423,11 @@ async def replay_dead_letter(
     if dlq.replayed_at:
         raise HTTPException(status_code=409, detail="Entry has already been replayed")
 
-    # Create a fresh delivery record for this replay
-    from uuid import uuid4
-
+    # Create a fresh delivery record for this replay (same event id, see
+    # _replay_event_id: receivers deduplicate on it).
     new_delivery = WebhookDelivery(
         webhook_id=webhook_id,
-        event_id=str(uuid4()),
+        event_id=await _replay_event_id(session, dlq),
         event_type=dlq.event_type,
         status=DeliveryStatus.PENDING,
         payload=dlq.payload,
@@ -426,15 +446,22 @@ async def replay_dead_letter(
     # Enqueue immediate retry (no countdown — replay is user-initiated).
     # No queue= : an explicit queue kwarg overrides the task's routing, so naming
     # one here would strand the replay in an unconsumed queue. Routes to "default".
-    retry_webhook_delivery.apply_async(
-        args=[str(new_delivery.id)],
-        countdown=0,
-    )
+    message = "Replay queued. Check delivery history for result."
+    try:
+        retry_webhook_delivery.apply_async(
+            args=[str(new_delivery.id)],
+            countdown=0,
+        )
+    except Exception:
+        # The replay is committed as a pending delivery; requeue_stalled_deliveries
+        # sends it once the task queue is reachable again.
+        logger.warning("Replay of delivery %s not queued; the sweeper will retry", new_delivery.id)
+        message = "Replay recorded. The task queue is unavailable, so it will be sent shortly."
 
     return {
         "status": "queued",
         "new_delivery_id": str(new_delivery.id),
-        "message": "Replay queued. Check delivery history for result.",
+        "message": message,
     }
 
 
@@ -446,7 +473,6 @@ async def replay_all_dead_letters(
 ) -> Any:
     """Replay all un-replayed DLQ entries for this webhook."""
     require_admin(user)
-    from uuid import uuid4
 
     from sqlalchemy import select
 
@@ -482,11 +508,11 @@ async def replay_all_dead_letters(
         .all()
     )
 
-    queued = 0
+    new_ids: list[UUID] = []
     for dlq in dlq_entries:
         new_delivery = WebhookDelivery(
             webhook_id=webhook_id,
-            event_id=str(uuid4()),
+            event_id=await _replay_event_id(session, dlq),
             event_type=dlq.event_type,
             status=DeliveryStatus.PENDING,
             payload=dlq.payload,
@@ -495,17 +521,29 @@ async def replay_all_dead_letters(
         session.add(new_delivery)
         await session.flush()
         await session.refresh(new_delivery)
+        new_ids.append(new_delivery.id)
 
         dlq.replayed_at = datetime.now(UTC)
         dlq.replayed_by = user.id
 
-        # No queue= : see the note on the single-replay path above.
-        retry_webhook_delivery.apply_async(
-            args=[str(new_delivery.id)],
-            countdown=queued * 2,  # stagger replays by 2 s each to avoid thundering herd
-        )
-        queued += 1
-
+    # Commit BEFORE enqueueing, as the single replay does. The tasks used to be
+    # queued inside the loop and the commit came last, so the first one
+    # (countdown 0) could run before its delivery row existed, skip it as "not
+    # found", and the entry was still marked replayed: an event lost by the
+    # button meant to recover it. A failed enqueue now leaves a committed
+    # pending delivery that requeue_stalled_deliveries picks up.
     await session.commit()
+
+    queued = 0
+    for delivery_id in new_ids:
+        try:
+            # No queue= : see the note on the single-replay path above.
+            retry_webhook_delivery.apply_async(
+                args=[str(delivery_id)],
+                countdown=queued * 2,  # stagger replays by 2 s each to avoid thundering herd
+            )
+        except Exception:
+            logger.warning("Replay of delivery %s not queued; the sweeper will retry", delivery_id)
+        queued += 1
 
     return {"status": "queued", "count": queued}

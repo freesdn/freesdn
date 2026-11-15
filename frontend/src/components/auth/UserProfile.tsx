@@ -19,8 +19,9 @@ import {
   Loader2,
   AlertCircle,
   Check,
-  Copy,
 } from 'lucide-react';
+import { getApiErrorMessage } from '@/lib/api/errors';
+import { CopyButton } from '@/components/ui/copy-button';
 
 /**
  * The user record has ONE name column, `full_name`; `first_name`/`last_name`
@@ -94,7 +95,7 @@ export function UserProfile() {
       setSuccess(t('UserProfile.messages.profileUpdated'));
     } catch (err: unknown) {
       const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || t('UserProfile.messages.profileUpdateFailed'));
+      setError(getApiErrorMessage(axiosErr, t('UserProfile.messages.profileUpdateFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -125,7 +126,7 @@ export function UserProfile() {
       });
     } catch (err: unknown) {
       const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || t('UserProfile.messages.passwordChangeFailed'));
+      setError(getApiErrorMessage(axiosErr, t('UserProfile.messages.passwordChangeFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -140,7 +141,7 @@ export function UserProfile() {
       setMfaSetup(response.data);
     } catch (err: unknown) {
       const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || t('UserProfile.messages.mfaSetupFailed'));
+      setError(getApiErrorMessage(axiosErr, t('UserProfile.messages.mfaSetupFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -159,7 +160,7 @@ export function UserProfile() {
       setMfaCode('');
     } catch (err: unknown) {
       const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || t('UserProfile.messages.mfaInvalidCode'));
+      setError(getApiErrorMessage(axiosErr, t('UserProfile.messages.mfaInvalidCode')));
     } finally {
       setIsLoading(false);
     }
@@ -179,7 +180,7 @@ export function UserProfile() {
       setDisableMfaPassword('');
     } catch (err: unknown) {
       const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-      setError(axiosErr.response?.data?.detail || t('UserProfile.messages.mfaDisableFailed'));
+      setError(getApiErrorMessage(axiosErr, t('UserProfile.messages.mfaDisableFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -385,13 +386,10 @@ export function UserProfile() {
                         <code className="px-2 py-1 bg-muted rounded text-sm font-mono">
                           {mfaSetup.secret}
                         </code>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigator.clipboard.writeText(mfaSetup.secret)}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
+                        <CopyButton
+                          value={mfaSetup.secret}
+                          aria-label={t('UserProfile.mfa.copyKey')}
+                        />
                       </div>
                     </div>
                     

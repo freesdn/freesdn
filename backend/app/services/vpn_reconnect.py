@@ -29,6 +29,19 @@ from app.models.vpn import (
 
 logger = logging.getLogger(__name__)
 
+#: The attempt's error when nothing answers on tailscaled's LocalAPI socket.
+TAILSCALE_NOT_RUNNING = (
+    "Tailscale is not running: nothing answers on its socket, so no reconnect was "
+    "attempted. Check that the tailscale container (in VPN sidecar mode, the vpn "
+    "container) is running."
+)
+
+#: The attempt's error when the node is logged out of its tailnet.
+TAILSCALE_NEEDS_LOGIN = (
+    "Tailscale needs to log in again, which a reconnect cannot do. Log in from the "
+    "Tailscale page with an auth key or in the browser."
+)
+
 
 class VPNReconnectService:
     """
@@ -289,6 +302,33 @@ class VPNReconnectService:
         }
 
     @staticmethod
+    async def _tailscale_preflight() -> tuple[str | None, bool]:
+        """Before a bare ``tailscale up``: (why it must not run, already connected).
+
+        Nothing answers on tailscaled's socket: its runtime container is
+        stopped, restarting or was never started. The CLI then spends about two
+        seconds failing, with an error about a socket, on every retry; a
+        connect to the socket says the same in milliseconds.
+
+        The node is logged out (NeedsLogin): a bare ``tailscale up`` is then not
+        a reconnect but a fresh login with default settings. It asks Tailscale
+        for a browser login URL nobody opens, blocks until the 30 s timeout,
+        and resets the node's hostname, routes and other preferences (Tailscale
+        1.104.5 ``cmd/tailscale/cli/up.go``: only a node that has logged in and
+        is not NeedsLogin gets the "just set WantRunning" path).
+        """
+        from app.services.vpn_integration import _tailscaled_answers, get_vpn_manager
+
+        if not await _tailscaled_answers():
+            return TAILSCALE_NOT_RUNNING, False
+        status = await get_vpn_manager().tailscale.get_status(refresh=True)
+        if getattr(status, "is_connected", False):
+            return None, True
+        if getattr(status, "backend_state", None) == "NeedsLogin":
+            return TAILSCALE_NEEDS_LOGIN, False
+        return None, False
+
+    @staticmethod
     async def _run_cmd(*args: str, timeout: float = 30.0) -> tuple[int, str]:
         """Run a VPN helper, ALWAYS killing+reaping the child on timeout/error.
 
@@ -338,6 +378,11 @@ class VPNReconnectService:
                 return rc == 0, (None if rc == 0 else err)
 
             elif vpn_type == "tailscale":
+                refused, connected = await self._tailscale_preflight()
+                if connected:
+                    return True, None
+                if refused:
+                    return False, refused
                 rc, err = await self._run_cmd("tailscale", "up", timeout=30)
                 return rc == 0, (None if rc == 0 else err)
 
@@ -475,10 +520,11 @@ class VPNReconnectService:
                 return (True, None) if rc == 0 else (False, err)
 
             elif vpn_type == "tailscale":
-                ts = manager.tailscale
-                status = await ts.get_status(refresh=True)
-                if status and getattr(status, "is_connected", False):
+                refused, connected = await self._tailscale_preflight()
+                if connected:
                     return True, None
+                if refused:
+                    return False, refused
                 rc, err = await self._run_cmd(
                     "tailscale",
                     "up",

@@ -96,7 +96,8 @@
       "saveChanges": "Save Changes",
       "createNetwork": "Create Network",
       "deleting": "Deleting…",
-      "deleteNetwork": "Delete Network"
+      "deleteNetwork": "Delete Network",
+      "menuFor": "Actions for {{ssid}}"
     },
     "security": {
       "modes": {
@@ -208,7 +209,20 @@
     },
     "toast": {
       "bulkDeleteTitle": "Bulk Delete",
-      "bulkDeleteDescription": "Please delete networks individually for safety."
+      "bulkDeleteDescription": "Please delete networks individually for safety.",
+      "controllerUnconfirmed": "The controller did not confirm the deletion",
+      "deleteUnconfirmed": "{{name}} was removed from FreeSDN, but its controller did not confirm the deletion, so the SSID may still be broadcasting. Check the controller. Reason: {{warning}}",
+      "deleteKept": "FreeSDN kept {{name}} because its controller did not confirm the deletion. Reason: {{warning}}",
+      "noReason": "no reason given"
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "Delete {{count}} WiFi network?",
+        "title_other": "Delete {{count}} WiFi networks?",
+        "body": "Each network is deleted from its controller right away, without staging, and every client on it is disconnected. FreeSDN removes its record even if a controller refuses, in which case the network stays on that controller.",
+        "action_one": "Delete network",
+        "action_other": "Delete networks"
+      }
     }
   },
   "NetworkClientsPage": {
@@ -315,6 +329,12 @@
       "unblockDescription": "Allow \"{{name}}\" to reconnect to the network.",
       "blockDescription": "Block \"{{name}}\" from accessing the network. The client will be disconnected immediately.",
       "processing": "Processing…"
+    },
+    "bulk": {
+      "blockTitle_one": "Block {{count}} client?",
+      "blockTitle_other": "Block {{count}} clients?",
+      "blockDescription": "Each client is disconnected by its controller right away and cannot reconnect until it is unblocked.",
+      "blockConfirm": "Block clients"
     }
   },
   "NetworkDashboardPage": {
@@ -413,7 +433,8 @@
       "addVlan": "Add VLAN",
       "export": "Export",
       "edit": "Edit",
-      "delete": "Delete"
+      "delete": "Delete",
+      "menuFor": "Actions for VLAN {{vlanId}} {{name}}"
     },
     "columns": {
       "vlanId": "VLAN ID",
@@ -499,8 +520,27 @@
       "operationFailed": "Operation failed",
       "distributeSuccess": "VLAN distributed successfully.",
       "distributeFailed": "Failed to distribute VLAN: {{error}}",
+      "distributePartial": "Created on {{succeeded}} controller(s); {{failed}} refused it: {{error}}",
       "bulkDeleteTitle": "Bulk Delete",
-      "bulkDeleteMessage": "Please delete VLANs individually for safety."
+      "bulkDeleteMessage": "Please delete VLANs individually for safety.",
+      "controllerUnconfirmed": "The controller did not confirm the deletion",
+      "deleteUnconfirmed": "VLAN {{name}} was removed from FreeSDN, but its controller did not confirm the deletion, so it may still exist there. Check the controller. Reason: {{warning}}",
+      "deleteKept": "FreeSDN kept VLAN {{name}} because its controller did not confirm the deletion. Reason: {{warning}}",
+      "noReason": "no reason given"
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "Delete {{count}} VLAN?",
+        "title_other": "Delete {{count}} VLANs?",
+        "body": "Each VLAN is deleted from its controller right away, without staging, and ports and devices that use it lose it. FreeSDN removes its record even if a controller refuses, in which case the VLAN stays on that controller.",
+        "action_one": "Delete VLAN",
+        "action_other": "Delete VLANs"
+      },
+      "syncAll": {
+        "title": "Copy missing VLANs to other controllers?",
+        "body": "FreeSDN creates each missing VLAN right away on the controllers that lack it, copied from a controller that has it. VLANs whose settings differ are left as they are. Controllers other than Omada get only the VLAN ID and name, not the subnet, gateway or DHCP settings.",
+        "action": "Copy VLANs"
+      }
     }
   }
 }

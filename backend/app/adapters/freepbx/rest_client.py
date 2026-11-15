@@ -33,6 +33,7 @@ from typing import Any
 
 import aiohttp
 
+from app.adapters import io_policy
 from app.core.http_client import build_aiohttp_session
 
 from .constants import (
@@ -281,11 +282,11 @@ class FreePBXRestClient:
 
             # Check for common failure indicators
             if "incorrect" in body_lower or "invalid" in body_lower:
-                raise FreePBXAuthError("FreePBX web login failed — invalid credentials")
+                raise FreePBXAuthError("FreePBX web login failed: invalid credentials")
 
             # If we land back on the login form, auth failed
             if 'name="username"' in body and 'name="password"' in body:
-                raise FreePBXAuthError("FreePBX web login failed — still on login page")
+                raise FreePBXAuthError("FreePBX web login failed: still on the login page")
 
             # Optimistic — session cookie obtained, assume logged in
             logger.debug(
@@ -459,7 +460,8 @@ class FreePBXRestClient:
                     )
                 return payload.get("data") or {}
             except (TimeoutError, aiohttp.ClientError, OSError) as exc:
-                if attempt < attempts:
+                # io_policy: a timeout or refused connection is not retried.
+                if attempt < attempts and io_policy.may_retry_exception(exc, idempotent=True):
                     logger.debug(
                         "FreePBX GraphQL transient error (attempt %d/%d): %s",
                         attempt,
@@ -507,7 +509,7 @@ class FreePBXRestClient:
                 # The route isn't enabled for this M2M app's scopes
                 # (or the underlying *_api module isn't installed).
                 raise FreePBXApiError(
-                    f"FreePBX REST {path!r} returned 404 — endpoint "
+                    f"FreePBX REST {path!r} returned 404: endpoint "
                     "not enabled for this M2M client or required "
                     "*_api module not installed",
                     status_code=404,
@@ -621,7 +623,10 @@ class FreePBXRestClient:
 
             except (TimeoutError, aiohttp.ClientError, OSError) as exc:
                 last_exc = exc
-                if attempt < REST_MAX_RETRIES:
+                # io_policy: a timeout or refused connection is not retried.
+                if attempt < REST_MAX_RETRIES and io_policy.may_retry_exception(
+                    exc, idempotent=True
+                ):
                     await asyncio.sleep(REST_RETRY_DELAY * attempt)
                     continue
                 raise FreePBXConnectionError(
@@ -1764,9 +1769,51 @@ class FreePBXRestClient:
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """Search call detail records (not currently available via AJAX)."""
-        logger.warning("CDR search via AJAX is not supported; returning empty list")
-        return []
+        """Call detail records from the FreePBX Admin API (GraphQL ``fetchAllCdrs``).
+
+        Only the OAuth2 Admin API exposes CDR; the AJAX web session has no CDR
+        endpoint. This used to return ``[]`` in every mode, which every caller
+        read as "no calls were made". It now raises ``FreePBXApiError`` when CDR
+        cannot be read, so "unavailable" and "no calls" stay distinguishable.
+
+        Arguments are inlined as validated literals (dates ``YYYY-MM-DD``, a
+        bounded integer) rather than typed variables, so a schema that types an
+        argument differently cannot reject the whole query.
+
+        NOT live-validated: written against the FreePBX 16 cdr module's GraphQL
+        type; a schema without these fields surfaces as ``FreePBXApiError``.
+        ``src`` / ``dst`` / ``disposition`` / ``offset`` filter client-side.
+        """
+        if self._auth_mode != "oauth2":
+            raise FreePBXApiError(
+                "Call records are only available through the FreePBX Admin API: "
+                "add an OAuth2 API application to this PBX's connection"
+            )
+        args = [f"first: {max(1, min(int(limit) + max(int(offset), 0), 5000))}"]
+        for name, value in (("startDate", start_date), ("endDate", end_date)):
+            if value:
+                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                    raise FreePBXApiError(f"{name} must be YYYY-MM-DD")
+                args.append(f'{name}: "{value}"')
+        data = await self._graphql(
+            "{ fetchAllCdrs(" + ", ".join(args) + ") { cdrs { uniqueid calldate clid src "
+            "dst disposition duration billsec recordingfile cnum } totalCount status "
+            "message } }",
+            idempotent=True,
+        )
+        wrapper = data.get("fetchAllCdrs") or {}
+        if wrapper.get("status") is False:
+            raise FreePBXApiError(str(wrapper.get("message") or "fetchAllCdrs failed"))
+        rows = [r for r in (wrapper.get("cdrs") or []) if isinstance(r, dict)]
+        if src:
+            rows = [r for r in rows if src in str(r.get("src") or "")]
+        if dst:
+            rows = [r for r in rows if dst in str(r.get("dst") or "")]
+        if disposition:
+            rows = [
+                r for r in rows if str(r.get("disposition") or "").lower() == disposition.lower()
+            ]
+        return rows[max(int(offset), 0) : max(int(offset), 0) + int(limit)]
 
     # ═══════════════════════════════════════════════════════════════════
     # Voicemail — not available via AJAX

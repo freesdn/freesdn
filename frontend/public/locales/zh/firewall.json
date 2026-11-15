@@ -232,7 +232,11 @@
     },
     "confirm": {
       "deleteGateway": "删除网关 \"{{name}}\"？此操作无法撤销。",
-      "deleteRule": "删除规则 \"{{name}}\"？"
+      "deleteRule": "删除规则 \"{{name}}\"？",
+      "deleteGatewayTitle": "删除网关 \"{{name}}\"？",
+      "deleteGatewayBody": "FreeSDN 将停止管理和监控此网关，并将其从设备列表和站点角色映射中移除。网关本身不会有任何更改。",
+      "deleteGatewayAction": "删除网关",
+      "deleteRuleBody": "这只会删除 FreeSDN 中该规则的记录。网关上不会有任何更改。"
     },
     "errors": {
       "partialLoad": "部分数据加载失败。结果可能不完整。"
@@ -374,6 +378,7 @@
       "offline": "离线",
       "unknown": "未知",
       "version": "版本",
+      "storedVersion": "{{version}}（已存储）",
       "lastSync": "上次同步",
       "never": "从未",
       "capabilities": "功能",
@@ -444,7 +449,8 @@
       "rebootInitiated": "已启动重启",
       "rebootInitiatedDesc": "网关正在重启 · 将短暂离线。",
       "rebootFailed": "重启失败",
-      "diagnosticFailed": "{{label}} 失败"
+      "diagnosticFailed": "{{label}} 失败",
+      "deviceBusy": "网关繁忙"
     },
     "resources": {
       "firewallRule": "防火墙规则",
@@ -501,7 +507,10 @@
       "checkUpdates": "检查更新",
       "downloadConfig": "下载配置",
       "halt": "停机",
-      "haltConfirm": "这将停止（关闭）网关。确定吗？"
+      "haltConfirm": "这将停止（关闭）网关。确定吗？",
+      "haltTitle": "将此网关停机？",
+      "haltBody": "网关会立即关机。所有经由它路由的网络都会断开连接，而且 FreeSDN 无法将其重新开机，必须有人在设备现场开机。",
+      "haltAction": "网关停机"
     },
     "packages": {
       "title": "已安装的软件包",
@@ -1119,7 +1128,8 @@
       "never": "从未",
       "lastError": "上次错误",
       "lastSeen": "上次在线",
-      "capabilities": "功能"
+      "capabilities": "功能",
+      "lastSkipped": "上次同步已跳过"
     },
     "wanHealth": {
       "title": "WAN 网关健康状况",
@@ -2479,6 +2489,10 @@
       "macAddress": "MAC 地址",
       "ipAddress": "IP 地址",
       "submit": "暂存保留"
+    },
+    "confirmStaged": {
+      "body": "路由器上暂时不会有任何更改。此删除会保留在待处理更改中，直到你在那里应用它。",
+      "action": "暂存删除"
     }
   },
   "MikroTikSnmpTab": {
@@ -3853,6 +3867,7 @@
     "retry": "重试",
     "running": "运行中",
     "stopped": "已停止",
-    "summary": "设备实时摘要"
+    "summary": "设备实时摘要",
+    "busy": "网关正在处理其他请求。未向其发送任何内容，稍后将重试。"
   }
 }

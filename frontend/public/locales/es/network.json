@@ -96,7 +96,8 @@
       "saveChanges": "Guardar cambios",
       "createNetwork": "Crear red",
       "deleting": "Eliminando…",
-      "deleteNetwork": "Eliminar red"
+      "deleteNetwork": "Eliminar red",
+      "menuFor": "Acciones para {{ssid}}"
     },
     "security": {
       "modes": {
@@ -208,7 +209,20 @@
     },
     "toast": {
       "bulkDeleteTitle": "Eliminación masiva",
-      "bulkDeleteDescription": "Por seguridad, elimina las redes de forma individual."
+      "bulkDeleteDescription": "Por seguridad, elimina las redes de forma individual.",
+      "controllerUnconfirmed": "El controlador no confirmó la eliminación",
+      "deleteUnconfirmed": "{{name}} se quitó de FreeSDN, pero su controlador no confirmó la eliminación, así que el SSID puede seguir emitiéndose. Revise el controlador. Motivo: {{warning}}",
+      "deleteKept": "FreeSDN conservó {{name}} porque su controlador no confirmó la eliminación. Motivo: {{warning}}",
+      "noReason": "sin motivo indicado"
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "¿Eliminar {{count}} red WiFi?",
+        "title_other": "¿Eliminar {{count}} redes WiFi?",
+        "body": "Cada red se elimina de su controlador de inmediato, sin pasar por cambios pendientes, y todos sus clientes se desconectan. FreeSDN elimina su registro aunque un controlador lo rechace; en ese caso, la red permanece en ese controlador.",
+        "action_one": "Eliminar red",
+        "action_other": "Eliminar redes"
+      }
     }
   },
   "NetworkClientsPage": {
@@ -315,6 +329,12 @@
       "unblockDescription": "Permitir que \"{{name}}\" se vuelva a conectar a la red.",
       "blockDescription": "Impedir que \"{{name}}\" acceda a la red. El cliente se desconectará de inmediato.",
       "processing": "Procesando…"
+    },
+    "bulk": {
+      "blockTitle_one": "¿Bloquear {{count}} cliente?",
+      "blockTitle_other": "¿Bloquear {{count}} clientes?",
+      "blockDescription": "Su controlador desconecta cada cliente de inmediato y no puede volver a conectarse hasta que se desbloquee.",
+      "blockConfirm": "Bloquear clientes"
     }
   },
   "NetworkDashboardPage": {
@@ -413,7 +433,8 @@
       "addVlan": "Agregar VLAN",
       "export": "Exportar",
       "edit": "Editar",
-      "delete": "Eliminar"
+      "delete": "Eliminar",
+      "menuFor": "Acciones para la VLAN {{vlanId}} {{name}}"
     },
     "columns": {
       "vlanId": "ID de VLAN",
@@ -499,8 +520,27 @@
       "operationFailed": "La operación falló",
       "distributeSuccess": "VLAN distribuida correctamente.",
       "distributeFailed": "No se pudo distribuir la VLAN: {{error}}",
+      "distributePartial": "Creada en {{succeeded}} controlador(es); {{failed}} la rechazaron: {{error}}",
       "bulkDeleteTitle": "Eliminación masiva",
-      "bulkDeleteMessage": "Elimina las VLAN individualmente por seguridad."
+      "bulkDeleteMessage": "Elimina las VLAN individualmente por seguridad.",
+      "controllerUnconfirmed": "El controlador no confirmó la eliminación",
+      "deleteUnconfirmed": "La VLAN {{name}} se quitó de FreeSDN, pero su controlador no confirmó la eliminación, así que puede seguir existiendo allí. Revise el controlador. Motivo: {{warning}}",
+      "deleteKept": "FreeSDN conservó la VLAN {{name}} porque su controlador no confirmó la eliminación. Motivo: {{warning}}",
+      "noReason": "sin motivo indicado"
+    },
+    "confirm": {
+      "bulkDelete": {
+        "title_one": "¿Eliminar {{count}} VLAN?",
+        "title_other": "¿Eliminar {{count}} VLAN?",
+        "body": "Cada VLAN se elimina de su controlador de inmediato, sin pasar por cambios pendientes, y los puertos y dispositivos que la usan la pierden. FreeSDN elimina su registro aunque un controlador lo rechace; en ese caso, la VLAN permanece en ese controlador.",
+        "action_one": "Eliminar VLAN",
+        "action_other": "Eliminar VLAN"
+      },
+      "syncAll": {
+        "title": "¿Copiar las VLAN faltantes a otros controladores?",
+        "body": "FreeSDN crea de inmediato cada VLAN faltante en los controladores que no la tienen, copiándola de un controlador que sí la tiene. Las VLAN con ajustes distintos se dejan como están. Los controladores que no son Omada solo reciben el ID y el nombre de la VLAN, no la subred, la puerta de enlace ni los ajustes de DHCP.",
+        "action": "Copiar VLAN"
+      }
     }
   }
 }

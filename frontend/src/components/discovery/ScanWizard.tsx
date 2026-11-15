@@ -39,10 +39,12 @@ interface SiteItem {
   subnets?: Array<{ cidr: string; name?: string }>;
 }
 
+// Mirrors ControllerResponse: the API field is `controller_type`; `type`
+// does not exist, so the picker printed a dangling "·" after every name.
 interface ControllerItem {
   id: string;
   name: string;
-  type: string;
+  controller_type: string;
   host: string;
   site_id: string;
 }
@@ -284,7 +286,7 @@ export default function ScanWizard({ sites, controllers, onStartScan, onStartCon
                           <div className="flex items-center gap-2">
                             <Server className="h-4 w-4" />
                             {c.name}
-                            <span className="text-xs text-muted-foreground">· {c.type}</span>
+                            <span className="text-xs text-muted-foreground">· {c.controller_type}</span>
                           </div>
                         </SelectItem>
                       ))}

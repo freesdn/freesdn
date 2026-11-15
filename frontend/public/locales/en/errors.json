@@ -33,5 +33,17 @@
     "positive": "Must be a positive number",
     "url": "Please enter a valid URL",
     "date": "Please enter a valid date"
+  },
+  "api": {
+    "generic": "An error occurred",
+    "unreachable": "Could not reach the FreeSDN server. Check your connection and try again.",
+    "timeout": "The server took too long to respond. Try again.",
+    "cancelled": "The request was cancelled.",
+    "payloadTooLarge": "The request is too large for the server to accept.",
+    "rateLimitedRetry": "Too many requests. Try again in {{seconds}} s.",
+    "badGateway": "The FreeSDN API is not answering (HTTP 502). It may be restarting; try again shortly.",
+    "gatewayTimeout": "The FreeSDN API did not answer in time (HTTP 504).",
+    "status": "The server returned an error (HTTP {{status}}).",
+    "withRequestId": "{{message}} (request ID {{requestId}})"
   }
 }

@@ -23,7 +23,7 @@ from sqlalchemy.orm import selectinload
 from app.core.crypto import decrypt_credential, is_encrypted
 from app.models.core import Controller, Site
 from app.models.radius import Dot1xAuthEvent, Dot1xPortConfig, RadiusServerProfile
-from app.services.adapter_factory import get_adapter
+from app.services.adapter_factory import build_adapter_for_controller, get_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -114,20 +114,11 @@ class RadiusProfileService:
             await self.db.flush()
             return {"success": False, "error": "Controller not found"}
 
-        # Build adapter
-        adapter_kwargs: dict[str, Any] = {
-            "port": controller.port,
-            "ssl": controller.use_ssl,
-            "verify_ssl": controller.verify_ssl,
-        }
+        # Built from the row, so a cloud-connected controller gets its mode and
+        # OAuth2 fields. A local-mode adapter aimed at a cloud controller could
+        # never authenticate, so every 802.1X push to one failed.
         try:
-            adapter = get_adapter(
-                controller.controller_type,
-                host=controller.host,
-                username=_safe_decrypt(controller.username),
-                password=_safe_decrypt(controller.password),
-                **adapter_kwargs,
-            )
+            adapter = build_adapter_for_controller(controller)
         except Exception:
             logger.exception("Cannot create adapter for controller %s", controller.id)
             config.push_status = "failed"
@@ -154,9 +145,38 @@ class RadiusProfileService:
             "reauthentication_interval": config.reauthentication_interval,
         }
 
-        try:
+        from fastapi import HTTPException
+
+        from app.services.device_writes import request_actor_id, write_controller_config
+
+        async def _push() -> Any:
             async with adapter:
-                await adapter.update_dot1x_config(payload)
+                return await adapter.update_dot1x_config(payload)
+
+        try:
+            # Staged and applied in this request (``direct.radius.dot1x``, the
+            # shared secret masked): refused in read-only mode before the
+            # controller is contacted, and run in the controller's turn.
+            result = await write_controller_config(
+                self.db,
+                controller.id,
+                actor_id=request_actor_id(),
+                feature="radius.dot1x",
+                operation="update",
+                target_id=str(config_id),
+                payload=payload,
+                perform=_push,
+            )
+            if not getattr(result, "success", False):
+                # The controller refused: this used to be ignored, and a refused
+                # push was recorded as "pushed".
+                config.push_status = "failed"
+                await self.db.flush()
+                return {
+                    "success": False,
+                    "error": getattr(result, "error", None)
+                    or "The controller refused the 802.1X configuration",
+                }
 
             config.push_status = "pushed"
             config.pushed_at = datetime.now(UTC)
@@ -167,6 +187,11 @@ class RadiusProfileService:
             )
             return {"success": True, "pushed_at": config.pushed_at.isoformat()}
 
+        except HTTPException as exc:
+            # Read-only mode or a busy controller: nothing was sent.
+            config.push_status = "failed"
+            await self.db.flush()
+            return {"success": False, "error": str(exc.detail)}
         except Exception:
             logger.exception(
                 "Failed to push 802.1X config %s",
@@ -202,7 +227,7 @@ class RadiusProfileService:
 
         adapter_kwargs: dict[str, Any] = {
             "port": controller.port,
-            "ssl": controller.use_ssl,
+            "use_ssl": controller.use_ssl,
             "verify_ssl": controller.verify_ssl,
         }
         try:

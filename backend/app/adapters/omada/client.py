@@ -11,17 +11,20 @@ Supports both **local** controllers (internal API w/ session auth) and
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import random
 import re
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
+from app.adapters import io_policy
 from app.adapters.apply_context import in_apply_window
 from app.adapters.circuit_breaker import CircuitBreaker, CircuitOpenError
 from app.adapters.omada.constants import (
@@ -33,27 +36,32 @@ from app.adapters.omada.constants import (
     CLOUD_ACCESS_TOKEN_LIFETIME,
     CLOUD_DEFAULT_RPM,
     CLOUD_REGION_URLS,
+    CLOUD_SESSION_EXPIRED_CODES,
     CONNECTION_MODE_CLOUD,
     CONNECTION_MODE_LOCAL,
     DEFAULT_OMADA_PORT,
     LOCAL_PAGE_PARAM,
     LOCAL_PAGE_SIZE_PARAM,
+    LOCAL_SESSION_SUSPECT_CODES,
     MIN_SUPPORTED_MAJOR,
-    OMADA_ERROR_CSRF_INVALID,
     OMADA_ERROR_GENERIC,
     OMADA_ERROR_INVALID_PARAMS,
+    OMADA_ERROR_INVALID_REQUEST,
     OMADA_ERROR_NOT_FOUND,
     OMADA_ERROR_PERMISSION_DENIED,
-    OMADA_ERROR_SESSION_EXPIRED,
+    OMADA_ERROR_UNSUPPORTED_PATH,
     OMADA_SUCCESS,
     OPENAPI_PAGE_PARAM,
     OPENAPI_PAGE_SIZE_PARAM,
     PATH_API_PREFIX_TEMPLATE,
     PATH_CLOUD_TOKEN,
+    PATH_CONTROLLER_STATUS,
     PATH_INFO,
+    PATH_LOGIN_STATUS,
     PATH_LOGIN_TEMPLATE,
     PATH_LOGOUT_TEMPLATE,
     PATH_OPENAPI_PREFIX_TEMPLATE,
+    PATH_SYSTEM_INFO,
     RETRYABLE_HTTP_STATUS,
 )
 from app.adapters.omada.exceptions import (
@@ -61,10 +69,12 @@ from app.adapters.omada.exceptions import (
     OmadaAuthError,
     OmadaAuthorizationError,
     OmadaConnectionError,
+    OmadaInvalidRequestError,
     OmadaNotFoundError,
     OmadaRateLimitError,
     OmadaSessionExpiredError,
     OmadaTimeoutError,
+    OmadaUnsupportedEndpointError,
     OmadaUnsupportedVersionError,
     OmadaValidationError,
 )
@@ -133,6 +143,36 @@ def _omada_mac(mac: str) -> str:
     if len(clean) != 12:
         return mac.upper().replace(":", "-").replace(".", "-")
     return "-".join(clean[i : i + 2] for i in range(0, 12, 2)).upper()
+
+
+#: Endpoints a controller has told us it does not serve, per controller AND
+#: firmware version: ``{"<base_url>|<controller id>|<version>": {"<endpoint>", ...}}``.
+#: The adapter is rebuilt for every sync, so an instance attribute would forget
+#: between cycles and the controller would be asked (and the failure logged)
+#: every five minutes. Keyed on the version so a firmware upgrade asks again.
+_UNSUPPORTED_ENDPOINTS: dict[str, set[str]] = {}
+
+
+def _is_login_redirect(response: Any) -> bool:
+    """True when the controller bounced the request to its login page.
+
+    That is how Omada reports an expired or unknown session: HTTP 302 to
+    ``/{omadacId}/login``. With redirects followed the client receives the login
+    page itself (200 text/html) and the 302 sits in ``response.history``.
+    """
+
+    def _to_login(location: str) -> bool:
+        return location.split("?", 1)[0].rstrip("/").endswith("/login")
+
+    if getattr(response, "is_redirect", False) is True:
+        headers = getattr(response, "headers", None) or {}
+        return _to_login(str(headers.get("location") or ""))
+    history = getattr(response, "history", None) or []
+    if not isinstance(history, list) or not history:
+        return False
+    url = getattr(response, "url", None)
+    final_path = str(getattr(url, "path", "") or "")
+    return _to_login(final_path)
 
 
 @dataclass
@@ -261,6 +301,15 @@ class OmadaApiClient:
         self._semaphore = asyncio.Semaphore(max(config.rate_limit_concurrent, 1))
         self._cache = SimpleCache(max_entries=2048)
         self._session_lock = asyncio.Lock()
+        # Re-authentication bookkeeping. ``_session_generation`` goes up by one on
+        # every successful re-login; a request remembers the generation it was
+        # sent under, so when ten concurrent reads all bounce off a dead session
+        # only the first re-logs in and the other nine just replay.
+        self._reauth_lock = asyncio.Lock()
+        self._session_generation = 0
+        # HTTP clients replaced by a re-login. Closed at logout rather than at the
+        # swap, so a read still in flight on the old client is not cut off.
+        self._retired_http: list[httpx.AsyncClient] = []
 
         # Per-controller circuit breaker. After
         # ``circuit_failure_threshold`` consecutive _request failures,
@@ -321,23 +370,36 @@ class OmadaApiClient:
 
             try:
                 if self.config.is_cloud:
-                    return await self._login_cloud()
-                return await self._login_local()
+                    result = await self._login_cloud()
+                else:
+                    result = await self._login_local()
             except Exception:
                 # Close the httpx client if login fails to avoid resource leak
                 if self._http and not self._http.is_closed:
                     await self._http.aclose()
                 self._http = None
                 raise
+            # A new session: a request still holding the previous generation
+            # replays instead of logging in yet again (see _reauthenticate).
+            self._session_generation += 1
+            return result
 
     # ---- Local auth flow ------------------------------------------------
 
-    async def _login_local(self) -> dict[str, Any]:
-        """Local controller: /api/info → session login w/ CSRF token."""
-        assert self._http is not None
+    async def _login_local(self, http: httpx.AsyncClient | None = None) -> dict[str, Any]:
+        """Local controller: /api/info → session login w/ CSRF token.
+
+        ``http`` is the client to log in on (default: the current one). A re-login
+        passes a fresh client and this method installs it as ``self._http`` in the
+        same synchronous step that installs the new CSRF token, so no request can
+        ever pair the new session cookie with the old token (the controller ends a
+        session that receives a wrong Csrf-Token).
+        """
+        http = http or self._http
+        assert http is not None
 
         try:
-            info_response = await self._http.get(PATH_INFO)
+            info_response = await http.get(PATH_INFO)
             info_response.raise_for_status()
         except httpx.TimeoutException as exc:
             logger_auth.error("controller info request timed out: %s → %s", self.base_url, exc)
@@ -399,7 +461,7 @@ class OmadaApiClient:
         }
 
         try:
-            login_response = await self._http.post(login_path, json=login_payload)
+            login_response = await http.post(login_path, json=login_payload)
             login_response.raise_for_status()
         except httpx.TimeoutException as exc:
             logger_auth.error("login timed out")
@@ -416,6 +478,7 @@ class OmadaApiClient:
             )
 
         result = envelope.result or {}
+        self._http = http
         self._controller_id = controller_id
         self._controller_version = controller_version
         self._csrf_token = result.get("token")
@@ -542,8 +605,216 @@ class OmadaApiClient:
             self._logged_in = False
             await self.login()
 
+    async def _close_retired_http(self) -> None:
+        retired, self._retired_http = self._retired_http, []
+        for old in retired:
+            try:
+                if not old.is_closed:
+                    await old.aclose()
+            except Exception as exc:
+                logger_auth.debug("closing a replaced HTTP client failed: %s", exc)
+
+    async def _reauthenticate(self, seen_generation: int, reason: str) -> None:
+        """Replace a dead session, at most once per generation.
+
+        ``seen_generation`` is the generation the failed request was sent under.
+        If it is no longer current, another request has already logged in again
+        and the caller only needs to replay.
+
+        A local re-login happens on a FRESH HTTP client that is swapped in only
+        once the login succeeded. ``login()`` used to close the shared client
+        first, which cut off every read in flight on it (the soak logged those as
+        ``connection_error`` retries on ``/switches/<mac>/ports``), and requests
+        sent while the new login was still running went out without a session
+        cookie and came back as the login page.
+        """
+        async with self._reauth_lock:
+            if seen_generation != self._session_generation:
+                return
+            logger_auth.info("session refresh", extra={"reason": reason})
+            if self.config.is_cloud:
+                await self._refresh_cloud_token()
+            else:
+                async with self._session_lock:
+                    old = self._http
+                    fresh = build_async_client(
+                        base_url=self.base_url,
+                        verify=self.config.verify_ssl,
+                        timeout=httpx.Timeout(
+                            timeout=self.config.timeout,
+                            connect=self.config.connect_timeout,
+                        ),
+                        follow_redirects=True,
+                    )
+                    try:
+                        await self._login_local(http=fresh)
+                    except Exception:
+                        await fresh.aclose()
+                        # The old session is gone too; the next request starts over.
+                        self._logged_in = False
+                        raise
+                    if old is not None and old is not fresh:
+                        self._retired_http.append(old)
+                        if len(self._retired_http) > 2:
+                            stale = self._retired_http.pop(0)
+                            with contextlib.suppress(Exception):
+                                await stale.aclose()
+            self._session_generation += 1
+
+    async def _local_session_alive(self) -> bool | None:
+        """Ask the controller whether this session is still logged in.
+
+        ``GET loginStatus`` answers ``{"login": true|false}`` and never creates a
+        session, so it settles an ambiguous error for the price of one read
+        instead of a login. Returns None when the answer is unavailable.
+        """
+        if self.config.is_cloud or not self._http or not self._controller_id:
+            return None
+        headers = {"Csrf-Token": self._csrf_token} if self._csrf_token else {}
+        try:
+            response = await self._http.request(
+                "GET", self._api_path(PATH_LOGIN_STATUS), headers=headers
+            )
+            if _is_login_redirect(response):
+                return False
+            body = response.json()
+        except Exception as exc:
+            logger_auth.debug("loginStatus check failed: %s", exc)
+            return None
+        result = body.get("result") if isinstance(body, dict) else None
+        if isinstance(result, dict) and isinstance(result.get("login"), bool):
+            return result["login"]
+        return None
+
+    # ---- Kept sessions (the controller health check) ----------------------
+
+    def session_state(self) -> dict[str, Any] | None:
+        """This local session's cookies and CSRF token, to resume it later.
+
+        The controller health check keeps it in its own process memory (never in
+        a shared store: a session cookie is a credential), so the next probe asks
+        ``loginStatus`` instead of logging in again. None in cloud mode or when
+        not logged in.
+        """
+        if self.config.is_cloud or not self._logged_in or not self._http:
+            return None
+        if not self._controller_id or not self._csrf_token:
+            return None
+        cookies = [
+            {"name": c.name, "value": c.value, "domain": c.domain, "path": c.path}
+            for c in self._http.cookies.jar
+        ]
+        if not cookies:
+            return None
+        return {
+            "cookies": cookies,
+            "csrf_token": self._csrf_token,
+            "controller_id": self._controller_id,
+            "version": self._controller_version,
+        }
+
+    async def resume_session(self, state: dict[str, Any]) -> bool:
+        """Adopt a session from ``session_state`` if the controller says it is
+        still logged in.
+
+        One ``GET loginStatus``, which never creates a session. True: this client
+        is logged in on that session, nothing else was sent. False: the session
+        is gone (expired, the controller restarted, or someone logged it out) and
+        this client stays logged out. A transport error is raised as it is, so a
+        controller that does not answer reads as one.
+        """
+        if self.config.is_cloud:
+            return False
+        controller_id = str(state.get("controller_id") or "")
+        token = str(state.get("csrf_token") or "")
+        if not controller_id or not token:
+            return False
+        async with self._session_lock:
+            http = build_async_client(
+                base_url=self.base_url,
+                verify=self.config.verify_ssl,
+                timeout=httpx.Timeout(
+                    timeout=self.config.timeout,
+                    connect=self.config.connect_timeout,
+                ),
+                follow_redirects=True,
+            )
+            for cookie in state.get("cookies") or []:
+                http.cookies.set(
+                    str(cookie.get("name")),
+                    str(cookie.get("value")),
+                    domain=str(cookie.get("domain") or ""),
+                    path=str(cookie.get("path") or "/"),
+                )
+            prefix = PATH_API_PREFIX_TEMPLATE.format(controller_id=controller_id)
+            path = f"{prefix}{PATH_LOGIN_STATUS}"
+            try:
+                response = await http.get(path, headers={"Csrf-Token": token})
+                body = None if _is_login_redirect(response) else response.json()
+            except ValueError:
+                body = None
+            except BaseException:
+                await http.aclose()
+                raise
+            result = body.get("result") if isinstance(body, dict) else None
+            if not (isinstance(result, dict) and result.get("login") is True):
+                await http.aclose()
+                return False
+            if self._http and not self._http.is_closed:
+                await self._http.aclose()
+            self._http = http
+            self._controller_id = controller_id
+            self._controller_version = state.get("version") or self._controller_version
+            self._csrf_token = token
+            self._logged_in = True
+            self._session_generation += 1
+            return True
+
+    async def close_keeping_session(self) -> None:
+        """Close the HTTP client WITHOUT logging out, so the session stays valid
+        on the controller for ``resume_session``."""
+        await self._close_retired_http()
+        http, self._http = self._http, None
+        self._logged_in = False
+        self._csrf_token = None
+        if http is not None and not http.is_closed:
+            await http.aclose()
+
+    async def _session_lost(self, sent_generation: int) -> bool | None:
+        """Whether the session a request was sent under is gone.
+
+        True when another request has re-logged in since (the replay will use the
+        new session) or loginStatus says logged out; False when loginStatus says
+        the session is alive; None when the controller could not tell us.
+        """
+        if sent_generation != self._session_generation:
+            return True
+        alive = await self._local_session_alive()
+        return None if alive is None else not alive
+
+    def _unsupported_key(self) -> str:
+        return f"{self.base_url}|{self._controller_id}|{self._controller_version}"
+
+    def _endpoint_unsupported(self, endpoint: str) -> bool:
+        return endpoint in _UNSUPPORTED_ENDPOINTS.get(self._unsupported_key(), set())
+
+    def _mark_endpoint_unsupported(self, endpoint: str, exc: Exception) -> None:
+        known = _UNSUPPORTED_ENDPOINTS.setdefault(self._unsupported_key(), set())
+        if endpoint in known:
+            return
+        known.add(endpoint)
+        logger_http.info(
+            "endpoint not served by this controller firmware; not asking again",
+            extra={
+                "endpoint": endpoint,
+                "controller_version": self._controller_version,
+                "reason": str(exc),
+            },
+        )
+
     async def logout(self) -> None:
         """Logout and close HTTP session."""
+        await self._close_retired_http()
         if not self._http:
             self._logged_in = False
             return
@@ -582,9 +853,11 @@ class OmadaApiClient:
 
         * **local**: ``/{controllerId}/api/v2{path}``
         * **cloud**: ``/openapi/v1/{controllerId}{path}``
+
+        Maintenance endpoints are no exception. They used to be sent bare
+        (``/maintenance/controllerStatus``), which a real OC300 answers with HTTP
+        404; its own web UI calls ``/{omadacId}/api/v2/maintenance/controllerStatus``.
         """
-        if path.startswith("/maintenance/"):
-            return path
         if not self._controller_id:
             raise OmadaConnectionError("Controller ID missing; login required")
         if self.config.is_cloud:
@@ -705,6 +978,9 @@ class OmadaApiClient:
             logger_cache.debug("cache miss", extra={"path": path})
 
         reauth_attempted = False
+        # Set once loginStatus confirmed the session is alive for this request, so
+        # a retried -1 does not ask again on every attempt.
+        session_confirmed = False
         # Retry only what is safe to replay. The per-call ``retry`` flag stays
         # (a caller may still opt out of retrying a read), but it is no longer
         # sufficient on its own: it defaults to True, so every POST/PATCH/DELETE
@@ -754,10 +1030,14 @@ class OmadaApiClient:
                     if self._access_token:
                         headers["Authorization"] = f"AccessToken={self._access_token}"
                 else:
-                    # Local: CSRF session token
-                    if self._csrf_token and not path.startswith("/maintenance/"):
+                    # Local: CSRF session token. Every API path needs it: without
+                    # the right token the controller redirects to its login page,
+                    # and a wrong token also ends the session.
+                    if self._csrf_token:
                         headers["Csrf-Token"] = self._csrf_token
 
+                # The session this attempt is sent under (see _reauthenticate).
+                sent_generation = self._session_generation
                 start = time.monotonic()
                 try:
                     response = await self._http.request(
@@ -772,9 +1052,9 @@ class OmadaApiClient:
                         # The request may already have reached the controller.
                         raise OmadaTimeoutError("Request timed out", adapter_id="omada") from exc
                     self._error_count += 1
-                    if retry and attempt < max_attempts:
-                        await self._retry_sleep(attempt, "timeout", path)
-                        continue
+                    # io_policy: a timeout is never retried, even for a read. A
+                    # controller that did not answer in time is slow or gone, and
+                    # a replay only multiplies the wait and its load.
                     self._breaker.on_failure()
                     _record_metric(method_upper, "timeout")
                     try:
@@ -786,7 +1066,13 @@ class OmadaApiClient:
                     if not is_idempotent:
                         raise OmadaConnectionError("Request failed", adapter_id="omada") from exc
                     self._error_count += 1
-                    if retry and attempt < max_attempts:
+                    # Only a dropped connection is worth a second read; a refused
+                    # or unreachable controller will not recover in seconds.
+                    if (
+                        retry
+                        and attempt < max_attempts
+                        and io_policy.may_retry_exception(exc, idempotent=True)
+                    ):
                         await self._retry_sleep(attempt, "connection_error", path)
                         continue
                     self._breaker.on_failure()
@@ -812,6 +1098,21 @@ class OmadaApiClient:
             from app.adapters._response_limits import check_response_size
 
             check_response_size(response)
+
+            # An expired or unknown local session: the controller redirects the
+            # request to its login page. This, not an errorCode, is the signal.
+            if not self.config.is_cloud and _is_login_redirect(response):
+                self._error_count += 1
+                if not reauth_attempted:
+                    reauth_attempted = True
+                    await self._reauthenticate(sent_generation, "login_redirect")
+                    continue
+                _record_metric(method_upper, "session_rejected")
+                raise OmadaSessionExpiredError(
+                    "Controller still redirects to its login page after logging in again",
+                    adapter_id="omada",
+                )
+
             if response.status_code in RETRYABLE_HTTP_STATUS:
                 self._error_count += 1
                 # A 502/503/504 is ambiguous for a MUTATION: the controller may
@@ -835,14 +1136,13 @@ class OmadaApiClient:
                 )
 
             if response.status_code in {401, 403} and not reauth_attempted:
-                reauth_attempted = True
-                logger_auth.info("session refresh requested by HTTP status")
-                if self.config.is_cloud:
-                    await self._refresh_cloud_token()
-                else:
-                    self._logged_in = False
-                    await self.login()
-                continue
+                # Locally a 401/403 is not proof the session died: the controller
+                # also answers 401 when a web session calls an Open API path. Ask
+                # loginStatus first; re-login unless the session is confirmed alive.
+                if self.config.is_cloud or await self._session_lost(sent_generation) is not False:
+                    reauth_attempted = True
+                    await self._reauthenticate(sent_generation, f"http_{response.status_code}")
+                    continue
 
             try:
                 response.raise_for_status()
@@ -860,7 +1160,12 @@ class OmadaApiClient:
                     ).inc()
                 except Exception:
                     pass
-                raise OmadaApiError(
+                # 404: this firmware has no such endpoint (the bare
+                # /maintenance/... paths got exactly this from an OC300).
+                error_cls = (
+                    OmadaUnsupportedEndpointError if response.status_code == 404 else OmadaApiError
+                )
+                raise error_cls(
                     f"HTTP error {response.status_code}",
                     error_code=response.status_code,
                 ) from exc
@@ -873,6 +1178,16 @@ class OmadaApiClient:
                 # for API paths its firmware does not implement. Uncaught, the
                 # JSONDecodeError escaped the adapter and the request answered
                 # 500; OmadaApiError maps to a 502 that names the real cause.
+                # A login page served without a redirect would look the same, so
+                # ask loginStatus once before calling it an unsupported path.
+                if (
+                    not self.config.is_cloud
+                    and not reauth_attempted
+                    and await self._session_lost(sent_generation) is True
+                ):
+                    reauth_attempted = True
+                    await self._reauthenticate(sent_generation, "non_json_body")
+                    continue
                 self._error_count += 1
                 _record_metric(method_upper, "non_json_body")
                 snippet = (response.text or "")[:120].replace("\n", " ").strip()
@@ -911,7 +1226,11 @@ class OmadaApiClient:
                 return result
 
             self._error_count += 1
-            logger_http.warning(
+            # "Unsupported request path." is an expected answer while probing for
+            # the endpoint a firmware serves, so it is not worth a warning.
+            log_level = logging.INFO if code == OMADA_ERROR_UNSUPPORTED_PATH else logging.WARNING
+            logger_http.log(
+                log_level,
                 "non-zero errorCode",
                 extra={
                     "path": path,
@@ -920,25 +1239,42 @@ class OmadaApiClient:
                     "attempt": attempt,
                 },
             )
-            if code in {OMADA_ERROR_SESSION_EXPIRED, OMADA_ERROR_CSRF_INVALID}:
+            # -1001 and -1600 describe the REQUEST (wrong shape, unknown path).
+            # They used to be read as "session expired" (-1001 was mislabelled),
+            # so every unpaged LAN-network read logged in again, replayed, failed
+            # the same way, and left the previous session open on the controller.
+            if code == OMADA_ERROR_INVALID_REQUEST:
+                raise OmadaInvalidRequestError(
+                    envelope.msg or "Invalid request parameters.", error_code=code
+                )
+            if code == OMADA_ERROR_UNSUPPORTED_PATH:
+                raise OmadaUnsupportedEndpointError(
+                    envelope.msg or "Unsupported request path.", error_code=code
+                )
+            if self.config.is_cloud and code in CLOUD_SESSION_EXPIRED_CODES:
                 if reauth_attempted:
-                    # Endpoint may be incompatible rather than session truly expired
-                    logger_auth.warning(
-                        "persistent session error after re-auth",
-                        extra={"path": path, "errorCode": code},
-                    )
-                    raise OmadaApiError(
-                        f"Endpoint returned session error after re-auth: {envelope.msg or code}",
-                        error_code=code,
+                    raise OmadaSessionExpiredError(
+                        f"Access token still rejected after refresh: {envelope.msg or code}",
+                        adapter_id="omada",
                     )
                 reauth_attempted = True
-                logger_auth.info("session refresh requested by Omada error code")
-                if self.config.is_cloud:
-                    await self._refresh_cloud_token()
-                else:
-                    self._logged_in = False
-                    await self.login()
+                await self._reauthenticate(sent_generation, f"omada_{code}")
                 continue
+            if (
+                not self.config.is_cloud
+                and code in LOCAL_SESSION_SUSPECT_CODES
+                and not reauth_attempted
+                and not session_confirmed
+            ):
+                # -1 is what an OC300 answers for an unfiltered client list, with a
+                # perfectly good session. The -1 branch re-logged in on the theory
+                # that some firmware reports a lost session this way; keep that
+                # recovery, but only once the controller says the session is gone.
+                if await self._session_lost(sent_generation) is not False:
+                    reauth_attempted = True
+                    await self._reauthenticate(sent_generation, f"omada_{code}")
+                    continue
+                session_confirmed = True
             if code == OMADA_ERROR_PERMISSION_DENIED:
                 raise OmadaAuthorizationError("Insufficient permissions", error_code=code)
             if code == OMADA_ERROR_INVALID_PARAMS:
@@ -946,21 +1282,6 @@ class OmadaApiClient:
             if code == OMADA_ERROR_NOT_FOUND:
                 raise OmadaNotFoundError("Resource not found", adapter_id="omada")
             if code == OMADA_ERROR_GENERIC and retry and attempt < max_attempts:
-                # Some firmware versions return -1 (generic) instead of
-                # -1001 (session expired).  Attempt a session refresh on the
-                # first generic error before falling back to plain retries.
-                if not reauth_attempted:
-                    reauth_attempted = True
-                    logger_auth.info(
-                        "session refresh requested by generic error code",
-                        extra={"path": path},
-                    )
-                    if self.config.is_cloud:
-                        await self._refresh_cloud_token()
-                    else:
-                        self._logged_in = False
-                        await self.login()
-                    continue
                 await self._retry_sleep(attempt, "omada_generic", path)
                 continue
             raise OmadaApiError(envelope.msg or f"Omada error {code}", error_code=code)
@@ -1044,8 +1365,12 @@ class OmadaApiClient:
         else:
             page_key, size_key = LOCAL_PAGE_PARAM, LOCAL_PAGE_SIZE_PARAM
 
+        # Read the caller's own query parameters ONCE. Popping them inside the
+        # loop kept them for page 1 only, so page 2 of a filtered list (e.g. the
+        # client list with filters.active=true) went out unfiltered.
+        base_params = dict(kwargs.pop("params", None) or {})
         while current_page <= max_pages:
-            params = dict(kwargs.pop("params", {}) or {})
+            params = dict(base_params)
             params[page_key] = current_page
             params[size_key] = page_size
             result = await self._request(
@@ -1226,40 +1551,89 @@ class OmadaApiClient:
         await asyncio.sleep(delay)
         return await self.set_port_poe(site_id, mac, port_id, True)
 
-    async def get_networks(self, site_id: str) -> list[dict[str, Any]]:
-        paths = [
-            f"/sites/{site_id}/setting/lan/networks",
-            f"/sites/{site_id}/setting/lan",
-        ]
-        try:
-            data = await self._request_with_fallback(
-                "GET",
-                paths,
-                cache_ttl=self.config.cache_ttl_config,
-            )
-        except (OmadaSessionExpiredError, OmadaApiError):
-            # Fallback: try as paginated endpoint (some firmware versions)
+    async def _read_first_supported(
+        self,
+        forms: list[tuple[str, Callable[[], Awaitable[Any]]]],
+        what: str,
+    ) -> Any:
+        """Return the first form of a read this controller answers.
+
+        Each form is ``(endpoint key, call)``. A form the firmware does not serve
+        (-1600 or HTTP 404) is remembered per controller and firmware version and
+        skipped from then on; any other API refusal (for example -1001 for the
+        wrong request shape) just moves on to the next form. A session that cannot
+        be re-established is not swallowed, so a dead controller costs one login
+        attempt, not one per form.
+        """
+        last_exc: Exception | None = None
+        for endpoint, call in forms:
+            if self._endpoint_unsupported(endpoint):
+                continue
             try:
-                return await self._paginated_request(
-                    "GET",
-                    f"/sites/{site_id}/setting/lan/networks",
-                    page_size=100,
-                    cache_ttl=self.config.cache_ttl_config,
+                return await call()
+            except OmadaUnsupportedEndpointError as exc:
+                self._mark_endpoint_unsupported(endpoint, exc)
+                last_exc = exc
+            except OmadaApiError as exc:
+                logger_http.debug(
+                    "read form refused", extra={"endpoint": endpoint, "error": str(exc)}
                 )
-            except Exception:
-                return []
+                last_exc = exc
+        if last_exc is not None:
+            raise last_exc
+        raise OmadaUnsupportedEndpointError(
+            f"this controller firmware serves no known endpoint for {what}",
+            adapter_id="omada",
+        )
+
+    @staticmethod
+    def _rows_of(data: Any, *keys: str) -> list[dict[str, Any]]:
+        """Pull the row list out of the envelope variants Omada uses."""
         if isinstance(data, list):
             return data
-        # Handle envelope variants: {"data": [...]}, {"networks": [...]}
-        if "data" in data:
-            return data["data"]
-        if "networks" in data:
-            return data["networks"]
-        # Last resort: return first list value found
-        for v in data.values():
-            if isinstance(v, list):
-                return v
+        if not isinstance(data, dict):
+            return []
+        for key in ("data", *keys):
+            value = data.get(key)
+            if isinstance(value, list):
+                return value
+        for value in data.values():
+            if isinstance(value, list):
+                return value
         return []
+
+    async def get_networks(self, site_id: str) -> list[dict[str, Any]]:
+        """LAN networks (VLANs) of a site.
+
+        The list is paged. An OC300 on 6.3 answers the unpaged path with -1001
+        "Invalid request parameters." and the paged one with every network, and
+        the 5.x reference client pages it as well, so the paged form goes first.
+        The unpaged path and ``/setting/lan`` (-1600 on 6.3) stay as fallbacks.
+        """
+        ttl = self.config.cache_ttl_config
+        networks = f"/sites/{site_id}/setting/lan/networks"
+        try:
+            data = await self._read_first_supported(
+                [
+                    (
+                        "lan_networks_paged",
+                        lambda: self._paginated_request(
+                            "GET", networks, page_size=100, cache_ttl=ttl
+                        ),
+                    ),
+                    ("lan_networks", lambda: self._request("GET", networks, cache_ttl=ttl)),
+                    (
+                        "lan_setting",
+                        lambda: self._request(
+                            "GET", f"/sites/{site_id}/setting/lan", cache_ttl=ttl
+                        ),
+                    ),
+                ],
+                "LAN networks",
+            )
+        except OmadaApiError:
+            return []
+        return self._rows_of(data, "networks")
 
     async def create_network(self, site_id: str, config: dict[str, Any]) -> dict[str, Any]:
         result = await self._request(
@@ -1408,21 +1782,33 @@ class OmadaApiClient:
         return result
 
     async def get_clients(self, site_id: str) -> list[dict[str, Any]]:
-        paths = [
-            f"/sites/{site_id}/clients",
-            f"/sites/{site_id}/insight/clients",
-            f"/sites/{site_id}/stat/clients",
+        """Connected clients of a site.
+
+        The first form asks for active clients only. On 6.2 and later the
+        unfiltered list always answers -1 "General error." (the controller fails
+        while scoring client health; reported by TP-Link users on 6.2.0.17 and
+        seen on an OC300 running 6.3.0.111), while ``filters.active=true`` returns
+        every connected client with its Wi-Fi fields. ha-omada has long sent the
+        same filter to pre-6.0 controllers. The unfiltered list and the known-clients history
+        (which also lists offline clients and carries few fields) are fallbacks.
+        """
+        clients_path = f"/sites/{site_id}/clients"
+        forms: list[tuple[str, str, dict[str, str] | None]] = [
+            ("active", clients_path, {"filters.active": "true"}),
+            ("all", clients_path, None),
+            ("known", f"/sites/{site_id}/insight/clients", None),
+            ("stat", f"/sites/{site_id}/stat/clients", None),
         ]
-        # Cache the path that worked last time so subsequent calls
+        # Cache the form that worked last time so subsequent calls
         # skip the (potentially 4 × timeout-seconds) fallback walk.
-        working = getattr(self, "_working_clients_path", None)
-        if working and working in paths:
-            paths = [working] + [p for p in paths if p != working]
+        working = getattr(self, "_working_clients_form", None)
+        if working:
+            forms = [f for f in forms if f[0] == working] + [f for f in forms if f[0] != working]
 
         last_exc: Exception | None = None
-        for i, path in enumerate(paths):
+        for i, (label, path, params) in enumerate(forms):
             try:
-                # Disable inner-retry on non-primary paths so each
+                # Disable inner-retry on non-primary forms so each
                 # fallback fails fast — we don't want to wait 4 × the
                 # full retry budget when the controller has simply
                 # moved the endpoint to a different location.
@@ -1433,22 +1819,23 @@ class OmadaApiClient:
                     page_size=500,
                     cache_ttl=self.config.cache_ttl_clients,
                     retry=retry,
+                    params=params,
                 )
-                self._working_clients_path = path
+                self._working_clients_form = label
                 return rows
             except (OmadaSessionExpiredError, OmadaApiError, OmadaNotFoundError) as exc:
                 last_exc = exc
-                if i < len(paths) - 1:
+                if i < len(forms) - 1:
                     logger_http.debug(
                         "client endpoint fallback",
-                        extra={"from": path, "to": paths[i + 1]},
+                        extra={"from": label, "to": forms[i + 1][0]},
                     )
                     continue
 
         # Paginated requests all failed — try non-paginated as last resort.
         # Some Omada firmware returns errorCode on paginated params but works
         # fine without them, returning all clients in a single response.
-        for path in paths[:1]:  # Only try the primary endpoint
+        for path in (clients_path,):  # Only try the primary endpoint
             try:
                 data = await self._request(
                     "GET",
@@ -1463,7 +1850,7 @@ class OmadaApiClient:
                             "client list succeeded via non-paginated fallback",
                             extra={"path": path, "count": len(rows)},
                         )
-                        self._working_clients_path = path
+                        self._working_clients_form = "all_unpaged"
                         return rows
             except Exception as exc:
                 logger_http.debug("client endpoint path failed: %s — %s", path, exc)
@@ -1479,17 +1866,25 @@ class OmadaApiClient:
     ) -> list[dict[str, Any]]:
         """Get all clients, enriching wireless ones with detail (WiFi fields).
 
-        The list endpoint (/sites/{id}/clients) returns minimal fields.
-        Wireless clients lack ssid/band/channel/signal.  We fetch per-client
-        detail for wireless clients via /sites/{id}/clients/{mac} in parallel
-        batches and merge the rich data back.
+        Rows from the known-clients fallback carry no ssid/band/channel/signal,
+        so those wireless clients get a per-client detail read
+        (/sites/{id}/clients/{mac}) in parallel batches, merged back in. Rows
+        from the active-client list already carry ssid, rssi, signalLevel,
+        channel and radioId (the detail read adds none of them), so they are
+        not fetched again. Enriching all of them cost one read per wireless
+        client on every sync, and that fan-out is what timed out on the rate
+        limiter.
         """
         clients = await self.get_clients(site_id)
         if not clients:
             return clients
 
         # Identify wireless clients that need enrichment
-        wireless_macs = [c["mac"] for c in clients if c.get("wireless") is True and c.get("mac")]
+        wireless_macs = [
+            c["mac"]
+            for c in clients
+            if c.get("wireless") is True and c.get("mac") and not c.get("ssid")
+        ]
         if not wireless_macs:
             return clients
 
@@ -2087,14 +2482,36 @@ class OmadaApiClient:
         )
 
     async def get_port_profiles(self, site_id: str) -> list[dict[str, Any]]:
-        data = await self._request(
-            "GET",
-            f"/sites/{site_id}/setting/lan/profileOverrides",
-            cache_ttl=self.config.cache_ttl_config,
+        """Switch port profiles of a site.
+
+        An OC300 on 6.3 serves the full profiles at the paged
+        ``/setting/lan/profiles`` (unpaged: -1001) and a short id/name/type list
+        at ``/setting/lan/profileSummary``, the form the 5.x reference client
+        uses. ``/setting/lan/profileOverrides`` answers -1600 there and is not in
+        the controller's own web UI; it stays only as the last resort.
+        """
+        ttl = self.config.cache_ttl_config
+        lan = f"/sites/{site_id}/setting/lan"
+        data = await self._read_first_supported(
+            [
+                (
+                    "lan_profiles_paged",
+                    lambda: self._paginated_request(
+                        "GET", f"{lan}/profiles", page_size=100, cache_ttl=ttl
+                    ),
+                ),
+                (
+                    "lan_profile_summary",
+                    lambda: self._request("GET", f"{lan}/profileSummary", cache_ttl=ttl),
+                ),
+                (
+                    "lan_profile_overrides",
+                    lambda: self._request("GET", f"{lan}/profileOverrides", cache_ttl=ttl),
+                ),
+            ],
+            "switch port profiles",
         )
-        if isinstance(data, list):
-            return data
-        return data.get("data", [])
+        return self._rows_of(data)
 
     async def get_port_profile(self, site_id: str, profile_id: str) -> dict[str, Any]:
         """Get a single port profile by ID."""
@@ -2157,10 +2574,43 @@ class OmadaApiClient:
         return result
 
     async def get_controller_status(self) -> dict[str, Any]:
-        return await self._request("GET", "/maintenance/controllerStatus", cache_ttl=15)
+        """Controller identity and health (``/maintenance/controllerStatus``).
+
+        On a 6.3 OC300 this carries controllerVersion, firmwareVersion, model,
+        upTime, systemTime and storage, and no CPU or memory figures.
+        """
+        return await self._read_first_supported(
+            [
+                (
+                    "controller_status",
+                    lambda: self._request("GET", PATH_CONTROLLER_STATUS, cache_ttl=15),
+                )
+            ],
+            "controller status",
+        )
 
     async def get_system_info(self) -> dict[str, Any]:
-        return await self._request("GET", "/maintenance/sysInfo", cache_ttl=15)
+        """Controller system information.
+
+        ``/maintenance/sysInfo`` is asked for once per controller and firmware;
+        6.3 answers -1600, and from then on the same facts are taken from the
+        controller status (cached, so no extra request), with the key names the
+        callers already read (``controllerVer``, ``uptime``) filled in.
+        """
+        try:
+            return await self._read_first_supported(
+                [("system_info", lambda: self._request("GET", PATH_SYSTEM_INFO, cache_ttl=15))],
+                "system info",
+            )
+        except OmadaUnsupportedEndpointError:
+            pass
+        status = await self.get_controller_status()
+        info = dict(status)
+        if "controllerVer" not in info and status.get("controllerVersion") is not None:
+            info["controllerVer"] = status["controllerVersion"]
+        if "uptime" not in info and status.get("upTime") is not None:
+            info["uptime"] = status["upTime"]
+        return info
 
     # ------------------------------------------------------------------
     # Firmware Management (Enterprise)

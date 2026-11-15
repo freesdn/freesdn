@@ -9,8 +9,6 @@ import {
   Monitor,
   Terminal,
   Apple,
-  Copy,
-  Check,
   Package,
   Shield,
   Wifi,
@@ -22,6 +20,7 @@ import {
 import { PageHeader } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/status-indicator';
@@ -68,32 +67,9 @@ function PlatformIcon({ platform, className }: { platform: string; className?: s
   }
 }
 
-// Copy button component
-function CopyButton({ text }: { text: string }) {
-  const { t } = useTranslation('agents');
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="p-1 rounded hover:bg-foreground/10 transition-colors"
-      aria-label={copied ? t('DownloadsPage.copy.copied') : t('DownloadsPage.copy.copy')}
-      title={t('DownloadsPage.copy.copy')}
-    >
-      {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
-    </button>
-  );
-}
-
 // Install instructions component
 function InstallInstructions({ commands }: { commands: string[] }) {
+  const { t } = useTranslation('agents');
   return (
     <div className="relative group">
       <pre className="bg-zinc-950 text-zinc-300 rounded-lg p-4 text-sm overflow-x-auto font-mono leading-relaxed">
@@ -104,7 +80,12 @@ function InstallInstructions({ commands }: { commands: string[] }) {
         ))}
       </pre>
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <CopyButton text={commands.filter(c => !c.startsWith('#')).join('\n')} />
+        {/* The block is always dark, so the icon colours are fixed light tones. */}
+        <CopyButton
+          value={commands.filter(c => !c.startsWith('#')).join('\n')}
+          aria-label={t('DownloadsPage.copy.copy')}
+          className="h-7 w-7 text-zinc-400 hover:bg-white/10 hover:text-zinc-100 data-[copy-state=copied]:text-success data-[copy-state=failed]:text-destructive"
+        />
       </div>
     </div>
   );

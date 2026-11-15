@@ -17,6 +17,7 @@ from typing import Any
 
 import httpx
 
+from app.adapters.apply_context import FORCE_DOES_NOT_LIFT_READ_ONLY, read_only_refuses_write
 from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
@@ -59,6 +60,13 @@ def _validate_path(path: str) -> None:
 
 # HTTP methods that mutate state — subject to the dual-gate.
 _WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# The pfSense REST package runs these diagnostics as POSTs, but they change
+# nothing on the firewall. Classified as reads so they work in read-only mode
+# without borrowing ``force`` (which no longer lifts the read-only lock).
+_READ_POST_PATHS: frozenset[str] = frozenset(
+    {"/diagnostics/ping", "/diagnostics/traceroute", "/diagnostics/dns_lookup"}
+)
 
 
 def _is_adapter_read_only() -> bool:
@@ -248,13 +256,17 @@ class PfSenseClient:
         # Universal read-only gate. Default-on; refuses writes unless
         # the caller explicitly opted in via ``force=True``. Same
         # shape Omada / OPNsense / Proxmox use.
-        if method_upper in _WRITE_METHODS and _is_adapter_read_only() and not force:
+        is_write = method_upper in _WRITE_METHODS and not (
+            method_upper == "POST" and path in _READ_POST_PATHS
+        )
+        if is_write and read_only_refuses_write(_is_adapter_read_only()):
             _record_request_metric(method_upper, "read_only_blocked")
             raise AdapterError(
                 "ADAPTER_READ_ONLY is set — pfSense write refused. Set "
                 "ADAPTER_READ_ONLY=false in the environment AND pass "
                 "force=true to override. Both safeties must be down "
-                "before a write reaches the firewall.",
+                "before a write reaches the firewall."
+                + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else ""),
                 adapter_id="pfsense",
             )
 

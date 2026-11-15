@@ -11,7 +11,7 @@
  *
  * Behaviourally identical to the inline implementation: form initialises once
  * from `pbx.settings`, the password reveal toggle is local, and the Delete
- * button still goes through `confirm()`.
+ * button asks for confirmation in the shared in-app dialog first.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from 'react';
@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { useConfirm } from '@/hooks';
 import type { PBXSystem } from '../types';
 
 export interface PBXSettingsTabProps {
@@ -43,6 +44,7 @@ export function PBXSettingsTab({
   deletePBXMutation,
 }: PBXSettingsTabProps) {
   const { t } = useTranslation('voip');
+  const confirm = useConfirm();
   const [settingsInitialized, setSettingsInitialized] = useState(false);
   const [settingsForm, setSettingsForm] = useState({
     name: '', ip_address: '', api_port: 443, sip_port: 5060,
@@ -167,8 +169,15 @@ export function PBXSettingsTab({
         </CardHeader>
         <CardContent>
           <Button variant="destructive" size="sm"
-            onClick={() => {
-              if (confirm(t('PBXSettingsTab.dangerZone.deleteConfirm', { name: pbxName }))) {
+            onClick={async () => {
+              const ok = await confirm({
+                title: t('VoIPPage.confirm.deletePbxTitle', { name: pbxName }),
+                description: t('VoIPPage.confirm.deletePbxBody'),
+                items: [pbxName],
+                confirmLabel: t('PBXSettingsTab.actions.deletePBX'),
+                destructive: true,
+              });
+              if (ok) {
                 deletePBXMutation.mutate();
               }
             }}

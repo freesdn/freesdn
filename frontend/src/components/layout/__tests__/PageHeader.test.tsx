@@ -44,6 +44,23 @@ describe('PageHeader', () => {
     expect(onRefresh).toHaveBeenCalledOnce();
   });
 
+  it('spins the refresh button until a returned promise settles', async () => {
+    // `refreshing` is usually a query's isLoading, which a refetch of cached
+    // data never sets: the button gave no feedback at all. A promise returned
+    // by onRefresh now drives the spinner on its own.
+    let resolve!: () => void;
+    const onRefresh = vi.fn(() => new Promise<void>((r) => { resolve = r; }));
+    const user = userEvent.setup();
+    render(<PageHeader title="Controllers" onRefresh={onRefresh} />);
+    const button = screen.getAllByRole('button')[0];
+    await user.click(button);
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    resolve();
+    await vi.waitFor(() => expect(button).not.toBeDisabled(), { timeout: 2000 });
+    expect(onRefresh).toHaveBeenCalledOnce();
+  });
+
   it('renders primaryAction with label and fires onClick', async () => {
     const onClick = vi.fn();
     const user = userEvent.setup();
@@ -93,4 +110,14 @@ describe('PageHeader', () => {
     );
     expect(screen.getByTestId('custom-actions')).toBeInTheDocument();
   });
+
+  it('keeps a truncated title readable on hover and hides the decorative icon', () => {
+    const title = 'Gateway core-fw-01.branch-office-west.example.internal configuration';
+    render(<PageHeader title={title} icon={Server} />);
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading).toHaveAccessibleName(title);
+    expect(heading.querySelector('span.truncate')).toHaveAttribute('title', title);
+    expect(heading.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  });
 });
+

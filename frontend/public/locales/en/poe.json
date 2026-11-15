@@ -136,6 +136,11 @@
         "title": "No Schedules",
         "description": "Create a schedule to automatically control PoE power",
         "notSupported": "PoE scheduling not supported on this device"
+      },
+      "confirmDelete": {
+        "title": "Delete PoE schedule \"{{name}}\"?",
+        "body": "FreeSDN stops switching these ports on this schedule. Each port keeps its current power state, so a port the schedule turned off stays off until you turn it on.",
+        "action": "Delete schedule"
       }
     },
     "portDialog": {

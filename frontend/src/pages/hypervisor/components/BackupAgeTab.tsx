@@ -32,6 +32,7 @@ import { useToast } from '@/hooks/use-toast';
 import { hypervisorApi } from '@/lib/api';
 import { formatBytes } from './helpers';
 import { backupAgeStatus, backupAgeCounts } from './backupAge';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface BackupAgeTabProps {
   controllerId: string;
@@ -125,7 +126,7 @@ export function BackupAgeTab({ controllerId, nodes }: BackupAgeTabProps) {
       setPrunePreview(Array.isArray(data) ? data : []);
     },
     onError: (err: any) => {
-      toast({ title: t('BackupAgeTab.toast.previewFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('BackupAgeTab.toast.previewFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 
@@ -160,7 +161,7 @@ export function BackupAgeTab({ controllerId, nodes }: BackupAgeTabProps) {
       queryClient.invalidateQueries({ queryKey: ['hypervisor', 'backup-age'] });
     },
     onError: (err: any) => {
-      toast({ title: t('BackupAgeTab.toast.pruneFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' });
+      toast({ title: t('BackupAgeTab.toast.pruneFailed'), description: getApiErrorMessage(err), variant: 'destructive' });
     },
   });
 

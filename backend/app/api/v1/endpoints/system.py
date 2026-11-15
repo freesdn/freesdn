@@ -12,7 +12,7 @@ import os
 import platform
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from typing import Any as _Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,51 +29,154 @@ router = APIRouter()
 
 
 # ── Adapter write-safety (read-only ↔ read-write), runtime-toggleable ──────────
-class AdapterReadOnlyState(BaseModel):
-    """Platform write-safety mode. read_only=true ⇒ device writes are refused
-    (monitor-only); false ⇒ read-write (manage). One switch, two states."""
+class AdapterReadOnlyUpdate(BaseModel):
+    """Requested state of the Settings read-only switch."""
 
     read_only: bool
+
+
+class AdapterReadOnlyState(BaseModel):
+    """Platform write-safety mode, with both of its sources.
+
+    ``read_only`` is what is in force: true means device writes are refused
+    (monitor-only). It is true when EITHER source says so:
+
+    * ``env_read_only``: ``ADAPTER_READ_ONLY`` in the server environment. Only a
+      change to the environment (and a restart) can turn it off.
+    * ``setting_read_only``: the Settings switch, stored in the database.
+      ``null`` when it could not be read, in which case writes are refused.
+
+    ``enforced_by`` names the source in force: ``environment``, ``setting``,
+    ``environment_and_setting``, ``unverified`` (the switch could not be read,
+    so writes are refused to be safe) or ``none`` (read-write).
+    """
+
+    read_only: bool
+    env_read_only: bool = False
+    setting_read_only: bool | None = None
+    enforced_by: Literal[
+        "environment", "setting", "environment_and_setting", "unverified", "none"
+    ] = "none"
+    # False when the switch can only be turned on from here (the environment
+    # enforces read-only mode).
+    can_disable: bool = True
+    setting_updated_at: datetime | None = None
+    # PUT only: false when the change is saved but other processes learn of it
+    # from the database (within about 30 seconds) rather than immediately.
+    propagated: bool | None = None
+
+
+async def _setting_updated_at(session: AsyncSession) -> datetime | None:
+    from app.models.platform_settings import ADAPTER_READ_ONLY_KEY, PlatformSetting
+
+    try:
+        row = await session.get(PlatformSetting, ADAPTER_READ_ONLY_KEY)
+    except Exception:  # noqa: BLE001 - informational only
+        return None
+    return row.updated_at if row is not None else None
+
+
+def _state_from(
+    status_: Any, *, updated_at: datetime | None, propagated: bool | None = None
+) -> Any:
+    return AdapterReadOnlyState(
+        read_only=status_.read_only,
+        env_read_only=status_.env_read_only,
+        setting_read_only=status_.setting_read_only,
+        enforced_by=status_.enforced_by,
+        can_disable=not status_.env_read_only,
+        setting_updated_at=updated_at,
+        propagated=propagated,
+    )
 
 
 @router.get("/settings/adapter-read-only", response_model=AdapterReadOnlyState)
 async def get_adapter_read_only_state(
     _user: _Any = Depends(require_permissions("settings:read")),
+    session: AsyncSession = Depends(get_session),
 ) -> _Any:
-    """Current effective write-safety state (runtime override, else env default)."""
-    from app.core.runtime_flags import is_adapter_read_only
+    """Current write-safety mode, with the environment and the Settings switch."""
+    from app.core.runtime_flags import read_only_status
 
-    return AdapterReadOnlyState(read_only=is_adapter_read_only())
+    status_ = await read_only_status()
+    return _state_from(status_, updated_at=await _setting_updated_at(session))
 
 
 @router.put("/settings/adapter-read-only", response_model=AdapterReadOnlyState)
 async def set_adapter_read_only_state(
-    body: AdapterReadOnlyState,
+    body: AdapterReadOnlyUpdate,
     # Write-level gate: this mutates a platform-wide safety setting. ``settings:read``
     # (granted to org_admin) must not gate a write — require ``settings:write`` so the
     # decorator matches the operation; the is_unscoped_superuser check below remains.
     current_user: _Any = Depends(require_permissions("settings:write")),
+    session: AsyncSession = Depends(get_session),
 ) -> _Any:
-    """Flip the platform write-safety mode LIVE (no restart) — super-admin only.
+    """Turn the Settings read-only switch on or off, live (no restart). Super admin only.
 
-    Persisted as a runtime override in Redis (the env var stays the durable
-    default). Propagates to every worker's gate within a few seconds.
+    Saved in the database, then pushed to every process through Valkey. Refused
+    with 409 when asked to turn read-only off while ``ADAPTER_READ_ONLY`` is set
+    in the server environment: the Settings switch cannot override it.
     """
     if not is_unscoped_superuser(current_user):
         raise HTTPException(
             status_code=403,
             detail="Only a super administrator can change the write-safety mode",
         )
-    from app.core.runtime_flags import is_adapter_read_only, set_adapter_read_only
+    from app.core.runtime_flags import (
+        EnvironmentEnforcesReadOnly,
+        read_only_status,
+        store_adapter_read_only,
+    )
 
+    previous = await read_only_status()
     try:
-        set_adapter_read_only(body.read_only)
-    except Exception as e:  # noqa: BLE001
+        result = await store_adapter_read_only(
+            session, body.read_only, actor_id=getattr(current_user, "id", None)
+        )
+    except EnvironmentEnforcesReadOnly as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Read-only mode is set by ADAPTER_READ_ONLY=true in the server environment, "
+                "so the Settings switch cannot turn it off. Set ADAPTER_READ_ONLY=false in "
+                "the environment (.env) and restart FreeSDN to allow device writes."
+            ),
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
-            detail=f"Could not persist the setting (Redis unavailable): {e}",
-        ) from e
-    return AdapterReadOnlyState(read_only=is_adapter_read_only())
+            detail="Could not save the setting: the database is unavailable. Nothing was changed.",
+        ) from exc
+    try:
+        from app.services.audit import AuditService
+
+        await AuditService(session).log(
+            action="settings.adapter_read_only",
+            resource_type="settings",
+            resource_name="adapter_read_only",
+            actor_id=getattr(current_user, "id", None),
+            previous_state={"setting_read_only": previous.setting_read_only},
+            new_state={
+                "setting_read_only": body.read_only,
+                "read_only": result.status.read_only,
+                "enforced_by": result.status.enforced_by,
+            },
+            tags=["write-safety"],
+        )
+        await session.commit()
+    except Exception:  # noqa: BLE001 - the switch is saved; the record is best-effort
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "write-safety change saved but its audit record failed", exc_info=True
+        )
+        with contextlib.suppress(Exception):
+            await session.rollback()
+    return _state_from(
+        result.status,
+        updated_at=await _setting_updated_at(session),
+        propagated=result.propagated,
+    )
 
 
 _start_time = time.time()

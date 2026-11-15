@@ -411,6 +411,12 @@
       "targetNodePlaceholder": "Select target node",
       "targetNodeRequired": "Select a target node",
       "onlineLabel": "Online migration (QEMU VMs only)"
+    },
+    "confirmDetail": {
+      "start": "The selected guests are started on their Proxmox nodes. The requests go to the host now.",
+      "shutdown": "Each guest's operating system is asked to shut down cleanly. A guest that ignores the request keeps running.",
+      "stop": "The selected guests are powered off at once, like pulling the power cord. Unflushed disk writes inside them are lost. Prefer Shutdown unless a guest is hung.",
+      "reboot": "The selected guests restart on their Proxmox nodes. Their services are unavailable until each one is back up."
     }
   },
   "EditConfigDialog": {

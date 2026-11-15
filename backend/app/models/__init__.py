@@ -143,6 +143,7 @@ from app.models.notification import (
 )
 from app.models.notification_outbox import InAppNotificationEvent
 from app.models.oauth2 import OAuth2App, OAuth2AuthorizationCode, OAuth2Token
+from app.models.platform_settings import PlatformSetting
 from app.models.plugins import InstalledPlugin, PluginOrganizationState, PluginSetting
 from app.models.poe import PoESchedule
 from app.models.radius import (
@@ -271,6 +272,7 @@ __all__ = [
     "InstalledPlugin",
     "PluginOrganizationState",
     "PluginSetting",
+    "PlatformSetting",
     # Marketplace
     "MarketplaceCatalogState",
     "MarketplacePlugin",

@@ -14,6 +14,10 @@
         "label": "需要身份验证",
         "description": "Tailscale 守护进程正在运行但未通过身份验证。请登录以加入您的 tailnet。"
       },
+      "disconnected": {
+        "label": "已断开",
+        "description": "Tailscale 正在运行且已登录，但此节点已与 tailnet 断开连接。"
+      },
       "awaiting_auth": {
         "label": "等待授权",
         "description": "在浏览器中打开授权 URL 以完成登录。"
@@ -123,6 +127,11 @@
       "starting": "正在启动守护进程...",
       "start": "启动 Tailscale 守护进程"
     },
+    "disconnected": {
+      "title": "Tailscale 已断开",
+      "description": "此节点已与 tailnet 断开连接。重新连接后，它将使用已保存的名称、路由和设置恢复，无需重新登录。",
+      "reconnecting": "正在重新连接..."
+    },
     "unexpectedState": {
       "title": "意外状态",
       "descriptionPrefix": "Tailscale 处于状态"
@@ -135,13 +144,17 @@
     },
     "confirm": {
       "disconnect": "断开与 Tailscale 网络的连接？",
-      "logout": "登出将取消此节点在您 tailnet 中的授权。是否继续？"
+      "logout": "登出将取消此节点在您 tailnet 中的授权。是否继续？",
+      "disconnectBody": "此节点将离开 tailnet，直到您重新连接。它仍保持授权，因此重新连接无需再次登录。如果您通过 Tailscale 访问 FreeSDN，该连接将会断开。",
+      "logoutTitle": "登出 Tailscale？",
+      "logoutBody": "此节点将在您的 tailnet 中被取消授权。再次加入需要重新登录或新的认证密钥。如果您通过 Tailscale 访问 FreeSDN，该连接将会断开。"
     },
     "actions": {
       "copy": "复制",
       "retry": "重试",
       "refresh": "刷新",
-      "reconnect": "重新连接"
+      "reconnect": "重新连接",
+      "copyField": "复制{{label}}"
     },
     "toast": {
       "copied": {
@@ -217,7 +230,8 @@
       "editAria": "编辑连接",
       "deleteAria": "删除连接",
       "hideHealth": "隐藏健康历史",
-      "showHealth": "显示健康历史"
+      "showHealth": "显示健康历史",
+      "disconnectBody": "这会立即在 FreeSDN 服务器上关闭此隧道。通过它访问的站点和设备将停止响应，直到你重新连接。如果你是通过此隧道访问 FreeSDN 本身，你将失去访问权限。"
     },
     "connectionForm": {
       "updatedToast": "连接已更新",
@@ -410,7 +424,11 @@
       "allConnections": "所有 VPN 连接",
       "emptyTitle": "暂无 VPN 连接",
       "emptyDescription": "尚未配置任何 VPN 连接。创建您的第一个连接以开始管理远程网络访问。",
-      "emptyAction": "创建第一个连接"
+      "emptyAction": "创建第一个连接",
+      "disconnectedHint": "此节点已与 tailnet 断开连接。",
+      "reconnect": "重新连接",
+      "reconnected": "Tailscale 已重新连接",
+      "reconnectFailed": "无法重新连接 Tailscale"
     },
     "actions": {
       "newConnection": "新建连接",
@@ -515,7 +533,7 @@
       "activeTunnels": "活动隧道",
       "enable": "启用",
       "disable": "禁用",
-      "disableConfirm": "禁用此隧道？流量将停止传输。",
+      "disableConfirm": "将此隧道标记为禁用？FreeSDN 将停止对其进行健康检查。网关仍保留其配置，因此在你拆除隧道之前流量会继续传输。",
       "teardownConfirm": "拆除 {{siteA}} 与 {{siteB}} 之间的隧道？",
       "siteA": "站点 A",
       "siteB": "站点 B",
@@ -523,7 +541,12 @@
       "provisioned": "配置于 {{date}}",
       "lastCheck": "上次检查 {{date}}",
       "emptyTitle": "暂无站点到站点隧道",
-      "emptyDescription": "请先创建隧道模板，然后在站点之间配置隧道。"
+      "emptyDescription": "请先创建隧道模板，然后在站点之间配置隧道。",
+      "disableTitle": "禁用 {{siteA}} 与 {{siteB}} 之间的隧道？",
+      "disableBody": "FreeSDN 将停止对其进行健康检查。网关仍保留其配置，因此在你拆除隧道之前流量会继续传输。",
+      "disableAction": "禁用隧道",
+      "teardownBody": "FreeSDN 会立即要求两端网关删除此隧道的配置，然后删除该隧道。如果某个网关无法删除配置，隧道仍会在这里被删除，而配置会保留在该网关上，因此请在之后检查两端网关。",
+      "teardownAction": "拆除隧道"
     },
     "conflictsTab": {
       "loadError": "加载路由冲突数据失败。",

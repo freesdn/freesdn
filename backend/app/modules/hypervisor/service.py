@@ -288,7 +288,12 @@ class HypervisorService:
     async def _get_adapter(controller: Any) -> ProxmoxAdapter:
         """Create a Proxmox adapter from a controller record."""
         from app.core.crypto import decrypt_credential
+        from app.core.device_slot import controller_slot_key
+        from app.services.device_live_read import take_device_turn
 
+        # A page's live read waits briefly for the cluster's turn, or is
+        # answered with its last response (app/services/device_live_read.py).
+        await take_device_turn(controller_slot_key(controller))
         config = controller.config or {}
 
         # Determine auth method
@@ -1464,6 +1469,9 @@ class HypervisorService:
 
     async def get_next_vmid(self, controller: Any) -> NextVMIDResponse:
         """Get next available VMID."""
+        from app.services.device_live_read import uncacheable_read
+
+        uncacheable_read()  # a remembered "next free id" may already be taken
         async with await self._get_adapter(controller) as adapter:
             result = await adapter.get_next_vmid()
             if not result.success:
@@ -2071,20 +2079,11 @@ class HypervisorService:
         # refuse on the direct path — restore overwrites a live
         # guest and skipped the staged pre-flight / confirmed=true / archive-volid
         # validation. Route through the staged proxmox.backup.restore endpoint.
+        #
+        # The adapter call that used to follow this line was unreachable (the
+        # refusal always raises) and is gone: the staged restore is the only
+        # path that reaches the device.
         _refuse_direct_catastrophic("restore_backup")
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.restore_backup(
-                node,
-                vm_type,
-                archive,
-                vmid,
-                storage,
-                start,
-                unique,
-            )
-            if not result.success:
-                raise ValueError(result.error or "Failed to restore backup")
-            return result.data
 
     async def get_prune_preview(
         self,
@@ -2146,20 +2145,53 @@ class HypervisorService:
     async def update_cloudinit_config(
         self, controller: Any, node: str, vmid: int, config: dict
     ) -> dict:
-        """Update CloudInit config for a QEMU VM."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.update_guest_cloudinit(node, vmid, config)
-            if not result.success:
-                raise ValueError(result.error or "Failed to update CloudInit config")
-            return result.data
+        """Update CloudInit config for a QEMU VM.
+
+        Staged and applied in this request (a ``direct.hypervisor.cloudinit``
+        ledger row; ``cipassword`` and keys masked): refused in read-only mode
+        before the hypervisor is contacted, and run in its turn.
+        """
+        from app.services.device_writes import request_actor_id, write_controller_config
+
+        async def _update() -> Any:
+            async with await self._get_adapter(controller) as adapter:
+                return await adapter.update_guest_cloudinit(node, vmid, config)
+
+        result = await write_controller_config(
+            self.db,
+            controller.id,
+            actor_id=request_actor_id(),
+            feature="hypervisor.cloudinit",
+            operation="update",
+            target_id=f"{node}/{vmid}",
+            payload={"node": node, "vmid": vmid, **config},
+            perform=_update,
+        )
+        if not result.success:
+            raise ValueError(result.error or "Failed to update CloudInit config")
+        return result.data
 
     async def regenerate_cloudinit(self, controller: Any, node: str, vmid: int) -> dict:
-        """Regenerate CloudInit drive."""
-        async with await self._get_adapter(controller) as adapter:
-            result = await adapter.regenerate_cloudinit(node, vmid)
-            if not result.success:
-                raise ValueError(result.error or "Failed to regenerate CloudInit drive")
-            return result.data
+        """Regenerate CloudInit drive (staged and applied, like the update)."""
+        from app.services.device_writes import request_actor_id, write_controller_config
+
+        async def _regenerate() -> Any:
+            async with await self._get_adapter(controller) as adapter:
+                return await adapter.regenerate_cloudinit(node, vmid)
+
+        result = await write_controller_config(
+            self.db,
+            controller.id,
+            actor_id=request_actor_id(),
+            feature="hypervisor.cloudinit.regenerate",
+            operation="update",
+            target_id=f"{node}/{vmid}",
+            payload={"node": node, "vmid": vmid},
+            perform=_regenerate,
+        )
+        if not result.success:
+            raise ValueError(result.error or "Failed to regenerate CloudInit drive")
+        return result.data
 
     # ═══════════════════════════════════════════════════════════════════════
     # HELPERS (static)

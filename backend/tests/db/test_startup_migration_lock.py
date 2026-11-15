@@ -99,3 +99,30 @@ def test_failed_migration_releases_guard(startup_database):
             )
             is True
         )
+
+
+def test_a_long_migration_keeps_its_guard_past_the_idle_in_transaction_backstop(
+    startup_database, maintenance_engine
+):
+    """The guard is idle in its transaction for the whole migration. With the
+    idle-in-transaction backstops (PostgreSQL 10 min, PgBouncer 5 min) a
+    migration longer than the backstop would lose the lock half-way and then
+    fail the final commit. Fails without the keepalive: the server terminates
+    the guard session and leaving the block raises."""
+    url, engine = startup_database
+    with maintenance_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as admin:
+        admin.execute(
+            text(f'ALTER DATABASE "{url.database}" SET idle_in_transaction_session_timeout = 1000')
+        )
+    engine.dispose()  # new sessions pick the database setting up
+    with migration_lock(engine, keepalive_seconds=0.2):
+        time.sleep(2.5)  # a "migration" 2.5x longer than the backstop
+        with engine.connect() as probe:
+            held = probe.scalar(
+                text(
+                    "SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND granted "
+                    "AND objid = :low"
+                ),
+                {"low": STARTUP_MIGRATION_LOCK & 0xFFFFFFFF},
+            )
+        assert held == 1, "the guard lost the migration lock while the migration ran"

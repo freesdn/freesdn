@@ -39,11 +39,11 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useForm, type DefaultValues, type UseFormReturn, type FieldValues } from 'react-hook-form';
+import { useForm, type DefaultValues, type UseFormReturn, type FieldValues, type Path } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { ZodType } from 'zod';
 import { Loader2, AlertCircle } from 'lucide-react';
-import { getApiErrorMessage } from '@/lib/api/client';
+import { getApiErrorMessage, getApiFieldErrors } from '@/lib/api/errors';
 import {
   Dialog,
   DialogContent,
@@ -143,6 +143,14 @@ export function FormDialog<T extends FieldValues>({
       await onSubmit(values, form);
     } catch (err) {
       setServerError(extractErrorMessage(err));
+      // A 422 names the offending fields. Put each message under its own
+      // input as well, so the operator sees which one to fix.
+      const values = form.getValues() as Record<string, unknown>;
+      for (const [field, message] of Object.entries(getApiFieldErrors(err))) {
+        if (hasPath(values, field)) {
+          form.setError(field as Path<T>, { type: 'server', message });
+        }
+      }
     }
   });
 
@@ -202,6 +210,15 @@ export function FormDialog<T extends FieldValues>({
 
 /** Extract a human-readable error message from anything thrown during submit. */
 function extractErrorMessage(err: unknown): string {
-  if (!err) return 'An unexpected error occurred';
-  return getApiErrorMessage(err, String(err));
+  return getApiErrorMessage(err);
+}
+
+/** True when a dotted path (``name``, ``ports.0.vlan``) exists in the form values. */
+function hasPath(values: Record<string, unknown>, path: string): boolean {
+  let node: unknown = values;
+  for (const part of path.split('.')) {
+    if (typeof node !== 'object' || node === null || !(part in node)) return false;
+    node = (node as Record<string, unknown>)[part];
+  }
+  return true;
 }

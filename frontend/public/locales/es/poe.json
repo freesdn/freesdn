@@ -136,6 +136,11 @@
         "title": "Sin programaciones",
         "description": "Cree una programación para controlar automáticamente la energía PoE",
         "notSupported": "La programación de PoE no es compatible con este dispositivo"
+      },
+      "confirmDelete": {
+        "title": "¿Eliminar la programación de PoE \"{{name}}\"?",
+        "body": "FreeSDN deja de encender y apagar estos puertos según esta programación. Cada puerto conserva su estado de alimentación actual, así que un puerto que la programación apagó sigue apagado hasta que lo enciendas.",
+        "action": "Eliminar programación"
       }
     },
     "portDialog": {

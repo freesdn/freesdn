@@ -109,7 +109,10 @@
       "distribute": "分发",
       "retract": "撤回",
       "delete": "删除",
-      "deleteConfirm": "删除此规范 VLAN？此操作无法撤销。"
+      "deleteConfirm": "删除此规范 VLAN？此操作无法撤销。",
+      "deleteTitle": "删除 VLAN {{vlanId}}“{{name}}”？",
+      "deleteBody": "这只会从 FreeSDN 中删除该 VLAN。已分发到设备上的副本会保留；如需移除，请先在“分发”选项卡中回滚其分发。",
+      "deleteAction": "删除 VLAN"
     },
     "vlans": {
       "searchPlaceholder": "搜索 VLAN...",
@@ -161,7 +164,10 @@
     },
     "templateActions": {
       "delete": "删除",
-      "deleteConfirm": "删除此 VLAN 模板？此操作无法撤销。"
+      "deleteConfirm": "删除此 VLAN 模板？此操作无法撤销。",
+      "deleteTitle": "删除 VLAN 模板“{{name}}”？",
+      "deleteBody": "已基于此模板创建的 VLAN 会保留，任何设备上都不会有更改。",
+      "deleteAction": "删除模板"
     },
     "templates": {
       "createTemplate": "创建模板"
@@ -521,7 +527,7 @@
       "placeholder": "选择站点",
       "empty": "没有可用的站点。"
     },
-    "unreachable": "无法连接控制器 — 请确认其在线且可达（主机、端口、凭据），然后重试。"
+    "unreachable": "无法连接控制器，请确认其在线且可达（主机、端口、凭据），然后重试。"
   },
   "GatewayFirmwarePage": {
     "header": {

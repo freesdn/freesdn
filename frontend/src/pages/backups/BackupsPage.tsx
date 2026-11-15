@@ -41,6 +41,7 @@ import {
   FolderSync,
 } from 'lucide-react';
 import { PageHeader, PageTabs, type PageTab } from '@/components/layout';
+import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
 import { StatusBadge, type StatusVariant } from '@/components/ui/status-indicator';
 import { EmptyState } from '@/components/ui/empty-state';
 import { BulkActionsBar } from '@/components/ui/bulk-actions-bar';
@@ -82,8 +83,11 @@ import type { BackupManifestPreview, RestoreJob } from '@/lib/api';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { beginVaultExport } from '@/lib/api/vaultExportTransport';
 import { VaultExportDialog, type OwnedVaultScope } from './VaultExportDialog';
+import { DatabaseBackupStatusCard } from './DatabaseBackupStatusCard';
+import { DeviceConfigBackupsSection } from './DeviceConfigBackupsSection';
 
 interface Backup {
   id: string;
@@ -433,6 +437,7 @@ export default function BackupsPage() {
   const { t } = useTranslation('backup');
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const archiveUser = useAuthStore((state) => state.user);
   const canManageArchives = mayAccessArchive(archiveUser, false);
   const canManageVaults = mayAccessArchive(archiveUser, true);
@@ -1100,6 +1105,7 @@ export default function BackupsPage() {
         {/* Header */}
         <PageHeader
           title={t('BackupsPage.header.title')}
+          titleBadge={<CapabilityMaturityBadge capabilityId="backup_restore" />}
           description={t('BackupsPage.header.description')}
           icon={Archive}
           onRefresh={() => {
@@ -1143,6 +1149,10 @@ export default function BackupsPage() {
           </AlertDescription>
         </Alert>
 
+        {/* The instance's own disaster-recovery dumps: OFF on a fresh install
+            until a GPG key is installed (admins only). */}
+        <DatabaseBackupStatusCard />
+
         {hasQueryError && (
           <Card className="border-destructive">
             <CardContent noOffset className="p-4 flex items-center gap-3">
@@ -1152,17 +1162,20 @@ export default function BackupsPage() {
           </Card>
         )}
 
+        {/* Network device configuration history (read-only exports). */}
+        <DeviceConfigBackupsSection />
+
         {/* Quick Actions Bar */}
         <Card>
-          <CardContent noOffset className="flex items-center justify-between p-4">
+          <CardContent noOffset className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
-              <FileJson className="h-5 w-5 text-primary" />
+              <FileJson className="h-5 w-5 shrink-0 text-primary" />
               <div>
                 <h3 className="text-sm font-medium text-foreground">{t('BackupsPage.quickActions.title')}</h3>
                 <p className="text-xs text-muted-foreground">{t('BackupsPage.quickActions.subtitle')}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -1385,12 +1398,13 @@ export default function BackupsPage() {
                     key={backup.id}
                     className="bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition-colors"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <input
-                          type="checkbox"
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+                        {/* The shared Checkbox, not a native input: the native box
+                            rendered as a bright white square in the default dark theme. */}
+                        <Checkbox
                           checked={selectedBackupIds.has(backup.id)}
-                          onChange={() => {
+                          onCheckedChange={() => {
                             setSelectedBackupIds((prev) => {
                               const next = new Set(prev);
                               if (next.has(backup.id)) next.delete(backup.id); else next.add(backup.id);
@@ -1398,13 +1412,12 @@ export default function BackupsPage() {
                             });
                           }}
                           aria-label={t('BackupsPage.actions.selectItem', { name: backup.name })}
-                          className="h-4 w-4"
                         />
-                        <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                        <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/20 sm:flex">
                           {storageIcons[backup.storage_type] || <Archive className="h-5 w-5" />}
                         </div>
-                        <div>
-                          <h3 className="font-medium text-foreground flex items-center gap-2">
+                        <div className="min-w-0">
+                          <h3 className="font-medium text-foreground flex flex-wrap items-center gap-x-2 gap-y-1 break-words">
                             {backup.name}
                             {backup.backup_type === 'rollback_slot' && (
                               <Badge
@@ -1416,13 +1429,13 @@ export default function BackupsPage() {
                               </Badge>
                             )}
                           </h3>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
                             <span>{formatDate(backup.created_at)}</span>
-                            <span>•</span>
+                            <span aria-hidden="true" className="hidden sm:inline">•</span>
                             <span>{formatBytes(backup.file_size)}</span>
                             {backup.is_encrypted && (
                               <>
-                                <span>•</span>
+                                <span aria-hidden="true" className="hidden sm:inline">•</span>
                                 <Badge variant="outline" className="text-xs">{t('BackupsPage.common.encrypted')}</Badge>
                               </>
                             )}
@@ -1430,9 +1443,9 @@ export default function BackupsPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4">
+                      <div className="flex shrink-0 items-center gap-2 sm:gap-4">
                         {backup.status === 'in_progress' && (
-                          <div className="w-32">
+                          <div className="hidden w-32 sm:block">
                             <Progress value={backup.progress} className="h-2" />
                             <span className="text-xs text-muted-foreground">
                               {backup.progress}%
@@ -1444,7 +1457,12 @@ export default function BackupsPage() {
                         </StatusBadge>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              aria-label={t('BackupsPage.actions.menuFor', { name: backup.name })}
+                            >
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -3308,9 +3326,19 @@ export default function BackupsPage() {
               label: t('BackupsPage.actions.delete'),
               icon: Trash2,
               variant: 'destructive',
-              onClick: () => {
-                if (confirm(t('BackupsPage.bulk.deleteConfirm', { count: selectedBackupIds.size }))) {
-                  selectedBackupIds.forEach((id) => deleteMutation.mutate(id));
+              onClick: async () => {
+                const ids = [...selectedBackupIds];
+                const ok = await confirm({
+                  title: t('BackupsPage.bulk.deleteConfirm', { count: ids.length }),
+                  description: t('BackupsPage.bulk.deleteBody'),
+                  count: ids.length,
+                  // A selected backup outside the current list still shows, by its id.
+                  items: ids.map((id) => backups.find((b: Backup) => b.id === id)?.name || id),
+                  confirmLabel: t('BackupsPage.bulk.deleteAction'),
+                  destructive: true,
+                });
+                if (ok) {
+                  ids.forEach((id) => deleteMutation.mutate(id));
                   setSelectedBackupIds(new Set());
                 }
               },

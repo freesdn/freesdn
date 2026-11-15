@@ -29,6 +29,10 @@ Sender:
 
 Channel layout:
     freesdn:ws:user:{user_id}   — targeted single-user fan-out
+    freesdn:ws:control          — "close these sockets" orders (a retired
+                                  organization's members, a deleted agent),
+                                  which every process must carry out on the
+                                  sockets it holds
 """
 
 from __future__ import annotations
@@ -50,12 +54,16 @@ logger = logging.getLogger(__name__)
 # targeted-message envelopes (they're not Event dataclasses).
 _CHANNEL_PREFIX = "freesdn:ws:user:"
 _PATTERN = "freesdn:ws:user:*"
+# A plain channel, outside the user pattern, so a control order can never be
+# delivered as a targeted message (or the other way round).
+_CONTROL_CHANNEL = "freesdn:ws:control"
 
 # Bounded reconnect backoff — same shape as EventBus._listen_redis.
 _RECONNECT_DELAY_SEC = 5.0
 
 # Type alias for the delivery callback the ConnectionManager registers.
 TargetedHandler = Callable[[str, dict[str, Any]], Awaitable[None]]
+ControlHandler = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class WSCrossInstanceBus:
@@ -76,16 +84,20 @@ class WSCrossInstanceBus:
         self._listener_task: asyncio.Task[None] | None = None
         self._running: bool = False
         self._on_targeted: TargetedHandler | None = None
+        self._on_control: ControlHandler | None = None
 
     @property
     def connected(self) -> bool:
         return self._running and self._redis is not None
 
-    async def connect(self, *, on_targeted: TargetedHandler) -> None:
+    async def connect(
+        self, *, on_targeted: TargetedHandler, on_control: ControlHandler | None = None
+    ) -> None:
         """Connect to Redis and start the listener task.
 
         ``on_targeted`` is invoked with ``(user_id, payload)`` for every
-        remote message (i.e. messages NOT originating from this pod).
+        remote message (i.e. messages NOT originating from this pod), and
+        ``on_control`` with the payload of every remote control order.
         If ``redis_url`` was not provided at construction time, this
         is a no-op — the manager falls back to single-pod behaviour
         with a debug log.
@@ -98,6 +110,7 @@ class WSCrossInstanceBus:
             return
 
         self._on_targeted = on_targeted
+        self._on_control = on_control
         # socket_connect_timeout bounds the connect so a black-holed Redis fails
         # fast at boot instead of blocking startup; no socket_timeout (would break
         # the long-lived pub/sub listen).
@@ -109,6 +122,7 @@ class WSCrossInstanceBus:
         self._redis = get_async_redis(socket_connect_timeout=5, socket_timeout=None)
         self._pubsub = self._redis.pubsub()
         await self._pubsub.psubscribe(_PATTERN)
+        await self._pubsub.subscribe(_CONTROL_CHANNEL)
         self._running = True
         self._listener_task = asyncio.create_task(self._listen())
 
@@ -185,6 +199,21 @@ class WSCrossInstanceBus:
                 user_id,
             )
 
+    async def publish_control(self, payload: dict[str, Any]) -> None:
+        """Send a control order to every other process.
+
+        The caller carries the order out on its own sockets first; this
+        process drops its own echo. A no-op without Redis (a single process
+        has no one else to tell).
+        """
+        if not self.connected or self._redis is None:
+            return
+        envelope = {"source_pod_id": self.pod_id, "control": payload}
+        try:
+            await self._redis.publish(_CONTROL_CHANNEL, json.dumps(envelope, default=str))
+        except Exception:
+            logger.exception("WSCrossInstanceBus: publish_control failed (%s)", payload)
+
     async def _listen(self) -> None:
         """Listener loop with automatic reconnection.
 
@@ -200,7 +229,7 @@ class WSCrossInstanceBus:
                     ignore_subscribe_messages=True,
                     timeout=1.0,
                 )
-                if message and message["type"] == "pmessage":
+                if message and message["type"] in ("pmessage", "message"):
                     await self._handle_message(message)
             except asyncio.CancelledError:
                 break
@@ -223,7 +252,18 @@ class WSCrossInstanceBus:
             return
 
         # Drop self-published messages — we already delivered locally.
-        if envelope.get("source_pod_id") == self.pod_id:
+        if not isinstance(envelope, dict) or envelope.get("source_pod_id") == self.pod_id:
+            return
+
+        if message["type"] == "message":
+            # Only the control channel is a plain subscription.
+            control = envelope.get("control")
+            if not isinstance(control, dict) or self._on_control is None:
+                return
+            try:
+                await self._on_control(control)
+            except Exception:
+                logger.exception("WSCrossInstanceBus: control handler failed (%s)", control)
             return
 
         user_id = envelope.get("user_id")
@@ -258,6 +298,7 @@ class WSCrossInstanceBus:
             self._redis = get_async_redis(socket_connect_timeout=5, socket_timeout=None)
             self._pubsub = self._redis.pubsub()
             await self._pubsub.psubscribe(_PATTERN)
+            await self._pubsub.subscribe(_CONTROL_CHANNEL)
             logger.info("WSCrossInstanceBus reconnected to Redis")
         except Exception as exc:
             logger.error("WSCrossInstanceBus reconnect failed: %s", exc)

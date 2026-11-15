@@ -123,8 +123,13 @@ async def fabric_permission_checker(actor_id: UUID | None, permission: str, org_
                 or getattr(user, "deleted_at", None) is not None
             ):
                 return False
-            # The author must still belong to the Connection's org.
+            # The author must still belong to the Connection's org, and that
+            # org must still be live.
             if user.organization_id != org_id:
+                return False
+            from app.core.organization_access import organization_admits
+
+            if not await organization_admits(db, user):
                 return False
             perms = await _load_user_permissions(user)
             return CurrentUser(user, perms).has_permission(permission)

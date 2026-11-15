@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.organization_access import organization_admits
 from app.core.security import create_access_token, create_refresh_token
 from app.core.security_utils import (
     decrypt_field,
@@ -1259,6 +1260,10 @@ class SSOService:
         enforcing MFA, in which case we skip the local TOTP gate.
         """
         self._require_flow_current(flow_expires_at)
+        # OIDC, SAML and LDAP all end here. A member of a deleted or
+        # deactivated organization gets the same refusal as a disabled account.
+        if not await organization_admits(self.db, user):
+            raise SSOAuthError("Account is unavailable")
         token_version = getattr(user, "token_version", 0) or 0
 
         # ------------------------------------------------------------------

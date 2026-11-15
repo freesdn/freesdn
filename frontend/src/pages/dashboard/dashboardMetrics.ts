@@ -28,6 +28,20 @@ export function buildTrafficChartData(
   ];
 }
 
+/** A MiB total as a short human figure: "812 MiB", "3.4 GiB", "1.2 TiB". */
+export function formatMebibytes(mib: number, locale?: string): string {
+  if (!Number.isFinite(mib) || mib < 0) return '-';
+  const units = ['MiB', 'GiB', 'TiB', 'PiB'];
+  let value = mib;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const digits = value >= 100 || unit === 0 ? 0 : 1;
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value)} ${units[unit]}`;
+}
+
 // ── Helper: build network health from enterprise analytics ──────────
 
 export function buildNetworkHealth(analytics: EnterpriseAnalytics | undefined, t: TFunction) {

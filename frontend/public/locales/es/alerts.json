@@ -129,6 +129,34 @@
       "errorTitle": "Error",
       "operationFailed": "La operación falló",
       "securityReviewUnavailable": "La revisión de eventos de seguridad aún no está disponible"
+    },
+    "status": {
+      "firing": "Activa",
+      "acknowledged": "Reconocida",
+      "resolved": "Resuelta",
+      "suppressed": "Suprimida",
+      "open": "Abierto",
+      "investigating": "En investigación",
+      "mitigating": "En mitigación",
+      "closed": "Cerrado",
+      "failed": "Fallido",
+      "success": "Correcto"
+    },
+    "securityRow": {
+      "description": "{{user}} desde {{ip}} · riesgo {{risk}}",
+      "unknownUser": "Usuario desconocido",
+      "unknownIp": "IP desconocida"
+    },
+    "incidentRow": {
+      "fallbackDescription": "Incidente con {{count}} eventos correlacionados"
+    },
+    "severity": {
+      "critical": "Crítica",
+      "high": "Alta",
+      "warning": "Advertencia",
+      "medium": "Media",
+      "low": "Baja",
+      "info": "Información"
     }
   }
 }

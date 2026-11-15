@@ -320,7 +320,11 @@ class DistributionService:
             return {}
 
         uuids = [UUID(rid) for rid in raw_ids]
-        q = select(GatewayConnection).where(GatewayConnection.id.in_(uuids))
+        # A soft-deleted gateway is never written to: it is left out, so its
+        # steps refuse in the preflight ("not found") and nothing runs.
+        q = select(GatewayConnection).where(
+            GatewayConnection.id.in_(uuids), GatewayConnection.deleted_at.is_(None)
+        )
         if org_id is not None:
             q = q.where(GatewayConnection.org_id == org_id)
         result = await self.db.execute(q)
@@ -333,7 +337,14 @@ class DistributionService:
         limbs: list[SiteRoleAssignment],
         vlan: CanonicalVLAN,
     ) -> None:
-        """Execute the distribution plan tier by tier.
+        """Execute the distribution plan as ONE staged change group.
+
+        Every write step is a member (a ``direct.gateway.distribution.*``
+        ledger row, in tier order) and every device is preflighted before any
+        step runs: it must be a known, not deleted, gateway of this
+        organization, its adapter must offer the step, and it must answer (the
+        plan's ``verify_reachable`` steps). A refused preflight runs nothing.
+        The first step that fails stops the rest.
 
         On mid-plan failure, we **build
         and persist a rollback plan** from the steps that already
@@ -345,10 +356,15 @@ class DistributionService:
         so the operator can inspect + execute it via the
         ``/distribution/{id}/rollback`` endpoint.
         """
+        from fastapi import HTTPException
+
+        from app.services.device_writes import apply_group_through_staging
+
         record.status = DistributionStatus.EXECUTING
         record.started_at = datetime.now(UTC)
         step_results: list[dict[str, Any]] = []
         succeeded_steps: list[dict[str, Any]] = []
+        gw_cache: dict[UUID, GatewayConnection] = {}
 
         try:
             steps = record.plan.get("steps", [])
@@ -359,39 +375,74 @@ class DistributionService:
                 steps,
                 org_id=record.organization_id,
             )
+            ordered = sorted(steps, key=lambda step: step["tier"])
+            reach: dict[str, str | None] = {}
+            members, by_key, durations = self._plan_members(ordered, gw_cache, reach, record)
 
-            tiers = sorted({s["tier"] for s in steps})
+            try:
+                outcome = await apply_group_through_staging(
+                    self.db,
+                    members,
+                    # The distribution routes have never taken a force flag.
+                    force=True,
+                    actor_id=record.triggered_by,
+                    notes=f"distribution {record.id} ({record.action} {record.resource_type})",
+                )
+            except HTTPException as exc:
+                # Read-only mode: refused before any device was contacted.
+                raise DistributionError(str(exc.detail)) from None
 
-            for tier in tiers:
-                tier_steps = [s for s in steps if s["tier"] == tier]
-                for step in tier_steps:
-                    t0 = time.monotonic()
-                    try:
-                        await self._execute_step(step, gw_cache)
-                        elapsed = int((time.monotonic() - t0) * 1000)
-                        step_results.append(
-                            {
-                                **step,
-                                "status": "success",
-                                "duration_ms": elapsed,
-                            }
-                        )
-                        succeeded_steps.append(step)
-                    except Exception as exc:
-                        elapsed = int((time.monotonic() - t0) * 1000)
-                        step_results.append(
-                            {
-                                **step,
-                                "status": "failed",
-                                "duration_ms": elapsed,
-                                # type-name only — adapter exceptions can
-                                # carry controller URLs / auth fragments.
-                                "error": type(exc).__name__,
-                            }
-                        )
-                        raise DistributionError(
-                            f"Tier {tier} failed on {step.get('action')}: {type(exc).__name__}"
-                        ) from exc
+            status_of = {m.key: m for m in outcome.members}
+            failure: str | None = None
+            for step in ordered:
+                action = step.get("action", "")
+                if action == "verify_reachable":
+                    device_id = step.get("device_id")
+                    if device_id not in reach:
+                        continue
+                    reason = reach[device_id]
+                    step_results.append(
+                        {
+                            **step,
+                            "status": "failed" if reason else "success",
+                            "duration_ms": 0,
+                            **({"error": reason} if reason else {}),
+                        }
+                    )
+                    if reason and failure is None:
+                        failure = f"Tier {step['tier']} failed on verify_reachable: {reason}"
+                    continue
+                if action == "verify_all":
+                    if outcome.applied:
+                        step_results.append({**step, "status": "success", "duration_ms": 0})
+                    continue
+                key = by_key.get(id(step))
+                member = status_of.get(key) if key else None
+                if member is None or member.status == "not_applied":
+                    continue
+                if member.status == "applied":
+                    succeeded_steps.append(step)
+                    step_results.append(
+                        {**step, "status": "success", "duration_ms": durations.get(key, 0)}
+                    )
+                    continue
+                step_results.append(
+                    {
+                        **step,
+                        "status": "failed",
+                        "duration_ms": durations.get(key, 0),
+                        # Reason text only: adapter exceptions are reported by
+                        # their type name, never their message.
+                        "error": member.reason or member.status,
+                    }
+                )
+                if failure is None:
+                    failure = f"Tier {step['tier']} failed on {action}: {member.reason}"
+            if outcome.preflight_refused and failure is None:
+                refused = next((m for m in outcome.members if m.reason), None)
+                failure = f"Preflight refused: {refused.reason if refused else 'not applied'}"
+            if not outcome.applied and members:
+                raise DistributionError(failure or "the distribution did not complete")
 
             record.status = DistributionStatus.COMPLETED
         except DistributionError as exc:
@@ -406,6 +457,7 @@ class DistributionService:
             if succeeded_steps:
                 record.rollback_plan = self._build_compensation_plan(
                     succeeded_steps,
+                    gw_cache,
                 )
                 record.rollback_executed = False
                 logger.error(
@@ -422,9 +474,120 @@ class DistributionService:
             record.completed_at = datetime.now(UTC)
             await self.db.flush()
 
+    def _plan_members(
+        self,
+        ordered: list[dict[str, Any]],
+        gw_cache: dict[UUID, GatewayConnection],
+        reach: dict[str, str | None],
+        record: DistributionRecord,
+    ) -> tuple[list[Any], dict[int, str], dict[str, int]]:
+        """A change-group member per write step of the plan, in tier order."""
+        from app.core.device_slot import gateway_slot_key
+        from app.services.adapter_staging import GroupMember
+
+        members: list[Any] = []
+        by_key: dict[int, str] = {}
+        durations: dict[str, int] = {}
+        for index, step in enumerate(ordered):
+            action = step.get("action", "")
+            if action in ("verify_reachable", "verify_all"):
+                continue
+            # Security: reject unknown actions before anything is dispatched.
+            if action not in _ALLOWED_ACTIONS:
+                raise DistributionError(f"Disallowed distribution action: {action}")
+            device_id = step.get("device_id")
+            if not device_id:
+                continue
+            gw = gw_cache.get(UUID(device_id))
+            key = f"{index}:{action}:{device_id}"
+            by_key[id(step)] = key
+            params = dict(step.get("params", {}))
+
+            async def _preflight(
+                device_id: str = device_id, gw: Any = gw, action: str = action
+            ) -> str | None:
+                if gw is None:
+                    return f"Gateway {device_id} not found"
+                if device_id not in reach:
+                    reach[device_id] = await self._reachability(gw)
+                if reach[device_id]:
+                    return reach[device_id]
+                if not hasattr(build_adapter(gw), action):
+                    return f"Adapter missing method: {action}"
+                return None
+
+            async def _perform(
+                gw: Any = gw, action: str = action, params: dict[str, Any] = params, key: str = key
+            ) -> Any:
+                t0 = time.monotonic()
+                try:
+                    adapter = build_adapter(gw)
+                    async with adapter:
+                        if action == "create_vlan_interface":
+                            return await adapter.create_vlan_interface(**params)
+                        if action == "create_dhcp_scope":
+                            return await adapter.create_dhcp_scope(**params)
+                        if action == "create_alias":
+                            return await adapter.create_alias(**params)
+                        if action == "create_vlan":
+                            return await adapter.create_vlan(**params)
+                        if action == "suppress_dhcp":
+                            return await adapter.suppress_dhcp(**params)
+                        if action == "delete_vlan_interface":
+                            return await adapter.delete_vlan_interface(**params)
+                        if action == "delete_dhcp_scope":
+                            return await adapter.delete_dhcp_scope(**params)
+                        if action == "delete_alias":
+                            return await adapter.delete_alias(**params)
+                        if action == "delete_vlan":
+                            return await adapter.delete_vlan(**params)
+                        raise DistributionError(f"Disallowed distribution action: {action}")
+                finally:
+                    durations[key] = int((time.monotonic() - t0) * 1000)
+
+            members.append(
+                GroupMember(
+                    key=key,
+                    organization_id=record.organization_id,
+                    controller_id=None,
+                    site_id=gw.site_id if gw is not None else record.site_id,
+                    feature=f"gateway.distribution.{action}",
+                    operation=(
+                        "delete"
+                        if action.startswith("delete_")
+                        else "update"
+                        if action == "suppress_dhcp"
+                        else "create"
+                    ),
+                    target_id=device_id,
+                    payload={
+                        "distribution_id": str(record.id),
+                        "tier": step.get("tier"),
+                        "gateway_id": device_id,
+                        **params,
+                    },
+                    perform=_perform,
+                    preflight=_preflight,
+                    slot_key=gateway_slot_key(gw) if gw is not None else None,
+                )
+            )
+        return members, by_key, durations
+
+    @staticmethod
+    async def _reachability(gw: GatewayConnection) -> str | None:
+        """None when the gateway answers; otherwise why it did not."""
+        try:
+            adapter = build_adapter(gw)
+            async with adapter:
+                pass  # successful connect/disconnect proves reachability
+        except Exception as exc:  # noqa: BLE001 - the reason is the answer
+            return f"Gateway {gw.id} is unreachable ({type(exc).__name__})"
+        return None
+
     @staticmethod
     def _build_compensation_plan(
         succeeded_steps: list[dict[str, Any]],
+        gw_cache: dict[UUID, GatewayConnection] | None = None,
     ) -> dict[str, Any]:
         """Build a reverse-order compensation plan from the steps
         that already committed before the failure. Inverts each
@@ -432,6 +595,34 @@ class DistributionService:
         ``delete_alias``, etc. Unsupported actions are flagged for
         manual review rather than guessed.
         """
+        from app.services.device_writes import adapter_implements
+
+        # The two brain steps every plan has. Their deletes take only the
+        # alias name / VLAN id (the create's subnet, members and so on are
+        # not delete arguments), and are offered only when the gateway's
+        # adapter really has them; otherwise the step stays manual, with why.
+        named_inverse = {
+            "create_alias": ("delete_alias", "name"),
+            "create_vlan_interface": ("delete_vlan_interface", "vlan_id"),
+        }
+
+        def _why_manual(step: dict[str, Any], inverse: str, key: str) -> str | None:
+            if (step.get("params") or {}).get(key) in (None, ""):
+                return f"the step has no {key} to address {inverse} with"
+            try:
+                gw = (gw_cache or {}).get(UUID(str(step.get("device_id"))))
+            except ValueError:
+                gw = None
+            if gw is None:
+                return "the gateway is no longer known, so its adapter cannot be checked"
+            try:
+                adapter = build_adapter(gw)
+            except Exception as exc:  # noqa: BLE001 - the reason is the answer
+                return f"the gateway's adapter could not be built ({type(exc).__name__})"
+            if not adapter_implements(adapter, inverse):
+                return f"the gateway's adapter has no {inverse}"
+            return None
+
         _INVERSE = {
             "create_vlan": "delete_vlan",
             "create_l3_vlan": "delete_l3_vlan",
@@ -445,6 +636,23 @@ class DistributionService:
         comp_steps: list[dict[str, Any]] = []
         # Reverse the order — undo most-recent-first.
         for step in reversed(succeeded_steps):
+            if step.get("action") in named_inverse:
+                named, key = named_inverse[step["action"]]
+                reason = _why_manual(step, named, key)
+                if reason is None:
+                    comp_steps.append(
+                        {**step, "action": named, "params": {key: step["params"][key]}}
+                    )
+                else:
+                    comp_steps.append(
+                        {
+                            **step,
+                            "action": "manual_review",
+                            "original_action": step.get("action"),
+                            "reason": reason,
+                        }
+                    )
+                continue
             inverse = _INVERSE.get(step.get("action", ""))
             if inverse is None:
                 if step.get("action", "").startswith("verify"):
@@ -461,62 +669,6 @@ class DistributionService:
                 continue
             comp_steps.append({**step, "action": inverse})
         return {"steps": comp_steps, "compensates_failed": True}
-
-    async def _execute_step(
-        self,
-        step: dict[str, Any],
-        gw_cache: dict[UUID, GatewayConnection],
-    ) -> None:
-        """Execute a single distribution step."""
-        action = step.get("action", "")
-
-        if action == "verify_all":
-            # Final verification tier — nothing to check at this stage;
-            # individual step results already capture per-device outcomes.
-            return
-
-        if action == "verify_reachable":
-            device_id = step.get("device_id")
-            if not device_id:
-                return
-            gw_uuid = UUID(device_id)
-            gw = gw_cache.get(gw_uuid)
-            if gw is None:
-                raise DistributionError(
-                    f"Gateway {device_id} not found — cannot verify reachability"
-                )
-            # Attempt to build an adapter and connect to prove reachability
-            adapter = build_adapter(gw)
-            try:
-                async with adapter:
-                    pass  # successful connect/disconnect proves reachability
-            except Exception as exc:
-                raise DistributionError(f"Gateway {device_id} is unreachable: {exc}") from exc
-            return
-
-        # Security: reject unknown actions before getattr dispatch
-        if action not in _ALLOWED_ACTIONS:
-            raise DistributionError(f"Disallowed distribution action: {action}")
-
-        device_id = step.get("device_id")
-        if not device_id:
-            return
-
-        gw_uuid = UUID(device_id)
-        gw = gw_cache.get(gw_uuid)
-        if gw is None:
-            raise DistributionError(f"Gateway {device_id} not found")
-
-        adapter = build_adapter(gw)
-        params = step.get("params", {})
-
-        async with adapter:
-            method = getattr(adapter, action, None)
-            if method is None:
-                raise DistributionError(f"Adapter missing method: {action}")
-            result = await method(**params)
-            if not result.success:
-                raise DistributionError(result.error or f"{action} failed")
 
     # ─── Fabric orchestration plane (lifecycle events) ──────────────────
 

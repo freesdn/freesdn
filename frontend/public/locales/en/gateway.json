@@ -109,7 +109,10 @@
       "distribute": "Distribute",
       "retract": "Retract",
       "delete": "Delete",
-      "deleteConfirm": "Delete this canonical VLAN? This action cannot be undone."
+      "deleteConfirm": "Delete this canonical VLAN? This action cannot be undone.",
+      "deleteTitle": "Delete VLAN {{vlanId}} \"{{name}}\"?",
+      "deleteBody": "This removes the VLAN from FreeSDN only. Copies already distributed to devices stay on them; if you want those removed, roll back its distributions on the Distribution tab first.",
+      "deleteAction": "Delete VLAN"
     },
     "vlans": {
       "searchPlaceholder": "Search VLANs...",
@@ -161,7 +164,10 @@
     },
     "templateActions": {
       "delete": "Delete",
-      "deleteConfirm": "Delete this VLAN template? This action cannot be undone."
+      "deleteConfirm": "Delete this VLAN template? This action cannot be undone.",
+      "deleteTitle": "Delete VLAN template \"{{name}}\"?",
+      "deleteBody": "VLANs already created from this template are kept, and nothing is changed on any device.",
+      "deleteAction": "Delete template"
     },
     "templates": {
       "createTemplate": "Create Template"
@@ -521,7 +527,7 @@
       "placeholder": "Choose site",
       "empty": "No sites available."
     },
-    "unreachable": "Controller unreachable — verify it's online and reachable (host, port, credentials), then retry."
+    "unreachable": "Controller unreachable. Verify it's online and reachable (host, port, credentials), then retry."
   },
   "GatewayFirmwarePage": {
     "header": {

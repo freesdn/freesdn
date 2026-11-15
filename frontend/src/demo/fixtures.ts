@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2024-2026 FreeSDN
 import { APP_VERSION } from '@/lib/build-info';
-import { demoIds, demoUser } from './identity';
+import { demoCameraId, demoIds, demoUser } from './identity';
 export { demoIds, demoUser } from './identity';
 export { getDemoCameraSnapshotPath } from './cameraSnapshots';
 
@@ -80,20 +80,38 @@ export const sites = [
   },
 ];
 
+// Shaped like the API's ControllerResponse (status enum, port, sync fields):
+// rows written as 'online' with no port rendered as "Neutral", "host:" and
+// "0% connected" on the Controllers pages of the public demo.
 export const controllers = [
-  { id: demoIds.omada, name: 'Omada OC300 - HQ', controller_type: 'omada', vendor: 'omada', host: 'omada-hq.demo.local', status: 'online', site_id: demoIds.hq, site_name: 'HQ Campus', device_count: 28, last_sync_at: iso(4), created_at: iso(9000), updated_at: iso(4) },
-  { id: demoIds.opnsense, name: 'OPNsense HA Pair', controller_type: 'opnsense', vendor: 'opnsense', host: 'fw-hq.demo.local', status: 'online', site_id: demoIds.hq, site_name: 'HQ Campus', device_count: 2, last_sync_at: iso(6), created_at: iso(8500), updated_at: iso(6) },
-  { id: demoIds.proxmox, name: 'PVE Cluster A', controller_type: 'proxmox', vendor: 'proxmox', host: 'pve-a.demo.local', status: 'online', site_id: demoIds.dc, site_name: 'Datacenter', device_count: 9, last_sync_at: iso(3), created_at: iso(8200), updated_at: iso(3) },
-  { id: demoIds.hikvision, name: 'Hikvision NVR HQ', controller_type: 'hikvision', vendor: 'hikvision', host: 'nvr-hq.demo.local', status: 'online', site_id: demoIds.hq, site_name: 'HQ Campus', device_count: 8, last_sync_at: iso(7), created_at: iso(7500), updated_at: iso(7) },
-  { id: demoIds.freepbx, name: 'FreePBX Voice', controller_type: 'freepbx', vendor: 'freepbx', host: 'pbx.demo.local', status: 'online', site_id: demoIds.hq, site_name: 'HQ Campus', device_count: 22, last_sync_at: iso(5), created_at: iso(7000), updated_at: iso(5) },
-  { id: demoIds.truenas, name: 'TrueNAS Backup Pool', controller_type: 'truenas', vendor: 'truenas', host: 'truenas.demo.local', status: 'warning', site_id: demoIds.dc, site_name: 'Datacenter', device_count: 1, last_sync_at: iso(10), created_at: iso(6800), updated_at: iso(10) },
-  { id: demoIds.unifi, name: 'UniFi Branch', controller_type: 'unifi', vendor: 'unifi', host: 'unifi-branch.demo.local', status: 'online', site_id: demoIds.branch, site_name: 'Branch Office', device_count: 12, last_sync_at: iso(9), created_at: iso(6500), updated_at: iso(9) },
-];
+  { id: demoIds.omada, name: 'Omada OC300 - HQ', controller_type: 'omada', vendor: 'omada', host: 'omada-hq.demo.local', port: 8043, status: 'connected', site_id: demoIds.hq, site_name: 'HQ Campus', device_count: 28, last_sync_at: iso(4), created_at: iso(9000), updated_at: iso(4) },
+  { id: demoIds.opnsense, name: 'OPNsense HA Pair', controller_type: 'opnsense', vendor: 'opnsense', host: 'fw-hq.demo.local', port: 443, status: 'connected', site_id: demoIds.hq, site_name: 'HQ Campus', device_count: 2, last_sync_at: iso(6), created_at: iso(8500), updated_at: iso(6) },
+  { id: demoIds.proxmox, name: 'PVE Cluster A', controller_type: 'proxmox', vendor: 'proxmox', host: 'pve-a.demo.local', port: 8006, status: 'connected', site_id: demoIds.dc, site_name: 'Datacenter', device_count: 9, last_sync_at: iso(3), created_at: iso(8200), updated_at: iso(3) },
+  { id: demoIds.hikvision, name: 'Hikvision NVR HQ', controller_type: 'hikvision', vendor: 'hikvision', host: 'nvr-hq.demo.local', port: 443, status: 'connected', site_id: demoIds.hq, site_name: 'HQ Campus', device_count: 8, last_sync_at: iso(7), created_at: iso(7500), updated_at: iso(7) },
+  { id: demoIds.freepbx, name: 'FreePBX Voice', controller_type: 'freepbx', vendor: 'freepbx', host: 'pbx.demo.local', port: 443, status: 'connected', site_id: demoIds.hq, site_name: 'HQ Campus', device_count: 22, last_sync_at: iso(5), created_at: iso(7000), updated_at: iso(5) },
+  { id: demoIds.truenas, name: 'TrueNAS Backup Pool', controller_type: 'truenas', vendor: 'truenas', host: 'truenas.demo.local', port: 443, status: 'connected', site_id: demoIds.dc, site_name: 'Datacenter', device_count: 1, last_sync_at: iso(10), created_at: iso(6800), updated_at: iso(10) },
+  { id: demoIds.unifi, name: 'UniFi Branch', controller_type: 'unifi', vendor: 'unifi', host: 'unifi-branch.demo.local', port: 443, status: 'connected', site_id: demoIds.branch, site_name: 'Branch Office', device_count: 12, last_sync_at: iso(9), created_at: iso(6500), updated_at: iso(9) },
+].map((c) => ({
+  description: null,
+  use_ssl: true,
+  verify_ssl: true,
+  is_active: true,
+  connection_mode: 'local',
+  config: {},
+  site_mappings: {},
+  last_error: null,
+  sync_enabled: true,
+  sync_interval_seconds: 300,
+  last_sync: c.last_sync_at,
+  // The Omada controller reports one offline AP (see the metadata route).
+  online_device_count: c.id === demoIds.omada ? c.device_count - 1 : c.device_count,
+  ...c,
+}));
 
 export const cameras = [
-  { id: 'cam-front-door', name: 'Front Door Camera', status: 'online', ip_address: '10.10.40.21', vendor: 'hikvision', model: 'DS-2CD2387G2', site_id: demoIds.hq, site_name: 'HQ Campus', nvr_id: demoIds.hikvision, channel_id: 1, location: 'HQ entrance', camera_type: 'fixed', stream_status: 'demo_unavailable', snapshot_url: '/demo/camera-front-door.jpg', last_snapshot_at: iso(5), created_at: iso(6000), updated_at: iso(5) },
-  { id: 'cam-warehouse', name: 'Warehouse Aisle Camera', status: 'online', ip_address: '10.20.40.18', vendor: 'onvif', model: 'Generic Profile S', site_id: demoIds.dc, site_name: 'Datacenter', nvr_id: demoIds.hikvision, channel_id: 2, location: 'Datacenter cage', camera_type: 'fixed', stream_status: 'demo_unavailable', snapshot_url: '/demo/camera-warehouse.jpg', last_snapshot_at: iso(7), created_at: iso(5900), updated_at: iso(7) },
-  { id: 'cam-branch-lobby', name: 'Branch Lobby Protect', status: 'online', ip_address: '10.30.40.7', vendor: 'unifi_protect', model: 'G5 Dome', site_id: demoIds.branch, site_name: 'Branch Office', nvr_id: demoIds.unifi, channel_id: 3, location: 'Branch lobby', camera_type: 'fixed', stream_status: 'demo_unavailable', snapshot_url: '/demo/camera-branch-lobby.jpg', last_snapshot_at: iso(4), created_at: iso(5800), updated_at: iso(4) },
+  { id: demoCameraId('cam-front-door'), name: 'Front Door Camera', status: 'online', ip_address: '10.10.40.21', vendor: 'hikvision', model: 'DS-2CD2387G2', site_id: demoIds.hq, site_name: 'HQ Campus', nvr_id: demoIds.hikvision, channel_id: 1, location: 'HQ entrance', camera_type: 'fixed', stream_status: 'demo_unavailable', snapshot_url: '/demo/camera-front-door.jpg', last_snapshot_at: iso(5), created_at: iso(6000), updated_at: iso(5) },
+  { id: demoCameraId('cam-warehouse'), name: 'Warehouse Aisle Camera', status: 'online', ip_address: '10.20.40.18', vendor: 'onvif', model: 'Generic Profile S', site_id: demoIds.dc, site_name: 'Datacenter', nvr_id: demoIds.hikvision, channel_id: 2, location: 'Datacenter cage', camera_type: 'fixed', stream_status: 'demo_unavailable', snapshot_url: '/demo/camera-warehouse.jpg', last_snapshot_at: iso(7), created_at: iso(5900), updated_at: iso(7) },
+  { id: demoCameraId('cam-branch-lobby'), name: 'Branch Lobby Protect', status: 'online', ip_address: '10.30.40.7', vendor: 'unifi_protect', model: 'G5 Dome', site_id: demoIds.branch, site_name: 'Branch Office', nvr_id: demoIds.unifi, channel_id: 3, location: 'Branch lobby', camera_type: 'fixed', stream_status: 'demo_unavailable', snapshot_url: '/demo/camera-branch-lobby.jpg', last_snapshot_at: iso(4), created_at: iso(5800), updated_at: iso(4) },
 ];
 
 
@@ -1486,6 +1504,11 @@ export const gatewayLiveData: Record<string, Record<string, unknown>> = {
     },
     'device-summary': {
       summary: {
+        hostname: 'hq-fw-01.demo.local',
+        interface_count: 6,
+        interfaces_up: 5,
+        interfaces_down: 1,
+        wan_status: 'up',
         cpu_usage_pct: 11,
         memory_usage_pct: 39,
         disk_usage_pct: 34,
@@ -1539,6 +1562,7 @@ export const gatewayLiveData: Record<string, Record<string, unknown>> = {
           default_gateway: false,
         },
       ],
+      count: 2,
     },
     'firewall-rules': {
       rules: [
@@ -2883,7 +2907,7 @@ export const demoCameras = [
   const protect = c.vendor === 'unifi_protect';
   const slug = c.id.replace(/^cam-(branch-|dc-|hq-)?/, '');
   return {
-    id: c.id,
+    id: demoCameraId(c.id),
     name: c.name,
     description: c.desc,
     camera_type: c.ptz ? 'ptz_camera' : 'ip_camera',
@@ -2937,61 +2961,61 @@ export const demoCameraSnapshots = demoCameras.map((c) => ({ id: c.id, path: c.s
 
 // ── Camera events (motion / line crossing / intrusion / face / tamper) ──────
 export const demoCameraEvents = [
-  { id: 'cev-0001', camera_id: 'cam-front-door', event_type: 'motion', timestamp: iso(3), description: 'Person entering the main doors', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: false, metadata_json: { target_type: 'human', confidence: 0.94, region: 'Doorway' } },
-  { id: 'cev-0002', camera_id: 'cam-branch-lot', event_type: 'linedetection', timestamp: iso(6), description: 'Vehicle crossed the gate line inbound', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: false, metadata_json: { target_type: 'vehicle', confidence: 0.91, region: 'Gate line' } },
-  { id: 'cev-0003', camera_id: 'cam-hq-parking-north', event_type: 'motion', timestamp: iso(9), description: 'Vehicle parked in visitor bay 4', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: false, metadata_json: { target_type: 'vehicle', confidence: 0.88, region: 'Visitor bays' } },
-  { id: 'cev-0004', camera_id: 'cam-dc-mantrap', event_type: 'motion', timestamp: iso(12), description: 'Badge-in at the suite mantrap', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.96, region: 'Mantrap' } },
-  { id: 'cev-0005', camera_id: 'cam-hq-loading-dock', event_type: 'linedetection', timestamp: iso(17), description: 'Delivery van crossed the dock apron line', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'vehicle', confidence: 0.86, region: 'Apron line' } },
-  { id: 'cev-0006', camera_id: 'cam-branch-entry', event_type: 'motion', timestamp: iso(21), description: 'Two people entered the branch', snapshot_url: '/demo/camera-branch-lobby.jpg', is_acknowledged: false, metadata_json: { target_type: 'human', confidence: 0.93, region: 'Entry mat' } },
-  { id: 'cev-0007', camera_id: 'cam-hq-rear-exit', event_type: 'fielddetection', timestamp: iso(26), description: 'Loitering in the rear stairwell zone', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: false, metadata_json: { target_type: 'human', confidence: 0.79, region: 'Stairwell' } },
-  { id: 'cev-0008', camera_id: 'cam-dc-generator-yard', event_type: 'fielddetection', timestamp: iso(33), description: 'Intrusion zone breached near the fuel bund', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.82, region: 'Fuel bund' } },
-  { id: 'cev-0009', camera_id: 'cam-hq-lobby-ptz', event_type: 'facedetection', timestamp: iso(38), description: 'Face captured at the reception counter', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.9, region: 'Counter' } },
-  { id: 'cev-0010', camera_id: 'cam-branch-stockroom', event_type: 'motion', timestamp: iso(44), description: 'Stock cage door opened', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.87, region: 'Cage door' } },
-  { id: 'cev-0011', camera_id: 'cam-hq-roof-ptz', event_type: 'motion', timestamp: iso(51), description: 'Movement on the west roof walkway', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 0.64, region: 'Walkway' } },
-  { id: 'cev-0012', camera_id: 'cam-hq-parking-south', event_type: 'videoloss', timestamp: iso(56), description: 'Video loss, camera powered down for maintenance', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 1, region: 'Channel 5' } },
-  { id: 'cev-0013', camera_id: 'cam-warehouse', event_type: 'motion', timestamp: iso(62), description: 'Technician walking the cage aisle', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.85, region: 'Aisle' } },
-  { id: 'cev-0014', camera_id: 'cam-front-door', event_type: 'motion', timestamp: iso(70), description: 'Courier drop at the main doors', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.92, region: 'Doorway' } },
-  { id: 'cev-0015', camera_id: 'cam-hq-server-room', event_type: 'shelteralarm', timestamp: iso(78), description: 'Camera housing tamper detected, cleared by facilities', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 0.71, region: 'Housing' } },
-  { id: 'cev-0016', camera_id: 'cam-branch-lot', event_type: 'motion', timestamp: iso(86), description: 'Vehicle left the staff lot', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'vehicle', confidence: 0.89, region: 'Exit lane' } },
-  { id: 'cev-0017', camera_id: 'cam-dc-cage-a', event_type: 'motion', timestamp: iso(95), description: 'Rack door opened in row 3', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.83, region: 'Row 3' } },
-  { id: 'cev-0018', camera_id: 'cam-hq-corridor-l2', event_type: 'motion', timestamp: iso(104), description: 'Corridor traffic between wings', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.8, region: 'Corridor' } },
-  { id: 'cev-0019', camera_id: 'cam-hq-cafeteria', event_type: 'motion', timestamp: iso(118), description: 'Motion recording triggered in the cafeteria', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.77, region: 'Servery' } },
-  { id: 'cev-0020', camera_id: 'cam-branch-entry', event_type: 'linedetection', timestamp: iso(131), description: 'Person crossed the entry threshold line', snapshot_url: '/demo/camera-branch-lobby.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.9, region: 'Threshold' } },
-  { id: 'cev-0021', camera_id: 'cam-dc-mantrap', event_type: 'facedetection', timestamp: iso(146), description: 'Face captured at the inner mantrap door', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.95, region: 'Inner door' } },
-  { id: 'cev-0022', camera_id: 'cam-hq-parking-north', event_type: 'linedetection', timestamp: iso(163), description: 'Vehicle crossed the barrier line outbound', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'vehicle', confidence: 0.87, region: 'Barrier' } },
-  { id: 'cev-0023', camera_id: 'cam-hq-loading-dock', event_type: 'motion', timestamp: iso(181), description: 'Pallet jack movement on the dock', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 0.68, region: 'Dock apron' } },
-  { id: 'cev-0024', camera_id: 'cam-dc-cage-b', event_type: 'motion', timestamp: iso(204), description: 'Aisle motion, scheduled hands-and-eyes visit', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.81, region: 'Row 9' } },
-  { id: 'cev-0025', camera_id: 'cam-branch-lobby', event_type: 'motion', timestamp: iso(228), description: 'Customer waiting in the lobby', snapshot_url: '/demo/camera-branch-lobby.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.88, region: 'Seating' } },
-  { id: 'cev-0026', camera_id: 'cam-hq-rear-exit', event_type: 'motion', timestamp: iso(255), description: 'Fire exit opened from inside', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.9, region: 'Door' } },
-  { id: 'cev-0027', camera_id: 'cam-dc-generator-yard', event_type: 'motion', timestamp: iso(288), description: 'Generator weekly test, engineer on site', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.84, region: 'Genset A' } },
-  { id: 'cev-0028', camera_id: 'cam-hq-roof-ptz', event_type: 'fielddetection', timestamp: iso(322), description: 'Perimeter zone entered during the patrol tour', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 0.62, region: 'North edge' } },
-  { id: 'cev-0029', camera_id: 'cam-branch-stockroom', event_type: 'motion', timestamp: iso(360), description: 'Stock count in progress', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.86, region: 'Aisle 2' } },
-  { id: 'cev-0030', camera_id: 'cam-front-door', event_type: 'motion', timestamp: iso(402), description: 'Opening rounds, first badge of the day', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.93, region: 'Doorway' } },
-  { id: 'cev-0031', camera_id: 'cam-branch-back-door', event_type: 'videoloss', timestamp: iso(1480), description: 'Video loss, camera isolated for the canopy rebuild', snapshot_url: '/demo/camera-branch-lobby.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 1, region: 'Channel 5' } },
-  { id: 'cev-0032', camera_id: 'cam-hq-server-room', event_type: 'motion', timestamp: iso(1650), description: 'After-hours access to rack row A', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.91, region: 'Row A' } },
+  { id: 'cev-0001', camera_id: demoCameraId('cam-front-door'), event_type: 'motion', timestamp: iso(3), description: 'Person entering the main doors', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: false, metadata_json: { target_type: 'human', confidence: 0.94, region: 'Doorway' } },
+  { id: 'cev-0002', camera_id: demoCameraId('cam-branch-lot'), event_type: 'linedetection', timestamp: iso(6), description: 'Vehicle crossed the gate line inbound', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: false, metadata_json: { target_type: 'vehicle', confidence: 0.91, region: 'Gate line' } },
+  { id: 'cev-0003', camera_id: demoCameraId('cam-hq-parking-north'), event_type: 'motion', timestamp: iso(9), description: 'Vehicle parked in visitor bay 4', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: false, metadata_json: { target_type: 'vehicle', confidence: 0.88, region: 'Visitor bays' } },
+  { id: 'cev-0004', camera_id: demoCameraId('cam-dc-mantrap'), event_type: 'motion', timestamp: iso(12), description: 'Badge-in at the suite mantrap', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.96, region: 'Mantrap' } },
+  { id: 'cev-0005', camera_id: demoCameraId('cam-hq-loading-dock'), event_type: 'linedetection', timestamp: iso(17), description: 'Delivery van crossed the dock apron line', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'vehicle', confidence: 0.86, region: 'Apron line' } },
+  { id: 'cev-0006', camera_id: demoCameraId('cam-branch-entry'), event_type: 'motion', timestamp: iso(21), description: 'Two people entered the branch', snapshot_url: '/demo/camera-branch-lobby.jpg', is_acknowledged: false, metadata_json: { target_type: 'human', confidence: 0.93, region: 'Entry mat' } },
+  { id: 'cev-0007', camera_id: demoCameraId('cam-hq-rear-exit'), event_type: 'fielddetection', timestamp: iso(26), description: 'Loitering in the rear stairwell zone', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: false, metadata_json: { target_type: 'human', confidence: 0.79, region: 'Stairwell' } },
+  { id: 'cev-0008', camera_id: demoCameraId('cam-dc-generator-yard'), event_type: 'fielddetection', timestamp: iso(33), description: 'Intrusion zone breached near the fuel bund', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.82, region: 'Fuel bund' } },
+  { id: 'cev-0009', camera_id: demoCameraId('cam-hq-lobby-ptz'), event_type: 'facedetection', timestamp: iso(38), description: 'Face captured at the reception counter', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.9, region: 'Counter' } },
+  { id: 'cev-0010', camera_id: demoCameraId('cam-branch-stockroom'), event_type: 'motion', timestamp: iso(44), description: 'Stock cage door opened', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.87, region: 'Cage door' } },
+  { id: 'cev-0011', camera_id: demoCameraId('cam-hq-roof-ptz'), event_type: 'motion', timestamp: iso(51), description: 'Movement on the west roof walkway', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 0.64, region: 'Walkway' } },
+  { id: 'cev-0012', camera_id: demoCameraId('cam-hq-parking-south'), event_type: 'videoloss', timestamp: iso(56), description: 'Video loss, camera powered down for maintenance', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 1, region: 'Channel 5' } },
+  { id: 'cev-0013', camera_id: demoCameraId('cam-warehouse'), event_type: 'motion', timestamp: iso(62), description: 'Technician walking the cage aisle', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.85, region: 'Aisle' } },
+  { id: 'cev-0014', camera_id: demoCameraId('cam-front-door'), event_type: 'motion', timestamp: iso(70), description: 'Courier drop at the main doors', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.92, region: 'Doorway' } },
+  { id: 'cev-0015', camera_id: demoCameraId('cam-hq-server-room'), event_type: 'shelteralarm', timestamp: iso(78), description: 'Camera housing tamper detected, cleared by facilities', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 0.71, region: 'Housing' } },
+  { id: 'cev-0016', camera_id: demoCameraId('cam-branch-lot'), event_type: 'motion', timestamp: iso(86), description: 'Vehicle left the staff lot', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'vehicle', confidence: 0.89, region: 'Exit lane' } },
+  { id: 'cev-0017', camera_id: demoCameraId('cam-dc-cage-a'), event_type: 'motion', timestamp: iso(95), description: 'Rack door opened in row 3', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.83, region: 'Row 3' } },
+  { id: 'cev-0018', camera_id: demoCameraId('cam-hq-corridor-l2'), event_type: 'motion', timestamp: iso(104), description: 'Corridor traffic between wings', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.8, region: 'Corridor' } },
+  { id: 'cev-0019', camera_id: demoCameraId('cam-hq-cafeteria'), event_type: 'motion', timestamp: iso(118), description: 'Motion recording triggered in the cafeteria', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.77, region: 'Servery' } },
+  { id: 'cev-0020', camera_id: demoCameraId('cam-branch-entry'), event_type: 'linedetection', timestamp: iso(131), description: 'Person crossed the entry threshold line', snapshot_url: '/demo/camera-branch-lobby.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.9, region: 'Threshold' } },
+  { id: 'cev-0021', camera_id: demoCameraId('cam-dc-mantrap'), event_type: 'facedetection', timestamp: iso(146), description: 'Face captured at the inner mantrap door', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.95, region: 'Inner door' } },
+  { id: 'cev-0022', camera_id: demoCameraId('cam-hq-parking-north'), event_type: 'linedetection', timestamp: iso(163), description: 'Vehicle crossed the barrier line outbound', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'vehicle', confidence: 0.87, region: 'Barrier' } },
+  { id: 'cev-0023', camera_id: demoCameraId('cam-hq-loading-dock'), event_type: 'motion', timestamp: iso(181), description: 'Pallet jack movement on the dock', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 0.68, region: 'Dock apron' } },
+  { id: 'cev-0024', camera_id: demoCameraId('cam-dc-cage-b'), event_type: 'motion', timestamp: iso(204), description: 'Aisle motion, scheduled hands-and-eyes visit', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.81, region: 'Row 9' } },
+  { id: 'cev-0025', camera_id: demoCameraId('cam-branch-lobby'), event_type: 'motion', timestamp: iso(228), description: 'Customer waiting in the lobby', snapshot_url: '/demo/camera-branch-lobby.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.88, region: 'Seating' } },
+  { id: 'cev-0026', camera_id: demoCameraId('cam-hq-rear-exit'), event_type: 'motion', timestamp: iso(255), description: 'Fire exit opened from inside', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.9, region: 'Door' } },
+  { id: 'cev-0027', camera_id: demoCameraId('cam-dc-generator-yard'), event_type: 'motion', timestamp: iso(288), description: 'Generator weekly test, engineer on site', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.84, region: 'Genset A' } },
+  { id: 'cev-0028', camera_id: demoCameraId('cam-hq-roof-ptz'), event_type: 'fielddetection', timestamp: iso(322), description: 'Perimeter zone entered during the patrol tour', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 0.62, region: 'North edge' } },
+  { id: 'cev-0029', camera_id: demoCameraId('cam-branch-stockroom'), event_type: 'motion', timestamp: iso(360), description: 'Stock count in progress', snapshot_url: '/demo/camera-warehouse.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.86, region: 'Aisle 2' } },
+  { id: 'cev-0030', camera_id: demoCameraId('cam-front-door'), event_type: 'motion', timestamp: iso(402), description: 'Opening rounds, first badge of the day', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.93, region: 'Doorway' } },
+  { id: 'cev-0031', camera_id: demoCameraId('cam-branch-back-door'), event_type: 'videoloss', timestamp: iso(1480), description: 'Video loss, camera isolated for the canopy rebuild', snapshot_url: '/demo/camera-branch-lobby.jpg', is_acknowledged: true, metadata_json: { target_type: null, confidence: 1, region: 'Channel 5' } },
+  { id: 'cev-0032', camera_id: demoCameraId('cam-hq-server-room'), event_type: 'motion', timestamp: iso(1650), description: 'After-hours access to rack row A', snapshot_url: '/demo/camera-front-door.jpg', is_acknowledged: true, metadata_json: { target_type: 'human', confidence: 0.91, region: 'Row A' } },
 ];
 
 // ── Camera groups and saved wall views ─────────────────────────────────────
 export const demoCameraGroups = [
-  { id: 'cgrp-perimeter', name: 'Perimeter', description: 'Every outward-facing camera across the three sites', color: '#f97316', icon: 'shield', sort_order: 1, created_at: iso(20160), is_default: false, camera_ids: ['cam-hq-parking-north', 'cam-hq-parking-south', 'cam-hq-roof-ptz', 'cam-branch-lot', 'cam-dc-generator-yard'] },
-  { id: 'cgrp-entrances', name: 'Entrances', description: 'Doors, mantraps and reception views', color: '#3b82f6', icon: 'door-open', sort_order: 2, created_at: iso(20160), is_default: true, camera_ids: ['cam-front-door', 'cam-hq-rear-exit', 'cam-hq-reception', 'cam-branch-entry', 'cam-branch-lobby', 'cam-dc-mantrap'] },
-  { id: 'cgrp-datacenter', name: 'Datacenter Cages', description: 'Colocation suite, cages A and B', color: '#8b5cf6', icon: 'server', sort_order: 3, created_at: iso(20160), is_default: false, camera_ids: ['cam-warehouse', 'cam-dc-cage-a', 'cam-dc-cage-b', 'cam-dc-mantrap'] },
-  { id: 'cgrp-logistics', name: 'Logistics', description: 'Dock, stockroom and goods handling', color: '#22c55e', icon: 'package', sort_order: 4, created_at: iso(20160), is_default: false, camera_ids: ['cam-hq-loading-dock', 'cam-branch-stockroom', 'cam-warehouse'] },
+  { id: 'cgrp-perimeter', name: 'Perimeter', description: 'Every outward-facing camera across the three sites', color: '#f97316', icon: 'shield', sort_order: 1, created_at: iso(20160), is_default: false, camera_ids: [demoCameraId('cam-hq-parking-north'), demoCameraId('cam-hq-parking-south'), demoCameraId('cam-hq-roof-ptz'), demoCameraId('cam-branch-lot'), demoCameraId('cam-dc-generator-yard')] },
+  { id: 'cgrp-entrances', name: 'Entrances', description: 'Doors, mantraps and reception views', color: '#3b82f6', icon: 'door-open', sort_order: 2, created_at: iso(20160), is_default: true, camera_ids: [demoCameraId('cam-front-door'), demoCameraId('cam-hq-rear-exit'), demoCameraId('cam-hq-reception'), demoCameraId('cam-branch-entry'), demoCameraId('cam-branch-lobby'), demoCameraId('cam-dc-mantrap')] },
+  { id: 'cgrp-datacenter', name: 'Datacenter Cages', description: 'Colocation suite, cages A and B', color: '#8b5cf6', icon: 'server', sort_order: 3, created_at: iso(20160), is_default: false, camera_ids: [demoCameraId('cam-warehouse'), demoCameraId('cam-dc-cage-a'), demoCameraId('cam-dc-cage-b'), demoCameraId('cam-dc-mantrap')] },
+  { id: 'cgrp-logistics', name: 'Logistics', description: 'Dock, stockroom and goods handling', color: '#22c55e', icon: 'package', sort_order: 4, created_at: iso(20160), is_default: false, camera_ids: [demoCameraId('cam-hq-loading-dock'), demoCameraId('cam-branch-stockroom'), demoCameraId('cam-warehouse')] },
 ];
 
 export const demoCameraViews = [
-  { id: 'cview-lobby-wall', name: 'Front of house', description: 'Reception and entry cameras for the security desk', layout: '2x2', camera_ids: ['cam-front-door', 'cam-hq-reception', 'cam-hq-lobby-ptz', 'cam-branch-lobby'], filters: {}, sort_order: 1, created_at: iso(18000), is_default: true, is_shared: true, is_owner: true },
-  { id: 'cview-perimeter-wall', name: 'Perimeter watch', description: 'Outdoor cameras across all sites', layout: '3x3', camera_ids: ['cam-hq-parking-north', 'cam-hq-roof-ptz', 'cam-hq-loading-dock', 'cam-branch-lot', 'cam-dc-generator-yard'], filters: {}, sort_order: 2, created_at: iso(18000), is_default: false, is_shared: true, is_owner: true },
-  { id: 'cview-dc-wall', name: 'Datacenter suite', description: 'Cage aisles and the mantrap', layout: '2x2', camera_ids: ['cam-dc-mantrap', 'cam-dc-cage-a', 'cam-dc-cage-b', 'cam-warehouse'], filters: {}, sort_order: 3, created_at: iso(18000), is_default: false, is_shared: false, is_owner: true },
+  { id: 'cview-lobby-wall', name: 'Front of house', description: 'Reception and entry cameras for the security desk', layout: '2x2', camera_ids: [demoCameraId('cam-front-door'), demoCameraId('cam-hq-reception'), demoCameraId('cam-hq-lobby-ptz'), demoCameraId('cam-branch-lobby')], filters: {}, sort_order: 1, created_at: iso(18000), is_default: true, is_shared: true, is_owner: true },
+  { id: 'cview-perimeter-wall', name: 'Perimeter watch', description: 'Outdoor cameras across all sites', layout: '3x3', camera_ids: [demoCameraId('cam-hq-parking-north'), demoCameraId('cam-hq-roof-ptz'), demoCameraId('cam-hq-loading-dock'), demoCameraId('cam-branch-lot'), demoCameraId('cam-dc-generator-yard')], filters: {}, sort_order: 2, created_at: iso(18000), is_default: false, is_shared: true, is_owner: true },
+  { id: 'cview-dc-wall', name: 'Datacenter suite', description: 'Cage aisles and the mantrap', layout: '2x2', camera_ids: [demoCameraId('cam-dc-mantrap'), demoCameraId('cam-dc-cage-a'), demoCameraId('cam-dc-cage-b'), demoCameraId('cam-warehouse')], filters: {}, sort_order: 3, created_at: iso(18000), is_default: false, is_shared: false, is_owner: true },
 ];
 
 // ── Evidence archives (legal hold) ─────────────────────────────────────────
 // The sha256 values are content digests of demo clips, not secrets.
 export const demoEvidenceArchives = [
-  { id: 'evd-2026-0007', camera_id: 'cam-hq-loading-dock', camera_name: 'Loading Dock', start_time: iso(200), end_time: iso(185), watermarked: true, status: 'ready', file_size: 486_320_128, sha256: '9f2c1d4a7be0356148c9a0d2f7be34519a0c6d8e2b4713f5a6c8d90e1f2a3b4c', note: 'Damaged pallet claim, held for the carrier', error: null, created_at: iso(180), completed_at: iso(176) },
-  { id: 'evd-2026-0008', camera_id: 'cam-dc-mantrap', camera_name: 'Mantrap Entry', start_time: iso(160), end_time: iso(150), watermarked: true, status: 'ready', file_size: 312_115_200, sha256: '3a7f90bd25c1e846f0b2d3491a7c5e68d04b1f92c7a3e5061d8b4f2907ce31da', note: 'Access review, badge audit window', error: null, created_at: iso(148), completed_at: iso(145) },
-  { id: 'evd-2026-0009', camera_id: 'cam-branch-lot', camera_name: 'Branch Staff Lot', start_time: iso(95), end_time: iso(80), watermarked: true, status: 'ready', file_size: 704_643_072, sha256: 'c81b56ef3d90a24718f60b3c5d2e79a4106fb8de2c47903a51e6b8d0f9247c3b', note: 'Parking incident report 26-0141', error: null, created_at: iso(78), completed_at: iso(71) },
-  { id: 'evd-2026-0010', camera_id: 'cam-front-door', camera_name: 'Front Door Camera', start_time: iso(40), end_time: iso(25), watermarked: true, status: 'archiving', file_size: null, sha256: null, note: 'Reception dispute, requested by facilities', error: null, created_at: iso(12), completed_at: null },
+  { id: 'evd-2026-0007', camera_id: demoCameraId('cam-hq-loading-dock'), camera_name: 'Loading Dock', start_time: iso(200), end_time: iso(185), watermarked: true, status: 'ready', file_size: 486_320_128, sha256: '9f2c1d4a7be0356148c9a0d2f7be34519a0c6d8e2b4713f5a6c8d90e1f2a3b4c', note: 'Damaged pallet claim, held for the carrier', error: null, created_at: iso(180), completed_at: iso(176) },
+  { id: 'evd-2026-0008', camera_id: demoCameraId('cam-dc-mantrap'), camera_name: 'Mantrap Entry', start_time: iso(160), end_time: iso(150), watermarked: true, status: 'ready', file_size: 312_115_200, sha256: '3a7f90bd25c1e846f0b2d3491a7c5e68d04b1f92c7a3e5061d8b4f2907ce31da', note: 'Access review, badge audit window', error: null, created_at: iso(148), completed_at: iso(145) },
+  { id: 'evd-2026-0009', camera_id: demoCameraId('cam-branch-lot'), camera_name: 'Branch Staff Lot', start_time: iso(95), end_time: iso(80), watermarked: true, status: 'ready', file_size: 704_643_072, sha256: 'c81b56ef3d90a24718f60b3c5d2e79a4106fb8de2c47903a51e6b8d0f9247c3b', note: 'Parking incident report 26-0141', error: null, created_at: iso(78), completed_at: iso(71) },
+  { id: 'evd-2026-0010', camera_id: demoCameraId('cam-front-door'), camera_name: 'Front Door Camera', start_time: iso(40), end_time: iso(25), watermarked: true, status: 'archiving', file_size: null, sha256: null, note: 'Reception dispute, requested by facilities', error: null, created_at: iso(12), completed_at: null },
 ];
 
 // ── Daily camera uptime reports ────────────────────────────────────────────
@@ -3072,7 +3096,7 @@ export const demoRecordingTemplates = [
 export const demoCameraAccessGrants = [
   { id: 'cag-0001', user_id: '10000000-0000-4000-8000-000000000002', camera_id: null, group_id: 'cgrp-entrances', access_level: 'viewer', can_live: true, can_playback: true, can_ptz: false, can_export: false, can_configure: false, expires_at: null, created_at: iso(4320), user_email: 'front-desk@freesdn.local', user_name: 'Front Desk (shared)' },
   { id: 'cag-0002', user_id: '10000000-0000-4000-8000-000000000003', camera_id: null, group_id: 'cgrp-perimeter', access_level: 'operator', can_live: true, can_playback: true, can_ptz: true, can_export: true, can_configure: false, expires_at: null, created_at: iso(8640), user_email: 'security@freesdn.local', user_name: 'Security Operations' },
-  { id: 'cag-0003', user_id: '10000000-0000-4000-8000-000000000004', camera_id: 'cam-dc-mantrap', group_id: null, access_level: 'viewer', can_live: true, can_playback: true, can_ptz: false, can_export: true, can_configure: false, expires_at: iso(-20160), created_at: iso(1440), user_email: 'auditor@freesdn.local', user_name: 'External Auditor (time limited)' },
+  { id: 'cag-0003', user_id: '10000000-0000-4000-8000-000000000004', camera_id: demoCameraId('cam-dc-mantrap'), group_id: null, access_level: 'viewer', can_live: true, can_playback: true, can_ptz: false, can_export: true, can_configure: false, expires_at: iso(-20160), created_at: iso(1440), user_email: 'auditor@freesdn.local', user_name: 'External Auditor (time limited)' },
 ];
 
 // ── Live camera health (CameraHealthResponse: bitrate/fps/codec live HERE,
@@ -4762,7 +4786,7 @@ export const alerts = [
     source: 'Front Door Camera',
     metric_name: 'camera.motion.duration_seconds',
     metric_value: { value: 12, unit: 's', zone: 'entrance' },
-    details: { camera_id: 'cam-front-door', zone: 'entrance', duration_seconds: 12, clip_available: true },
+    details: { camera_id: demoCameraId('cam-front-door'), zone: 'entrance', duration_seconds: 12, clip_available: true },
     tags: ['cameras', 'hq'],
     occurrence_count: 1,
     notifications_sent: 1,

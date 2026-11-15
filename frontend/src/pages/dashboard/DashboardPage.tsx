@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { buildNetworkHealth, buildTrafficChartData } from './dashboardMetrics';
+import { buildNetworkHealth, buildTrafficChartData, formatMebibytes } from './dashboardMetrics';
 import type { TFunction } from 'i18next';
 import {
   DndContext,
@@ -40,6 +40,8 @@ import {
   RotateCcw,
   Settings2,
   Check,
+  ArrowDownToLine,
+  ArrowUpFromLine,
 } from 'lucide-react';
 import {
   analyticsApi,
@@ -186,6 +188,35 @@ function buildServicesFromHealth(health: HealthCheck, t: TFunction) {
       status: mapStatus(redisStatus),
     },
   ];
+}
+
+/** Current cumulative traffic counters, shown as totals rather than a chart. */
+function TrafficSnapshot({ download, upload }: { download: number; upload: number }) {
+  const { t, i18n } = useTranslation('dashboard');
+  const items = [
+    { key: 'download', label: t('DashboardPage.traffic.download'), value: download, icon: ArrowDownToLine, tone: 'text-success bg-success/10' },
+    { key: 'upload', label: t('DashboardPage.traffic.upload'), value: upload, icon: ArrowUpFromLine, tone: 'text-info bg-info/10' },
+  ];
+  return (
+    <div className="flex min-h-[200px] flex-col justify-center gap-6">
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {items.map(({ key, label, value, icon: Icon, tone }) => (
+          <div key={key} className="flex items-center gap-4 rounded-lg border border-border/60 p-4">
+            <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', tone)}>
+              <Icon className="h-5 w-5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <dt className="text-sm text-muted-foreground">{label}</dt>
+              <dd className="text-2xl font-semibold tabular-nums tracking-tight">
+                {formatMebibytes(value, i18n.language)}
+              </dd>
+            </div>
+          </div>
+        ))}
+      </dl>
+      <p className="text-xs text-muted-foreground">{t('DashboardPage.traffic.counterSnapshot')}</p>
+    </div>
+  );
 }
 
 export default function DashboardPage() {
@@ -425,7 +456,12 @@ export default function DashboardPage() {
     'traffic': () =>
       analyticsLoading ? (
         <Skeleton className="h-[280px] w-full rounded-lg" />
-      ) : trafficData.length > 0 ? (
+      ) : trafficData.length === 1 ? (
+        // The analytics API returns one counter snapshot, not a time series.
+        // It used to be drawn as a one-dot area chart under a 1H/6H/24H/7D/30D
+        // selector that changed nothing; show the two totals for what they are.
+        <TrafficSnapshot download={trafficData[0].download} upload={trafficData[0].upload} />
+      ) : trafficData.length > 1 ? (
         <UsageChart data={trafficData} series={trafficSeries} height={280} />
       ) : (
         <div className="flex flex-col items-center justify-center h-[280px] text-muted-foreground">
@@ -546,7 +582,6 @@ export default function DashboardPage() {
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="outline"
-                    size="sm"
                     disabled={hiddenWidgets.length === 0}
                   >
                     <Plus className="h-4 w-4 mr-2" />
@@ -595,7 +630,6 @@ export default function DashboardPage() {
               </DropdownMenu>
               <Button
                 variant="ghost"
-                size="sm"
                 onClick={() => resetLayout(DASHBOARD_DEFAULT_ENABLED)}
                 title={t('DashboardPage.actions.resetTooltip')}
               >
@@ -604,7 +638,6 @@ export default function DashboardPage() {
               </Button>
               <Button
                 variant="default"
-                size="sm"
                 onClick={toggleCustomizing}
               >
                 <Check className="h-4 w-4 mr-2" />
@@ -614,7 +647,6 @@ export default function DashboardPage() {
           ) : (
             <Button
               variant="outline"
-              size="sm"
               onClick={toggleCustomizing}
               title={t('DashboardPage.actions.customizeTooltip')}
             >

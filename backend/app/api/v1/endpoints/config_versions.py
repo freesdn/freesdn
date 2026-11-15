@@ -283,6 +283,7 @@ async def rollback_config_version(
         raise HTTPException(400, detail="Device has no controller for rollback")
 
     from app.api.v1.endpoints.poe import _get_adapter_for_device
+    from app.services.device_writes import FullConfigPushUnsupported
 
     try:
         adapter = await _get_adapter_for_device(device)
@@ -300,6 +301,10 @@ async def rollback_config_version(
     except ValueError as e:
         logger.error("Rollback version lookup failed: %s", e, exc_info=True)
         raise HTTPException(404, detail="Configuration version not found")
+    except FullConfigPushUnsupported as e:
+        # Not a device failure: no adapter can apply a whole configuration
+        # yet. The reason is the operator's answer; nothing was sent.
+        raise HTTPException(501, detail=str(e)) from None
     except RuntimeError as e:
         logger.error("Rollback failed for device %s version %s: %s", device_id, version_id, e)
         raise HTTPException(502, detail="Rollback failed: unable to push config to device")

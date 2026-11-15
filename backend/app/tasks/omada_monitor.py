@@ -198,7 +198,12 @@ def _build_omada_adapter(controller: Any) -> Any:
 
 
 async def _poll_omada_health() -> dict[str, Any]:
-    polled = 0
+    from app.core.device_breaker import controller_breaker, controller_key
+    from app.core.device_poll import device_poll
+    from app.core.device_slot import controller_slot_key
+    from app.modules.poll_gate import orgs_with_module_disabled
+
+    polled = skipped = 0
     pending: list[tuple[str, dict[str, Any], list[Any]]] = []
 
     async with CelerySessionLocal() as session:
@@ -218,28 +223,52 @@ async def _poll_omada_health() -> dict[str, Any]:
             .scalars()
             .all()
         )
+        # An organization that switched the Network module off is not polled.
+        disabled = {
+            str(org)
+            for org in await orgs_with_module_disabled(
+                session, "network", {c.site.organization_id for c in controllers if c.site}
+            )
+        }
 
         for ctrl in controllers:
             # Org-scoped fail-closed: no site → no org → can't route an event.
             if ctrl.site is None:
                 continue
             org_id = str(ctrl.site.organization_id)
-            polled += 1
+            if str(ctrl.site.organization_id) in disabled:
+                continue
             prev = _state_get(str(ctrl.id))
             reachable = True
             cur: dict[str, Any] | None = None
             adapter = None
-            try:
-                adapter = _build_omada_adapter(ctrl)
-                await adapter.connect()
-                cur = await _read_current(adapter)
-            except Exception as exc:  # noqa: BLE001 — one bad controller must not abort the rest
-                reachable = False
-                logger.warning("Omada poll: %s (%s) unreachable: %s", ctrl.name, ctrl.host, exc)
-            finally:
-                if adapter is not None:
-                    with contextlib.suppress(Exception):
-                        await adapter.disconnect()
+            # The shared controller breaker and the controller's device slot:
+            # an Omada the health check found unreachable is not contacted,
+            # and one that discovery or the status sync is talking to is left
+            # for the next cycle. Neither counts as a transition.
+            async with device_poll(
+                slot_key=controller_slot_key(ctrl),
+                breaker=controller_breaker,
+                breaker_key=controller_key(ctrl.id),
+                holder="Omada monitor",
+            ) as turn:
+                if turn.skipped:
+                    skipped += 1
+                    logger.info("Omada poll: %s skipped: %s", ctrl.name, turn.reason)
+                    continue
+                polled += 1
+                try:
+                    adapter = _build_omada_adapter(ctrl)
+                    await adapter.connect()
+                    cur = await _read_current(adapter)
+                except Exception as exc:  # noqa: BLE001 — one bad controller must not abort the rest
+                    reachable = False
+                    turn.failed(exc)
+                    logger.warning("Omada poll: %s (%s) unreachable: %s", ctrl.name, ctrl.host, exc)
+                finally:
+                    if adapter is not None:
+                        with contextlib.suppress(Exception):
+                            await adapter.disconnect()
 
             events = _omada_transitions(prev, cur, reachable, ctrl, org_id)
             pending.append((str(ctrl.id), _omada_snapshot(reachable, cur), events))
@@ -258,13 +287,13 @@ async def _poll_omada_health() -> dict[str, Any]:
         # cycle rather than being silently swallowed by an advanced snapshot.
         _state_set(cid, snapshot)
 
-    return {"success": True, "polled": polled, "events_emitted": emitted}
+    return {"success": True, "polled": polled, "skipped": skipped, "events_emitted": emitted}
 
 
 @celery_app.task(bind=True, name="omada.poll_health", soft_time_limit=240, time_limit=300)
 def poll_health(self) -> dict[str, Any]:
     """Periodic Omada controller poll → omada.event.* transitions."""
-    lock_token = acquire_solo_lock("omada.poll_health", ttl_seconds=180)
+    lock_token = acquire_solo_lock("omada.poll_health", ttl_seconds=300)
     if not lock_token:
         return {"success": True, "skipped": True, "reason": "already_running"}
     try:

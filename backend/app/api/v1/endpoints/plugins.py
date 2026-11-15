@@ -27,6 +27,7 @@ from app.core.dependencies import (
     is_unscoped_org_admin,
     is_unscoped_superuser,
 )
+from app.core.http_client import build_async_client
 from app.db import get_session
 from app.models.plugins import InstalledPlugin, PluginOrganizationState, PluginSetting
 from app.plugins.capabilities import (
@@ -517,8 +518,6 @@ async def _download_plugin_archive(url: str) -> bytes:
     import ipaddress
     from urllib.parse import urlparse, urlunparse
 
-    import httpx
-
     from app.core.security_utils import _is_ip_safe, _resolve_and_validate
 
     parsed = urlparse(url)
@@ -577,7 +576,7 @@ async def _download_plugin_archive(url: str) -> bytes:
     total = 0
     chunks: list[bytes] = []
     async with (
-        httpx.AsyncClient(
+        build_async_client(
             timeout=60.0,
             follow_redirects=False,
             max_redirects=0,

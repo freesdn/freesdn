@@ -54,6 +54,8 @@ export function installPageFixture() {
     const path = config.url!;
     if (path.startsWith('/backups?')) return reply(config, { items: state.backups, total: state.backups.length });
     if (path.startsWith('/backups/stats?')) return reply(config, { total_backups: state.backups.length, completed_backups: state.backups.length });
+    if (path === '/backups/database-status') return reply(config, { state: 'healthy', severity: 'ok', enabled: true, encrypted: true, reason: 'encrypted', last_success_at: null, max_age_seconds: 93600, checked_at: '2026-09-01T00:00:00Z', setup_command: null });
+    if (path === '/config-backups/') return reply(config, []);
     if (path === '/sites') return reply(config, { items: [] });
     if (path.startsWith('/backups/schedules?') || path === '/backups/storage-locations' || path.includes('/storage-locations/types/')) return reply(config, []);
     if (path.startsWith('/auth/vault-export/requirements?')) return reply(config, { method: state.method, mfa_required: state.mfaRequired, oidc_redirect_uri: null });

@@ -82,7 +82,9 @@
       "warningMany": "Advertencia: {{count}} usuarios están asignados actualmente a este rol."
     },
     "matrix": {
-      "permissionHeader": "Permiso"
+      "permissionHeader": "Permiso",
+      "granted": "Concedido",
+      "notGranted": "No concedido"
     },
     "levels": {
       "superAdmin": "Superadministrador",

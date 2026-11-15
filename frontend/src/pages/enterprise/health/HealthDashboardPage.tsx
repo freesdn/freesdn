@@ -45,6 +45,7 @@ import {
   WANHealthPanel,
   SiteRankingTable,
 } from './components';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ─── Site Card ───────────────────────────────────────────────────────────────
 
@@ -145,9 +146,7 @@ export default function HealthDashboardPage() {
       });
     },
     onError: (err) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const detail = (err as any)?.response?.data?.detail
-        || (err instanceof Error ? err.message : t('HealthDashboardPage.toast.unknownError'));
+      const detail = getApiErrorMessage(err, t('HealthDashboardPage.toast.unknownError'));
       toast({
         variant: 'destructive',
         title: t('HealthDashboardPage.toast.reconcileFailed.title'),
@@ -311,7 +310,9 @@ export default function HealthDashboardPage() {
 
         {/* ── Tab 3: Alerts & SLA ──────────────────────────────────────────── */}
         <TabsContent value="alerts" className="mt-4">
-          <div className="grid gap-6 lg:grid-cols-2">
+          {/* grid-cols-1 bounds the track: an implicit auto column grew to the
+              longest unwrapped alert title and pushed both cards off a phone. */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <ActiveAlertsPanel siteId={selectedSiteId ?? undefined} />
             <SLAComplianceCard siteId={selectedSiteId ?? undefined} />
           </div>

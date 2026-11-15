@@ -24,7 +24,8 @@
       "close": "Cerrar",
       "previewChanges": "Previsualizar cambios",
       "restoreNow": "Restaurar ahora",
-      "selectItem": "Seleccionar {{name}}"
+      "selectItem": "Seleccionar {{name}}",
+      "menuFor": "Acciones para {{name}}"
     },
     "common": {
       "encrypted": "Cifrada"
@@ -148,7 +149,7 @@
       "fullBackupWarnLabel": "Este archivo contiene todas tus contraseñas.",
       "fullBackupWarnText": "Cualquiera con este archivo .fsdnvault y la frase de contraseña puede tomar el control de toda tu implementación: guárdalo como una bóveda de contraseñas. La copia de configuración normal (.fsdn) es la que se puede compartir con seguridad.",
       "passphraseLabel": "Frase de contraseña de la copia",
-      "passphrasePlaceholder": "Al menos 12 caracteres — la necesitarás para restaurar"
+      "passphrasePlaceholder": "Al menos 12 caracteres; la necesitarás para restaurar"
     },
     "backupTypeOptions": {
       "full": "Copia de seguridad completa",
@@ -330,7 +331,9 @@
     },
     "bulk": {
       "itemName": "copia de seguridad",
-      "deleteConfirm": "¿Eliminar {{count}} copia(s) de seguridad?"
+      "deleteConfirm": "¿Eliminar {{count}} copia(s) de seguridad?",
+      "deleteBody": "Se eliminan cada copia de seguridad y su archivo. Esta acción no se puede deshacer.",
+      "deleteAction": "Eliminar copias de seguridad"
     },
     "validation": {
       "nameRequired": "El nombre de la copia de seguridad es obligatorio"
@@ -589,5 +592,105 @@
     "individual": "Descargue las bóvedas individualmente. Cada archivo requiere su propia confirmación de cuenta.",
     "downloadDispatched": "Descarga de bóveda iniciada",
     "verifySaved": "Compruebe el archivo guardado. Una solicitud de descarga del navegador no demuestra que el archivo se haya guardado."
+  },
+  "DatabaseBackupStatus": {
+    "title": {
+      "healthy": "Copias de la base de datos: funcionando",
+      "unencrypted": "Copias de la base de datos: funcionando, SIN CIFRAR",
+      "pending": "Copias de la base de datos: primera copia pendiente",
+      "unknown": "Copias de la base de datos: estado desconocido",
+      "disabled": "Copias de la base de datos: DESACTIVADAS",
+      "failing": "Copias de la base de datos: la última ejecución FALLÓ",
+      "stale": "Copias de la base de datos: desactualizadas"
+    },
+    "body": {
+      "healthy": "pg-backup escribe periódicamente un volcado cifrado de ambas bases de datos. Es la copia de recuperación ante desastres de la instancia; las instantáneas de configuración de esta página no lo son.",
+      "unencrypted": "Los volcados se escriben SIN cifrar porque BACKUP_ALLOW_PLAINTEXT=1. Quien pueda leer el volumen de copias puede leer todas las credenciales guardadas.",
+      "pending": "El cifrado está configurado; el primer volcado aún no ha terminado.",
+      "unknown": "FreeSDN no puede leer el estado de pg-backup (el volumen pg_backups no está montado en este servicio o pg-backup no ha arrancado).",
+      "disabled": "Este FreeSDN NO tiene copias de la base de datos. pg-backup se niega a escribir volcados sin cifrar y no hay instalada una clave pública GPG utilizable.",
+      "failing": "La última ejecución de pg-backup falló. Revise el registro del contenedor (docker compose logs pg-backup).",
+      "stale": "Ninguna copia de la base de datos se completó en el intervalo esperado. ¿Está en marcha el contenedor pg-backup?"
+    },
+    "reason": {
+      "no_key": "Todavía no hay ninguna clave pública instalada.",
+      "key_path_is_directory": "La ruta de la clave es un directorio que Docker creó porque faltaba el archivo. En el servidor, elimínelo (sudo rmdir), ejecute el comando de abajo y vuelva a crear el contenedor pg-backup.",
+      "no_public_key": "El archivo de clave no contiene ninguna clave pública OpenPGP.",
+      "import_failed": "No se pudo importar la clave pública.",
+      "ambiguous_key": "El archivo contiene más de una clave: establezca BACKUP_GPG_RECIPIENT con la huella que se debe usar.",
+      "recipient_unusable": "No se puede cifrar para el destinatario configurado (sin clave coincidente, caducada o revocada). Deje BACKUP_GPG_RECIPIENT vacío para usar la clave del archivo."
+    },
+    "lastSuccess": "Última copia completada: {{when}}",
+    "setupHint": "Ejecute esto en el servidor de FreeSDN para crear el par de claves. Instala la clave pública para pg-backup, que empieza a hacer copias en menos de un minuto:",
+    "privateKeyWarning": "La clave privada se le entrega una sola vez y FreeSDN nunca la guarda. Manténgala fuera de este servidor: sin ella no se puede restaurar ninguna copia."
+  },
+  "DeviceConfigBackups": {
+    "title": "Historial de configuración de dispositivos de red",
+    "description": "Exportaciones programadas de solo lectura de cada configuración de OPNsense y OpenWrt (diarias salvo que lo cambies), que se guardan solo cuando cambian y se almacenan cifradas. Los secretos siempre se muestran ocultos.",
+    "empty": "Aún no hay dispositivos exportables. Las pasarelas OPNsense y OpenWrt aparecen aquí automáticamente.",
+    "disabled": "Desactivado",
+    "columns": {
+      "device": "Dispositivo",
+      "status": "Última exportación",
+      "lastSuccess": "Último éxito",
+      "versions": "Versiones",
+      "nextRun": "Próxima ejecución",
+      "schedule": "Programación"
+    },
+    "status": {
+      "changed": "Cambiada",
+      "unchanged": "Sin cambios",
+      "failed": "Fallida",
+      "paused": "En pausa (sondeo desactivado)",
+      "never": "Aún no exportada",
+      "unsupported": "No compatible",
+      "source_removed": "Dispositivo eliminado"
+    },
+    "error": {
+      "timeout": "tiempo agotado",
+      "auth_failed": "autenticación fallida",
+      "unreachable": "inaccesible",
+      "invalid_content": "exportación no válida",
+      "export_failed": "exportación fallida",
+      "unsupported": "no compatible"
+    },
+    "actions": {
+      "history": "Historial",
+      "capture": "Copiar ahora",
+      "schedule": "Programación"
+    },
+    "capture": {
+      "queued": "Exportación en cola",
+      "refused": "Exportación no iniciada"
+    },
+    "history": {
+      "title": "{{name}}: historial de configuración",
+      "redactedNote": "Cambios respecto a la versión anterior. Los valores secretos se sustituyen por huellas: una huella distinta significa que el secreto cambió.",
+      "versions": "Versiones",
+      "none": "Aún no hay versiones.",
+      "noChanges": "Sin diferencias.",
+      "summary": "{{added}} añadidas, {{removed}} eliminadas",
+      "truncated": "(recortado)"
+    },
+    "permission": {
+      "manage": "Cambiar la programación e iniciar una copia necesitan el permiso firewall.manage_rules, que tienen los administradores de sitio y los roles superiores.",
+      "unschedulable": "Este dispositivo ya no se puede exportar, así que no tiene una programación que cambiar."
+    },
+    "schedule": {
+      "title": "{{name}}: programación de copias",
+      "description": "Con qué frecuencia FreeSDN exporta la configuración de este dispositivo. Una exportación solo lee del dispositivo y nunca escribe en él; solo se guarda una versión cuando la configuración cambió.",
+      "enabled": "Copias programadas",
+      "enabledOn": "Activadas: FreeSDN exporta la configuración con esta programación.",
+      "enabledOff": "Desactivadas: no hay exportaciones programadas. Copiar ahora sigue funcionando.",
+      "interval": "Intervalo",
+      "intervalHelp": "Entre {{min}} y {{max}} horas.",
+      "everyHours": "Cada {{hours}} horas",
+      "daily": "Diaria (cada 24 horas)",
+      "weekly": "Semanal (cada 168 horas)",
+      "save": "Guardar programación",
+      "cancel": "Cancelar",
+      "saved": "Programación guardada para {{name}}",
+      "failed": "No se guardó la programación"
+    }
   }
 }

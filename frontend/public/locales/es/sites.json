@@ -161,7 +161,9 @@
         "namePlaceholder": "Administración",
         "vlanId": "ID de VLAN",
         "descriptionPlaceholder": "Descripción opcional"
-      }
+      },
+      "removeSubnetBody": "Se elimina de la configuración de este sitio en FreeSDN. No se cambia nada en tus dispositivos de red.",
+      "removeSubnetAction": "Eliminar subred"
     },
     "vpn": {
       "provider": "Proveedor",
@@ -284,7 +286,9 @@
         "removeConfigFailed": "Error al eliminar la configuración de VPN",
         "primaryUpdated": "VPN principal actualizada",
         "setPrimaryFailed": "Error al establecer la configuración principal"
-      }
+      },
+      "removeConfigBody": "Esto elimina el registro de esta configuración en FreeSDN. No se cambia nada en el servidor VPN ni en ningún dispositivo.",
+      "removeConfigAction": "Eliminar configuración"
     },
     "reachability": {
       "title": "Accesibilidad de dispositivos",
@@ -329,7 +333,8 @@
         "wgAgentConfig": "Configuración del agente WireGuard",
         "configCopied": "Configuración copiada",
         "addToServerConf": "Agregar al wg0.conf del servidor",
-        "peerBlockCopied": "Bloque de par copiado"
+        "peerBlockCopied": "Bloque de par copiado",
+        "copyField": "Copiar {{label}}"
       },
       "guide": {
         "title": "Guía de implementación del agente",

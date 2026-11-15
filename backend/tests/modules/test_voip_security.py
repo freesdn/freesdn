@@ -23,6 +23,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.adapters.apply_context import apply_window
 from app.adapters.freepbx.adapter import FreePBXAdapter
 from app.adapters.freepbx.ami_client import _AMI_ORIGINATE_APP_ALLOWLIST, AMIClient
 from app.adapters.freepbx.exceptions import AMIProtocolError, FreePBXError
@@ -234,20 +235,22 @@ class TestGrandstreamConfigureMethodsReadOnly:
         assert "read-only" in (result.error or "")
 
     @pytest.mark.asyncio
-    async def test_configure_sip_account_proceeds_with_force(self) -> None:
-        """The sanctioned opt-in (force=True + ADAPTER_READ_ONLY cleared)
-        still reaches the phone — proven by the client write being awaited."""
+    async def test_configure_sip_account_proceeds_in_staged_apply(self) -> None:
+        """The sanctioned path (an approved staged apply, force=True) still
+        reaches the phone under read-only, proven by the client write being
+        awaited. Force alone is refused since 26.12.0."""
         a = GrandstreamAdapter(host="ctrl.example.com", read_only=True)
         client = AsyncMock()
         client.set_config = AsyncMock(return_value=True)
         a._get_or_connect = AsyncMock(return_value=client)  # type: ignore[method-assign]
-        result = await a.configure_sip_account(
-            "aa:bb:cc:dd:ee:ff",
-            "sip.example.com",
-            "1001",
-            "s3cret",
-            force=True,
-        )
+        with apply_window():
+            result = await a.configure_sip_account(
+                "aa:bb:cc:dd:ee:ff",
+                "sip.example.com",
+                "1001",
+                "s3cret",
+                force=True,
+            )
         assert result.success
         client.set_config.assert_awaited_once()
 

@@ -1,25 +1,21 @@
 {
   "AccessControlPage": {
     "title": "Control de acceso",
-    "description": "Gestión de control de acceso físico",
-    "comingSoon": "Próximamente",
-    "comingSoonDescription": "La integración de control de acceso físico está prevista para una versión futura. Aquí estarán disponibles los controladores de puertas, los titulares de tarjetas y la gestión de eventos.",
-    "features": {
-      "doorManagement": {
-        "title": "Gestión de puertas",
-        "desc": "Supervisa y controla puertas, portones y barreras en tiempo real."
+    "description": "Control de acceso físico: puertas y credenciales.",
+    "status": {
+      "title": "Qué hace hoy este módulo",
+      "records": {
+        "title": "Los registros de puertas y credenciales funcionan",
+        "body": "FreeSDN puede guardar registros de puertas y credenciales: crearlos, editarlos y eliminarlos, y los PIN se guardan solo como hash de un solo sentido. Esta página aún no tiene pantallas para ellos.",
+        "where": "Se gestionan mediante la API en"
       },
-      "cardholders": {
-        "title": "Titulares y credenciales",
-        "desc": "Administra tarjetas de acceso, PIN y credenciales biométricas."
+      "doorControl": {
+        "title": "El control físico de puertas no está disponible",
+        "body": "Bloquear o desbloquear una puerta se rechaza (la API responde 501) hasta que se agregue un adaptador real para controladores de puertas, y todavía no existe ninguno. FreeSDN no puede abrir ni bloquear una puerta."
       },
-      "eventHistory": {
-        "title": "Historial de eventos",
-        "desc": "Registro de auditoría completo de los eventos de acceso con búsqueda y exportación."
-      },
-      "accessPolicies": {
-        "title": "Políticas de acceso",
-        "desc": "Horarios programados, antirretorno y reglas multifactor."
+      "module": {
+        "title": "Viene desactivado",
+        "body": "El módulo de control de acceso viene desactivado y es una versión preliminar: no se puede activar para una organización hasta que exista un adaptador para controladores de puertas. Está calificado como Experimental: está desarrollado, pero no se ha probado con hardware de puertas real."
       }
     }
   }

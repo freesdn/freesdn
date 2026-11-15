@@ -56,4 +56,18 @@ export default tseslint.config({ ignores: ['dist', 'storybook-static'] }, {
                 caughtErrorsIgnorePattern: '^_',
             }],
     },
+}, {
+    // The backend answers almost every failure with { error: { message } }
+    // (backend/app/core/middleware.py), so reading response.data.detail
+    // directly shows operators a generic fallback instead of the real reason.
+    // About 230 call sites did exactly that before they were moved onto the
+    // shared reader; this keeps new ones from coming back.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.test.{ts,tsx}', 'src/**/__tests__/**', 'src/lib/api/errors.ts'],
+    rules: {
+        'no-restricted-syntax': ['error', {
+                selector: "MemberExpression[property.name='detail'][object.property.name='data'][object.object.property.name='response']",
+                message: 'Read API errors with getApiErrorMessage() or parseApiError() from @/lib/api/errors; the backend sends { error: { message } }, not { detail }.',
+            }],
+    },
 });

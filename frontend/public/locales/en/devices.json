@@ -198,6 +198,16 @@
       "reboot": "Reboot",
       "export": "Export",
       "delete": "Delete"
+    },
+    "bulkReboot": {
+      "confirm": "Reboot {{n}} online devices? Each one drops its clients and links until it is back up."
+    },
+    "bulkDelete": {
+      "confirmTitle": "Remove {{n}} devices?",
+      "confirmDescription": "FreeSDN removes these {{n}} devices from its inventory. Nothing is changed on the devices themselves, and a device that a controller still reports comes back on the next sync.",
+      "doneTitle": "Removed {{n}} devices",
+      "partialTitle": "{{failed}} of {{total}} devices could not be removed",
+      "resyncNote": "Devices a controller still reports come back on the next sync."
     }
   },
   "DeviceDetailPage": {
@@ -273,7 +283,9 @@
     },
     "actions": {
       "sync": "Sync",
-      "reboot": "Reboot"
+      "reboot": "Reboot",
+      "back": "Back to devices",
+      "more": "More actions"
     },
     "menu": {
       "editDevice": "Edit Device",

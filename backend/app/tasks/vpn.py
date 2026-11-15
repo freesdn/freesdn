@@ -38,6 +38,40 @@ def _get_logdb():
     return _logdb_factory
 
 
+#: A ping that was not sent because another poller had the target's turn.
+_SKIPPED = object()
+
+
+async def _ping_targets(targets: list[str], ping: Any, holder: str) -> dict[str, Any]:
+    """Ping each distinct target once, in its device's turn.
+
+    A tunnel endpoint or health address is very often a managed gateway, which
+    the gateway sync, the health poll and the drift checks also talk to. Every
+    ping takes the target's slot (app/core/device_slot.py) like those pollers do;
+    while another one holds it the target is not pinged this cycle and its
+    connections keep their last state (``_SKIPPED``). Two tunnels that share a
+    target share one ping.
+    """
+    from app.core.device_poll import device_poll
+    from app.core.device_slot import host_slot_key
+
+    async def one(target: str) -> Any:
+        async with device_poll(
+            slot_key=host_slot_key(target, fallback=f"vpn-target:{target}"),
+            breaker=None,
+            breaker_key=None,
+            holder=holder,
+        ) as turn:
+            if turn.skipped:
+                logger.info("%s: %s skipped: %s", holder, target, turn.reason)
+                return _SKIPPED
+            return await ping(target)
+
+    unique = sorted(set(targets))
+    results = await asyncio.gather(*(one(t) for t in unique), return_exceptions=True)
+    return dict(zip(unique, results, strict=True))
+
+
 @celery_app.task(
     bind=True,
     base=FreeSDNTask,
@@ -158,13 +192,15 @@ def check_vpn_health(self) -> dict[str, Any]:
                     async with sem:
                         return await ts.ping(target)
 
-                ping_tasks = [_ping(t) for _, t in eligible]
-                ping_results = await asyncio.gather(*ping_tasks, return_exceptions=True)
+                by_target = await _ping_targets([t for _, t in eligible], _ping, "VPN health ping")
+                ping_results = [by_target[t] for _, t in eligible]
 
                 # Phase 2: Sequential DB updates (shared session)
                 # Write health check records to LogDB (time-series)
                 async with _get_logdb()() as logdb:
                     for (conn, target), ping_result in zip(eligible, ping_results, strict=False):
+                        if ping_result is _SKIPPED:
+                            continue  # not checked this cycle; due again next run
                         try:
                             latency = None if isinstance(ping_result, Exception) else ping_result
                             is_healthy = latency is not None
@@ -414,8 +450,10 @@ def check_tunnel_health(self) -> dict[str, Any]:
                         except Exception:
                             return False
 
-                ping_tasks = [_ping_ip(ip) for _, ip in eligible_tunnels]
-                ping_results = await asyncio.gather(*ping_tasks, return_exceptions=True)
+                by_ip = await _ping_targets(
+                    [ip for _, ip in eligible_tunnels], _ping_ip, "S2S tunnel health ping"
+                )
+                ping_results = [by_ip[ip] for _, ip in eligible_tunnels]
 
                 # Phase 2: Sequential DB updates
                 from app.models.vpn import VPNHealthCheck
@@ -424,6 +462,8 @@ def check_tunnel_health(self) -> dict[str, Any]:
                     for (tunnel, health_ip), ping_result in zip(
                         eligible_tunnels, ping_results, strict=False
                     ):
+                        if ping_result is _SKIPPED:
+                            continue  # its status stands until the next cycle
                         try:
                             is_healthy = ping_result is True
                             checked += 1
@@ -446,6 +486,12 @@ def check_tunnel_health(self) -> dict[str, Any]:
 
                             old_status = tunnel.status
                             new_status = "active" if is_healthy else "error"
+                            # The ping target falls back to the far gateway's
+                            # public endpoint, so a reply proves the gateway is
+                            # up, not that a tunnel exists. One whose push failed
+                            # (provisioned_at unset) used to turn active here.
+                            if new_status == "active" and tunnel.provisioned_at is None:
+                                new_status = old_status
 
                             if old_status != new_status:
                                 tunnel.status = new_status

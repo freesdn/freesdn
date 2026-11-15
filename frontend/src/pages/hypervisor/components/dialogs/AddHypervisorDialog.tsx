@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { controllersApi, sitePickerQuery } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface AddHypervisorDialogProps {
   open: boolean;
@@ -221,9 +222,7 @@ export function AddHypervisorDialog({ open, onOpenChange }: AddHypervisorDialogP
               setTestError(response.data.error || response.data.message || t('AddHypervisorDialog.test.failed'));
             }
           } catch (err: unknown) {
-            const axiosErr = err as import('axios').AxiosError<{ detail?: string }>;
-            const errObj = err as { message?: string };
-            const detail = axiosErr.response?.data?.detail || errObj.message || t('AddHypervisorDialog.test.failed');
+            const detail = getApiErrorMessage(err, t('AddHypervisorDialog.test.failed'));
             setTestResult({ success: false, message: detail, error: detail });
             setTestError(detail);
           } finally {

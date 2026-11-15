@@ -12,6 +12,17 @@ from app.modules.cameras import config_write
 from app.modules.cameras.config_write import staged_camera_write
 
 
+@pytest.fixture(autouse=True)
+def _straight_through_chokepoint(monkeypatch):
+    """These tests are about the envelope (audit, rollback); the chokepoint
+    itself needs a real session and is covered by test_camera_writes_staged.py."""
+
+    async def _write(_db, **kwargs):
+        return await kwargs["perform"]()
+
+    monkeypatch.setattr(config_write, "write_through_staging", _write)
+
+
 @pytest.fixture
 def audit_calls(monkeypatch):
     calls: list[dict] = []

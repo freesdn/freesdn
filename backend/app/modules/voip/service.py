@@ -16,10 +16,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import Integer, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_credential, encrypt_credential, is_encrypted
+from app.core.device_slot import pbx_slot_key, phone_slot_key
+from app.modules.voip.adapter_factory import DEFAULT_FREEPBX_USERNAME, pbx_username
+from app.services.device_live_read import take_device_turn
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +284,23 @@ class PhoneNotFoundError(VoIPError):
         super().__init__(f"Phone not found: {phone_id}")
 
 
+class DuplicatePhoneMACError(VoIPError):
+    """Another live phone already has this MAC.
+
+    ``existing`` is that phone when it belongs to the caller's organization, so
+    the API can name it; None when it does not (nothing about it is disclosed).
+    """
+
+    def __init__(self, mac: str, existing: Any | None):
+        self.mac = mac
+        self.existing = existing
+        if existing is not None:
+            detail = f"phone {existing.name!r} ({existing.id}) already has MAC {mac}"
+        else:
+            detail = f"MAC {mac} is already registered to another phone"
+        super().__init__(detail)
+
+
 class PBXNotFoundError(VoIPError):
     """PBX not found."""
 
@@ -386,6 +407,93 @@ class VoIPService:
             logger.warning("Failed to write VoIP device-mutation audit record: %s", exc)
             with contextlib.suppress(Exception):
                 await self.db.rollback()
+
+    async def _phone_action(self, phone: Any, *, action: str, perform: Any) -> Any:
+        """A phone action (reboot, factory reset), audited once the phone accepts it.
+
+        ``perform`` returns ``{"success": bool}``. It runs in the phone's turn
+        (``app/core/device_slot.py``), so the login and the command never land
+        on a health poll in progress.
+        """
+        from app.core.device_slot import phone_slot_key
+        from app.services.device_writes import audited_device_action, device_scope, request_actor_id
+
+        scope = await device_scope(self.db, phone)
+        return await audited_device_action(
+            self.db,
+            action=action,
+            target_type="device",
+            target_id=phone.id,
+            target_name=f"phone {phone.ip_address}",
+            organization_id=scope.organization_id,
+            site_id=scope.site_id,
+            actor_id=request_actor_id(),
+            parameters={"phone_ip": phone.ip_address},
+            perform=perform,
+            slot_key=phone_slot_key(phone),
+        )
+
+    async def _pbx_write(
+        self,
+        pbx_id: UUID,
+        *,
+        feature: str,
+        operation: str,
+        target_id: str,
+        payload: dict[str, Any],
+        perform: Any,
+    ) -> tuple[Any, Any]:
+        """A PBX configuration write, staged and applied in this request.
+
+        Was ``_with_adapter``: connect, write, and only the request knew. Now the
+        PBX is looked up (organization-scoped) first; read-only mode refuses the
+        write before the PBX is contacted; the write runs in the PBX's turn and
+        is recorded as a ``direct.<feature>`` ledger row (secrets masked). A
+        failure is a ``VoIPError``, as before. ``perform(adapter)`` makes the
+        call; the PBX row and the adapter's result are returned.
+        """
+        from app.core.device_slot import host_slot_key
+        from app.services.device_writes import device_scope, request_actor_id, write_through_staging
+
+        pbx = await self.get_pbx(pbx_id)
+        if pbx.pbx_type not in ("freepbx", "asterisk"):
+            raise VoIPError(f"Adapter not available for PBX type: {pbx.pbx_type}")
+        scope = await device_scope(self.db, pbx)
+
+        async def _on_pbx() -> Any:
+            adapter = self._adapter_from_pbx(pbx)
+            try:
+                await adapter.connect()
+                return await perform(adapter)
+            finally:
+                with contextlib.suppress(Exception):
+                    await adapter.disconnect()
+
+        try:
+            result = await write_through_staging(
+                self.db,
+                organization_id=scope.organization_id,
+                controller_id=None,
+                site_id=scope.site_id,
+                feature=feature,
+                operation=operation,
+                target_id=target_id,
+                payload={"pbx_id": str(pbx.id), **payload},
+                perform=_on_pbx,
+                force=True,
+                actor_id=request_actor_id(),
+                return_failed_result=True,
+                slot_key=host_slot_key(pbx.ip_address, fallback=f"pbx:{pbx.id}"),
+            )
+        except HTTPException:
+            # Read-only mode, device busy: refused before the PBX was contacted.
+            raise
+        except Exception as exc:
+            err_msg = str(exc) or type(exc).__name__
+            logger.error("PBX %s %s failed: %s", pbx.name, feature, err_msg)
+            raise VoIPError(f"{feature} {operation} failed: {err_msg}") from exc
+        pbx.last_seen = datetime.now(UTC)
+        return pbx, result
 
     def _pbx_ids_for_org(self):
         """Subquery of PBX IDs belonging to the current organization's sites."""
@@ -631,6 +739,9 @@ class VoIPService:
         # every client-supplied FK must belong to the caller's org.
         await self._assert_phone_fks_in_org(data)
 
+        if data.get("mac_address"):
+            data = {**data, "mac_address": await self._claim_mac(data["mac_address"])}
+
         phone = Phone(**data)
         self.db.add(phone)
         await self.db.commit()
@@ -642,6 +753,15 @@ class VoIPService:
         """Update a phone."""
         phone = await self.get_phone(phone_id)
 
+        if data.get("mac_address"):
+            from app.modules.voip.provisioning_auth import normalize_mac
+
+            mac = normalize_mac(data["mac_address"]) or data["mac_address"]
+            if mac != phone.mac_address:  # re-sending its own MAC is not a claim
+                mac = await self._claim_mac(mac, exclude_id=phone.id)
+                await self._release_mac_pair(phone)
+            data = {**data, "mac_address": mac}
+
         for key, value in data.items():
             if key in _PHONE_MUTABLE_FIELDS and hasattr(phone, key):
                 setattr(phone, key, value)
@@ -650,6 +770,33 @@ class VoIPService:
         await self.db.refresh(phone)
 
         return phone
+
+    async def _claim_mac(self, raw: str, *, exclude_id: UUID | None = None) -> str:
+        """Canonicalise ``raw`` and refuse it if another live phone holds it.
+
+        Checked across every organization, like the unique index and the
+        unauthenticated provisioning lookup, which resolves a phone by MAC alone;
+        the other phone is named only when it is in the caller's organization.
+        """
+        from app.modules.voip.provisioning_auth import live_phones_with_mac, normalize_mac
+
+        mac = normalize_mac(raw) or raw
+        others = await live_phones_with_mac(self.db, mac, exclude_id=exclude_id, limit=1)
+        if others:
+            existing = others[0]
+            if self.organization_id is not None:
+                from app.models.core import Site
+
+                # freesdn:include-deleted -- the other phone is live and holds
+                # the MAC even when its site was soft-deleted; its organization
+                # only decides whether the error may name it.
+                org = await self.db.scalar(
+                    select(Site.organization_id).where(Site.id == existing.site_id)
+                )
+                if org != self.organization_id:
+                    existing = None
+            raise DuplicatePhoneMACError(mac, existing)
+        return mac
 
     async def save_phone_credentials(self, phone_id: UUID, username: str, password: str) -> Any:
         """Save login credentials to a phone's settings JSONB field (encrypted)."""
@@ -669,9 +816,27 @@ class VoIPService:
     async def delete_phone(self, phone_id: UUID) -> bool:
         """Soft delete a phone."""
         phone = await self.get_phone(phone_id)
+        await self._release_mac_pair(phone)
         phone.deleted_at = datetime.now(UTC)
         await self.db.commit()
         return True
+
+    async def _release_mac_pair(self, phone: Any) -> None:
+        """``phone`` is leaving its MAC (deleted, or given another): settle the flags.
+
+        Deleting or re-addressing one of a pair flagged by migration 032 resolves
+        it, so the phone loses its flag and a sole remaining twin loses its own;
+        the API stops reporting them and the twin can be provisioned again.
+        """
+        from app.modules.voip.models import MAC_REVIEW_DUPLICATE
+        from app.modules.voip.provisioning_auth import live_phones_with_mac
+
+        phone.mac_review = None
+        if not phone.mac_address:
+            return
+        twins = await live_phones_with_mac(self.db, phone.mac_address, exclude_id=phone.id, limit=2)
+        if len(twins) == 1 and twins[0].mac_review == MAC_REVIEW_DUPLICATE:
+            twins[0].mac_review = None
 
     async def get_phone_stats(self, site_id: UUID | None = None) -> dict[str, int]:
         """Get phone statistics."""
@@ -894,6 +1059,9 @@ class VoIPService:
             )
         admin_pw = decrypt_credential(enc_pw) if is_encrypted(enc_pw) else enc_pw
 
+        # A page's live read waits briefly for the phone's turn, or is answered
+        # with its last response (app/services/device_live_read.py).
+        await take_device_turn(phone_slot_key(phone))
         return GrandstreamPhoneClient(
             host=phone.ip_address,
             username=settings.get("web_username", "admin"),
@@ -916,9 +1084,16 @@ class VoIPService:
                 "ADAPTER_READ_ONLY=false to allow live phone writes."
             )
         client = await self._grandstream_client_for_phone(phone)
-        try:
+
+        async def _reboot() -> dict[str, bool]:
             async with client:
-                ok = await client.reboot()
+                return {"success": bool(await client.reboot())}
+
+        try:
+            # Audited once the phone accepts it (device_action:reboot).
+            ok = (await self._phone_action(phone, action="reboot", perform=_reboot))["success"]
+        except HTTPException:
+            raise
         except Exception as exc:
             logger.warning(
                 "reboot_phone failed for %s: %s",
@@ -930,13 +1105,14 @@ class VoIPService:
         if ok:
             phone.last_reboot = datetime.now(UTC)
             await self.db.commit()
-        await self._audit_device_mutation(
-            action="reboot",
-            resource_id=phone.id,
-            resource_name=f"phone {phone.ip_address}",
-            status="success" if ok else "failure",
-            extra_metadata={"phone_ip": phone.ip_address},
-        )
+        else:
+            await self._audit_device_mutation(
+                action="reboot",
+                resource_id=phone.id,
+                resource_name=f"phone {phone.ip_address}",
+                status="failure",
+                extra_metadata={"phone_ip": phone.ip_address},
+            )
         return {
             "status": "success" if ok else "failed",
             "phone_id": str(phone.id),
@@ -962,9 +1138,18 @@ class VoIPService:
                 "ADAPTER_READ_ONLY=false to allow live phone writes."
             )
         client = await self._grandstream_client_for_phone(phone)
-        try:
+
+        async def _reset() -> dict[str, bool]:
             async with client:
-                ok = await client.factory_reset()
+                return {"success": bool(await client.factory_reset())}
+
+        try:
+            # Audited once the phone accepts it (device_action:factory_reset).
+            ok = (await self._phone_action(phone, action="factory_reset", perform=_reset))[
+                "success"
+            ]
+        except HTTPException:
+            raise
         except Exception as exc:
             logger.warning(
                 "factory_reset_phone failed for %s: %s",
@@ -978,13 +1163,14 @@ class VoIPService:
             phone.last_reboot = datetime.now(UTC)
             phone.sip_registered = False
             await self.db.commit()
-        await self._audit_device_mutation(
-            action="delete",
-            resource_id=phone.id,
-            resource_name=f"phone {phone.ip_address}",
-            status="success" if ok else "failure",
-            extra_metadata={"phone_ip": phone.ip_address, "operation": "factory_reset"},
-        )
+        else:
+            await self._audit_device_mutation(
+                action="delete",
+                resource_id=phone.id,
+                resource_name=f"phone {phone.ip_address}",
+                status="failure",
+                extra_metadata={"phone_ip": phone.ip_address, "operation": "factory_reset"},
+            )
         return {
             "status": "success" if ok else "failed",
             "phone_id": str(phone.id),
@@ -1176,9 +1362,37 @@ class VoIPService:
         # returned to the caller.
         write_plan = {**plan, "P34": str(sip_password)}
         client = await self._grandstream_client_for_phone(phone)
-        try:
+
+        async def _push() -> dict[str, bool]:
             async with client:
-                ok = await client.set_config(write_plan)
+                return {"success": bool(await client.set_config(write_plan))}
+
+        from app.core.device_slot import phone_slot_key
+        from app.services.device_writes import device_scope, request_actor_id, write_through_staging
+
+        scope = await device_scope(self.db, phone)
+        try:
+            # Staged and applied in this request; the ledger keeps the redacted
+            # plan (P34 masked), never the SIP secret.
+            ok = (
+                await write_through_staging(
+                    self.db,
+                    organization_id=scope.organization_id,
+                    controller_id=None,
+                    site_id=scope.site_id,
+                    feature="phone.sip_config",
+                    operation="update",
+                    target_id=str(phone.id),
+                    payload={"phone_ip": phone.ip_address, "account": account_index, **plan},
+                    perform=_push,
+                    force=True,
+                    actor_id=request_actor_id(),
+                    return_failed_result=True,
+                    slot_key=phone_slot_key(phone),
+                )
+            )["success"]
+        except HTTPException:
+            raise
         except Exception as exc:
             logger.warning(
                 "push_sip_config_to_phone failed for %s: %s",
@@ -2124,7 +2338,15 @@ class VoIPService:
             val = data.pop(cred_field, None)
             if val is not None:
                 current_settings = dict(pbx.settings or {})
-                current_settings[cred_field] = val
+                if cred_field == "api_username" and pbx_username(val) is None:
+                    # Blanking the username means "use the default login", the
+                    # same as never entering one. Storing "" made the saved PBX
+                    # log in with an empty username.
+                    current_settings.pop(cred_field, None)
+                else:
+                    current_settings[cred_field] = (
+                        pbx_username(val) if cred_field == "api_username" else val
+                    )
                 pbx.settings = current_settings
 
         settings_update = data.pop("settings", None)
@@ -2207,13 +2429,25 @@ class VoIPService:
                 "response_time_ms": round((time.monotonic() - start) * 1000, 1),
             }
 
-        # For FreePBX, use the real adapter
+        # For FreePBX, use the real adapter. No username entered means the same
+        # default login the saved PBX would use (adapter_factory), and a failed
+        # test says so instead of leaving the operator to guess which login ran.
+        username_given = pbx_username(api_username)
+        blank_username_hint = (
+            ""
+            if username_given
+            else (
+                f" No username was entered, so the test signed in as "
+                f"'{DEFAULT_FREEPBX_USERNAME}', the FreePBX default. Enter the "
+                "PBX's AMI and web username if it is different."
+            )
+        )
         if pbx_type in ("freepbx", "asterisk"):
             adapter = None
             try:
                 adapter = self._create_adapter(
                     host=ip_address,
-                    username=api_username or "admin",
+                    username=username_given or DEFAULT_FREEPBX_USERNAME,
                     password=api_password or "",
                     web_port=api_port,
                     verify_ssl=verify_ssl,
@@ -2249,7 +2483,7 @@ class VoIPService:
                 else:
                     return {
                         "status": "auth_error" if "auth" in str(result.error).lower() else "failed",
-                        "message": result.error or "Connection test failed",
+                        "message": (result.error or "Connection test failed") + blank_username_hint,
                         "pbx_version": None,
                         "extensions_found": None,
                         "response_time_ms": round(elapsed, 1),
@@ -2261,7 +2495,8 @@ class VoIPService:
                 )
                 return {
                     "status": "failed",
-                    "message": "Connection failed — check credentials and network",
+                    "message": "Connection failed: check credentials and network."
+                    + blank_username_hint,
                     "pbx_version": None,
                     "extensions_found": None,
                     "response_time_ms": round(elapsed, 1),
@@ -2365,6 +2600,7 @@ class VoIPService:
         if pbx.pbx_type not in ("freepbx", "asterisk"):
             raise VoIPError(f"Adapter not available for PBX type: {pbx.pbx_type}")
 
+        await take_device_turn(pbx_slot_key(pbx))
         adapter = self._adapter_from_pbx(pbx)
         try:
             await adapter.connect()
@@ -2527,6 +2763,7 @@ class VoIPService:
 
         # Try to enrich with live adapter data (connection status, active calls)
         if pbx.pbx_type in ("freepbx", "asterisk"):
+            await take_device_turn(pbx_slot_key(pbx))
             adapter = self._adapter_from_pbx(pbx)
             try:
                 await adapter.connect()
@@ -3360,34 +3597,37 @@ class VoIPService:
         ext_number = data.get("extension_number", "")
         display_name = data.get("display_name", ext_number)
 
-        async def _op(adapter, pbx):
-            result = await adapter.create_extension(ext_number, data)
-            if not result.success:
-                raise VoIPError(f"Failed to create extension: {result.error}")
+        _pbx, result = await self._pbx_write(
+            pbx_id,
+            feature="pbx.extension",
+            operation="create",
+            target_id=str(ext_number),
+            payload=dict(data),
+            perform=lambda adapter: adapter.create_extension(ext_number, data),
+        )
+        if not result.success:
+            raise VoIPError(f"Failed to create extension: {result.error}")
+        # Save to DB
+        ext = Extension(
+            pbx_id=pbx_id,
+            extension_number=ext_number,
+            display_name=display_name,
+            caller_id_name=data.get("caller_id_name"),
+            caller_id_number=data.get("caller_id_number"),
+            voicemail_enabled=data.get("voicemail_enabled", True),
+            voicemail_pin=data.get("voicemail_pin"),
+            settings=data.get("settings", {}),
+        )
+        self.db.add(ext)
+        await self.db.commit()
+        await self.db.refresh(ext)
 
-            # Save to DB
-            ext = Extension(
-                pbx_id=pbx_id,
-                extension_number=ext_number,
-                display_name=display_name,
-                caller_id_name=data.get("caller_id_name"),
-                caller_id_number=data.get("caller_id_number"),
-                voicemail_enabled=data.get("voicemail_enabled", True),
-                voicemail_pin=data.get("voicemail_pin"),
-                settings=data.get("settings", {}),
-            )
-            self.db.add(ext)
-            await self.db.commit()
-            await self.db.refresh(ext)
-
-            return {
-                "id": str(ext.id),
-                "extension_number": ext_number,
-                "display_name": display_name,
-                "message": f"Extension {ext_number} created",
-            }
-
-        return await self._with_adapter(pbx_id, "create_extension", _op)
+        return {
+            "id": str(ext.id),
+            "extension_number": ext_number,
+            "display_name": display_name,
+            "message": f"Extension {ext_number} created",
+        }
 
     async def update_pbx_extension(
         self, pbx_id: UUID, ext_number: str, data: dict[str, Any]
@@ -3395,69 +3635,73 @@ class VoIPService:
         """Update an extension on the PBX via adapter + update DB."""
         from app.modules.voip.models import Extension
 
-        async def _op(adapter, pbx):
-            result = await adapter.update_extension(ext_number, data)
-            if not result.success:
-                raise VoIPError(f"Failed to update extension: {result.error}")
-
-            # Update DB
-            existing = await self.db.execute(
-                select(Extension).where(
-                    Extension.pbx_id == pbx_id,
-                    Extension.extension_number == ext_number,
-                    Extension.deleted_at.is_(None),
-                )
+        _pbx, result = await self._pbx_write(
+            pbx_id,
+            feature="pbx.extension",
+            operation="update",
+            target_id=str(ext_number),
+            payload=dict(data),
+            perform=lambda adapter: adapter.update_extension(ext_number, data),
+        )
+        if not result.success:
+            raise VoIPError(f"Failed to update extension: {result.error}")
+        # Update DB
+        existing = await self.db.execute(
+            select(Extension).where(
+                Extension.pbx_id == pbx_id,
+                Extension.extension_number == ext_number,
+                Extension.deleted_at.is_(None),
             )
-            ext = existing.scalar_one_or_none()
-            if ext:
-                for key, value in data.items():
-                    if value is not None and key in _EXTENSION_MUTABLE_FIELDS:
-                        setattr(ext, key, value)
-                await self.db.commit()
-
-            return {
-                "extension_number": ext_number,
-                "message": f"Extension {ext_number} updated",
-            }
-
-        return await self._with_adapter(pbx_id, "update_extension", _op)
+        )
+        ext = existing.scalar_one_or_none()
+        if ext:
+            for key, value in data.items():
+                if value is not None and key in _EXTENSION_MUTABLE_FIELDS:
+                    setattr(ext, key, value)
+        await self.db.commit()
+        return {
+            "extension_number": ext_number,
+            "message": f"Extension {ext_number} updated",
+        }
 
     async def delete_pbx_extension(self, pbx_id: UUID, ext_number: str) -> dict[str, Any]:
         """Delete an extension from the PBX via adapter + remove from DB."""
         from app.modules.voip.models import Extension
 
-        async def _op(adapter, pbx):
-            result = await adapter.delete_extension(ext_number)
-            if not result.success:
-                raise VoIPError(f"Failed to delete extension: {result.error}")
-
-            # Soft-delete from DB
-            existing = await self.db.execute(
-                select(Extension).where(
-                    Extension.pbx_id == pbx_id,
-                    Extension.extension_number == ext_number,
-                    Extension.deleted_at.is_(None),
-                )
+        _pbx, result = await self._pbx_write(
+            pbx_id,
+            feature="pbx.extension",
+            operation="delete",
+            target_id=str(ext_number),
+            payload={"extension_number": ext_number},
+            perform=lambda adapter: adapter.delete_extension(ext_number),
+        )
+        if not result.success:
+            raise VoIPError(f"Failed to delete extension: {result.error}")
+        # Soft-delete from DB
+        existing = await self.db.execute(
+            select(Extension).where(
+                Extension.pbx_id == pbx_id,
+                Extension.extension_number == ext_number,
+                Extension.deleted_at.is_(None),
             )
-            ext = existing.scalar_one_or_none()
-            ext_db_id = ext.id if ext else None
-            if ext:
-                ext.deleted_at = datetime.now(UTC)
-                await self.db.commit()
+        )
+        ext = existing.scalar_one_or_none()
+        ext_db_id = ext.id if ext else None
+        if ext:
+            ext.deleted_at = datetime.now(UTC)
+        await self.db.commit()
 
-            await self._audit_device_mutation(
-                action="delete",
-                resource_id=ext_db_id,
-                resource_name=f"extension {ext_number}",
-                extra_metadata={"pbx_id": str(pbx_id), "extension_number": ext_number},
-            )
-
-            return {
-                "extension_number": ext_number,
-                "message": f"Extension {ext_number} deleted",
-            }
-
-        return await self._with_adapter(pbx_id, "delete_extension", _op)
+        await self._audit_device_mutation(
+            action="delete",
+            resource_id=ext_db_id,
+            resource_name=f"extension {ext_number}",
+            extra_metadata={"pbx_id": str(pbx_id), "extension_number": ext_number},
+        )
+        return {
+            "extension_number": ext_number,
+            "message": f"Extension {ext_number} deleted",
+        }
 
     async def originate_call(
         self,
@@ -3489,6 +3733,20 @@ class VoIPService:
             )
             if not result.success:
                 raise VoIPError(f"Failed to originate call: {result.error}")
+            # Call control is exempt from ADAPTER_READ_ONLY (force=True above),
+            # so it is the one PBX write that still happens in monitor-only
+            # mode: leave a durable record, as the camera PTZ/audio actions do.
+            await self._audit_device_mutation(
+                action="call_originate",
+                resource_id=pbx_id,
+                resource_name=f"PBX {pbx.name}",
+                extra_metadata={
+                    "pbx_id": str(pbx_id),
+                    "channel": channel,
+                    "destination": destination,
+                    "context": context,
+                },
+            )
             return {
                 "status": "originated",
                 "channel": channel,
@@ -3506,6 +3764,12 @@ class VoIPService:
             result = await adapter.hangup_call(channel, force=True)
             if not result.success:
                 raise VoIPError(f"Failed to hang up: {result.error}")
+            await self._audit_device_mutation(
+                action="call_hangup",
+                resource_id=pbx_id,
+                resource_name=f"PBX {pbx.name}",
+                extra_metadata={"pbx_id": str(pbx_id), "channel": channel},
+            )
             return {"status": "hungup", "channel": channel}
 
         return await self._with_adapter(pbx_id, "hangup_call", _op)
@@ -3526,6 +3790,17 @@ class VoIPService:
             result = await adapter.transfer_call(channel, destination, context, force=True)
             if not result.success:
                 raise VoIPError(f"Failed to transfer: {result.error}")
+            await self._audit_device_mutation(
+                action="call_transfer",
+                resource_id=pbx_id,
+                resource_name=f"PBX {pbx.name}",
+                extra_metadata={
+                    "pbx_id": str(pbx_id),
+                    "channel": channel,
+                    "destination": destination,
+                    "context": context,
+                },
+            )
             return {"status": "transferred", "channel": channel, "destination": destination}
 
         return await self._with_adapter(pbx_id, "transfer_call", _op)
@@ -3817,34 +4092,37 @@ class VoIPService:
             "grptime": data.get("ring_time", 20),
         }
 
-        async def _op(adapter, pbx):
-            result = await adapter.create_ring_group(adapter_payload)
-            if not result.success:
-                raise VoIPError(f"Failed to create ring group: {result.error}")
+        _pbx, result = await self._pbx_write(
+            pbx_id,
+            feature="pbx.ring_group",
+            operation="create",
+            target_id=str(group_number),
+            payload=dict(adapter_payload),
+            perform=lambda adapter: adapter.create_ring_group(adapter_payload),
+        )
+        if not result.success:
+            raise VoIPError(f"Failed to create ring group: {result.error}")
+        rg = RingGroup(
+            pbx_id=pbx_id,
+            group_number=group_number,
+            name=name,
+            description=data.get("description"),
+            ring_strategy=data.get("ring_strategy", "ringall"),
+            ring_time=data.get("ring_time", 20),
+            members=data.get("members", []),
+            settings=data.get("settings", {}),
+        )
+        self.db.add(rg)
+        await self.db.commit()
+        await self.db.refresh(rg)
 
-            rg = RingGroup(
-                pbx_id=pbx_id,
-                group_number=group_number,
-                name=name,
-                description=data.get("description"),
-                ring_strategy=data.get("ring_strategy", "ringall"),
-                ring_time=data.get("ring_time", 20),
-                members=data.get("members", []),
-                settings=data.get("settings", {}),
-            )
-            self.db.add(rg)
-            await self.db.commit()
-            await self.db.refresh(rg)
-
-            return {
-                "id": str(rg.id),
-                "pbx_id": str(pbx_id),
-                "group_number": group_number,
-                "name": name,
-                "message": f"Ring group {group_number} created",
-            }
-
-        return await self._with_adapter(pbx_id, "create_ring_group", _op)
+        return {
+            "id": str(rg.id),
+            "pbx_id": str(pbx_id),
+            "group_number": group_number,
+            "name": name,
+            "message": f"Ring group {group_number} created",
+        }
 
     async def delete_ring_group(self, ring_group_id: UUID) -> dict[str, Any]:
         """Delete a ring group from the PBX via adapter + soft-delete the row.
@@ -3871,28 +4149,31 @@ class VoIPService:
         pbx_id = rg.pbx_id
         group_number = rg.group_number
 
-        async def _op(adapter, pbx):
-            result = await adapter.delete_ring_group(group_number)
-            if not result.success:
-                raise VoIPError(f"Failed to delete ring group: {result.error}")
+        _pbx, result = await self._pbx_write(
+            pbx_id,
+            feature="pbx.ring_group",
+            operation="delete",
+            target_id=str(group_number),
+            payload={"group_number": group_number},
+            perform=lambda adapter: adapter.delete_ring_group(group_number),
+        )
+        if not result.success:
+            raise VoIPError(f"Failed to delete ring group: {result.error}")
+        rg.deleted_at = datetime.now(UTC)
+        await self.db.commit()
 
-            rg.deleted_at = datetime.now(UTC)
-            await self.db.commit()
+        await self._audit_device_mutation(
+            action="delete",
+            resource_id=ring_group_id,
+            resource_name=f"ring group {group_number}",
+            extra_metadata={"pbx_id": str(pbx_id), "group_number": str(group_number)},
+        )
 
-            await self._audit_device_mutation(
-                action="delete",
-                resource_id=ring_group_id,
-                resource_name=f"ring group {group_number}",
-                extra_metadata={"pbx_id": str(pbx_id), "group_number": str(group_number)},
-            )
-
-            return {
-                "id": str(ring_group_id),
-                "group_number": group_number,
-                "message": f"Ring group {group_number} deleted",
-            }
-
-        return await self._with_adapter(pbx_id, "delete_ring_group", _op)
+        return {
+            "id": str(ring_group_id),
+            "group_number": group_number,
+            "message": f"Ring group {group_number} deleted",
+        }
 
     # -------------------------------------------------------------------------
     # Call Logs

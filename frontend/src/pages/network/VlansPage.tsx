@@ -82,7 +82,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { escapeCell } from '@/lib/csv';
+import { getApiErrorMessage } from '@/lib/api/errors';
+import { readControllerDelete } from '@/lib/api/controllerSync';
 
 // DHCP Status badge · uses canonical StatusBadge
 function DhcpBadge({ enabled }: { enabled: boolean }) {
@@ -309,7 +312,7 @@ export default function VlansPage() {
       setCreateDialogOpen(false);
     },
     onError: (err: any) => {
-      toast({ title: t('VlansPage.toast.errorTitle'), description: err?.response?.data?.detail || t('VlansPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('VlansPage.toast.errorTitle'), description: getApiErrorMessage(err, t('VlansPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
@@ -322,23 +325,38 @@ export default function VlansPage() {
       setEditingVlan(undefined);
     },
     onError: (err: any) => {
-      toast({ title: t('VlansPage.toast.errorTitle'), description: err?.response?.data?.detail || t('VlansPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('VlansPage.toast.errorTitle'), description: getApiErrorMessage(err, t('VlansPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => networkApi.vlans.delete(id),
-    onSuccess: () => {
+    mutationFn: (vlan: Vlan) => networkApi.vlans.delete(vlan.id),
+    onSuccess: (res, vlan) => {
       queryClient.invalidateQueries({ queryKey: ['vlans'] });
       setDeletingVlan(undefined);
+      // The delete went to the controller first. When it did not confirm,
+      // say so: either FreeSDN removed its record anyway (the VLAN may still
+      // be live there) or it kept the record.
+      const outcome = readControllerDelete(res);
+      if (outcome.kind === 'deleted') return;
+      const name = `${vlan.vlan_id} ${vlan.name}`;
+      const warning = outcome.warning ?? t('VlansPage.toast.noReason');
+      toast({
+        title: t('VlansPage.toast.controllerUnconfirmed'),
+        description: outcome.kind === 'kept'
+          ? t('VlansPage.toast.deleteKept', { name, warning })
+          : t('VlansPage.toast.deleteUnconfirmed', { name, warning }),
+        variant: 'destructive',
+      });
     },
     onError: (err: any) => {
-      toast({ title: t('VlansPage.toast.errorTitle'), description: err?.response?.data?.detail || t('VlansPage.toast.operationFailed'), variant: 'destructive' });
+      toast({ title: t('VlansPage.toast.errorTitle'), description: getApiErrorMessage(err, t('VlansPage.toast.operationFailed')), variant: 'destructive' });
     },
   });
 
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   // VLAN Alignment query
   const { data: alignment, isLoading: alignmentLoading } = useQuery({
@@ -356,15 +374,34 @@ export default function VlansPage() {
   const distributeMutation = useMutation({
     mutationFn: ({ sourceId, targetIds }: { sourceId: string; targetIds: string[] }) =>
       networkApi.distributeVlan(sourceId, targetIds),
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ['vlan-alignment'] });
       queryClient.invalidateQueries({ queryKey: ['vlans'] });
-      toast({ title: t('VlansPage.toast.successTitle'), description: t('VlansPage.toast.distributeSuccess') });
+      // The endpoint answers 200 with a result per controller. This toast used
+      // to say "distributed successfully" even when every controller refused.
+      const body = res?.data ?? {};
+      const failed: { controller_name: string; message?: string | null }[] =
+        (body.results ?? []).filter((r: { success: boolean }) => !r.success);
+      if (failed.length === 0) {
+        toast({ title: t('VlansPage.toast.successTitle'), description: t('VlansPage.toast.distributeSuccess') });
+        return;
+      }
+      const error = failed
+        .map((r) => (r.message ? `${r.controller_name}: ${r.message}` : r.controller_name))
+        .join('; ');
+      const succeeded = Number(body.succeeded ?? 0);
+      toast({
+        title: t('VlansPage.toast.errorTitle'),
+        description: succeeded > 0
+          ? t('VlansPage.toast.distributePartial', { succeeded, failed: failed.length, error })
+          : t('VlansPage.toast.distributeFailed', { error }),
+        variant: 'destructive',
+      });
     },
     onError: (err: any) => {
       toast({
         title: t('VlansPage.toast.errorTitle'),
-        description: t('VlansPage.toast.distributeFailed', { error: err.response?.data?.detail || err.message }),
+        description: t('VlansPage.toast.distributeFailed', { error: getApiErrorMessage(err) }),
         variant: 'destructive',
       });
     },
@@ -433,7 +470,7 @@ export default function VlansPage() {
       cell: (vlan: Vlan) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" aria-label={t('VlansPage.actions.menuFor', { vlanId: vlan.vlan_id, name: vlan.name })}>
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -621,6 +658,7 @@ export default function VlansPage() {
             isLoading={isLoading}
             selectable
             onSelectionChange={setSelected}
+            selectedRows={selected}
             searchable={false}
             itemName={t('VlansPage.itemNamePlural')}
             getRowId={(row) => row.id}
@@ -635,10 +673,19 @@ export default function VlansPage() {
                       label: t('VlansPage.actions.delete'),
                       icon: Trash2,
                       variant: 'destructive',
-                      onClick: () => {
+                      onClick: async () => {
                         if (selected.length === 0) return;
-                        if (!confirm(t('VlansPage.toast.bulkDeleteTitle'))) return;
-                        selected.forEach((v) => deleteMutation.mutate(v.id));
+                        const targets = [...selected];
+                        const ok = await confirm({
+                          title: t('VlansPage.confirm.bulkDelete.title', { count: targets.length }),
+                          description: t('VlansPage.confirm.bulkDelete.body'),
+                          count: targets.length,
+                          items: targets.map((v) => `${v.vlan_id} ${v.name}`),
+                          confirmLabel: t('VlansPage.confirm.bulkDelete.action', { count: targets.length }),
+                          destructive: true,
+                        });
+                        if (!ok) return;
+                        targets.forEach((v) => deleteMutation.mutate(v));
                         setSelected([]);
                       },
                     },
@@ -705,13 +752,12 @@ export default function VlansPage() {
                             <Button
                               size="sm"
                               disabled={distributeMutation.isPending}
-                              onClick={() => {
-                                if (
-                                  !confirm(
-                                    t('VlansPage.alignment.syncAllConfirm'),
-                                  )
-                                )
-                                  return;
+                              onClick={async () => {
+                                // Work out what will be copied before asking, so
+                                // the dialog can name it. Same selection as before:
+                                // a VLAN is copied only to controllers that lack
+                                // it, from one that has it with matching settings.
+                                const plan: { name: string; sourceId: string; targetIds: string[] }[] = [];
                                 for (const item of alignment.items ?? []) {
                                   if (item.all_aligned) continue;
                                   const source = (item.controllers ?? []).find(
@@ -722,11 +768,26 @@ export default function VlansPage() {
                                     .filter((c: any) => !c.present)
                                     .map((c: any) => c.controller_id);
                                   if (targets.length > 0) {
-                                    distributeMutation.mutate({
+                                    plan.push({
+                                      name: `${item.vlan_id} ${item.name ?? ''}`.trim(),
                                       sourceId: source.network_id,
                                       targetIds: targets,
                                     });
                                   }
+                                }
+                                const ok = await confirm({
+                                  title: t('VlansPage.confirm.syncAll.title'),
+                                  description: t('VlansPage.confirm.syncAll.body'),
+                                  count: plan.length,
+                                  items: plan.map((p) => p.name),
+                                  confirmLabel: t('VlansPage.confirm.syncAll.action'),
+                                });
+                                if (!ok) return;
+                                for (const p of plan) {
+                                  distributeMutation.mutate({
+                                    sourceId: p.sourceId,
+                                    targetIds: p.targetIds,
+                                  });
                                 }
                               }}
                             >
@@ -880,7 +941,7 @@ export default function VlansPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>{t('VlansPage.form.cancel')}</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deletingVlan && deleteMutation.mutate(deletingVlan.id)}
+              onClick={() => deletingVlan && deleteMutation.mutate(deletingVlan)}
               className="bg-destructive hover:bg-destructive/90"
             >
               {deleteMutation.isPending ? t('VlansPage.deleteDialog.deleting') : t('VlansPage.actions.delete')}

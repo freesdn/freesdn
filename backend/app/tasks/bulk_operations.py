@@ -187,6 +187,7 @@ async def _load_user_for_authz(
 ) -> Any | None:
     """Load the triggering user + their site access rows for re-auth checks."""
     from app.core.dependencies import CurrentUser, _load_user_permissions
+    from app.core.organization_access import organization_admits
     from app.models import User
 
     result = await db.execute(
@@ -196,6 +197,9 @@ async def _load_user_for_authz(
     )
     user_obj = result.scalar_one_or_none()
     if user_obj is None or not user_obj.is_active:
+        return None
+    # A member of a deleted or deactivated organization no longer acts.
+    if not await organization_admits(db, user_obj):
         return None
 
     perms = await _load_user_permissions(user_obj)
@@ -462,12 +466,17 @@ async def _execute_on_device(
                 )
                 return
 
+        # Each write goes through the staging chokepoint (a configuration push
+        # or firmware upgrade is a ledger row, a reboot an audited action), is
+        # refused in read-only mode before the device is contacted, and waits
+        # for the device's turn, like the same change made from the UI.
+        actor = getattr(job, "triggered_by", None)
         if job.operation == "push_config":
-            await _push_config_to_device(db, device, job.config)
+            await _push_config_to_device(db, device, job.config, actor_id=actor)
         elif job.operation == "reboot":
-            await _reboot_device(device)
+            await _reboot_device(db, device, actor_id=actor)
         elif job.operation == "firmware_update":
-            await _firmware_update_device(device, job.config)
+            await _firmware_update_device(db, device, job.config, actor_id=actor)
         else:
             await svc.record_device_result(
                 job,
@@ -544,6 +553,17 @@ def _raise_if_adapter_failed(result: Any, device: Device, operation: str) -> Non
     raise RuntimeError(f"{operation} refused by device {device.id}: {reason}")
 
 
+def _refuse_in_read_only_mode(device: Device, operation: str) -> None:
+    """A reboot is an action, not staged; read-only mode still refuses it first."""
+    from app.services.adapter_staging import AdapterStagingService
+
+    if AdapterStagingService.is_read_only():
+        raise RuntimeError(
+            f"{operation} refused for device {device.id}: read-only mode is on, "
+            "so device writes are refused"
+        )
+
+
 def _require_adapter_capability(adapter: Any, device: Device, *methods: str) -> None:
     """Fail with an honest message when this vendor's adapter cannot do it.
 
@@ -578,9 +598,26 @@ def _require_adapter_capability(adapter: Any, device: Device, *methods: str) -> 
 
 
 async def _push_config_to_device(
-    db: AsyncSession, device: Device, config: dict[str, Any] | None
+    db: AsyncSession,
+    device: Device,
+    config: dict[str, Any] | None,
+    *,
+    actor_id: UUID | None = None,
 ) -> None:
     """Push resolved config to a single device via its adapter."""
+    adapter = _adapter_for_device(device)
+    # Checked before anything is resolved, staged or sent: no adapter
+    # implements push_full_config yet, so a bulk config push cannot apply
+    # anywhere. The reason is the device's result in the job.
+    from app.services.device_writes import FullConfigPushUnsupported, full_config_push_refusal
+
+    refusal = full_config_push_refusal(adapter, "Bulk config push")
+    if refusal is not None:
+        raise FullConfigPushUnsupported(refusal)
+    _require_adapter_capability(
+        adapter, device, "get_running_config", "normalize_config", "diff_config"
+    )
+
     resolver = TemplateResolver(db)
     desired = await resolver.resolve(device)
 
@@ -590,16 +627,7 @@ async def _push_config_to_device(
 
         desired = deep_merge(desired, config)
 
-    adapter = _adapter_for_device(device)
     async with adapter:
-        _require_adapter_capability(
-            adapter,
-            device,
-            "get_running_config",
-            "normalize_config",
-            "diff_config",
-            "push_full_config",
-        )
         # Every call here was wrong against BaseAdapter; the import repair only
         # got far enough for them to start failing instead of ImportError-ing:
         #   get_running_config(device_id)       -- was called with no argument
@@ -613,28 +641,60 @@ async def _push_config_to_device(
         diff = await adapter.diff_config(normalized_desired, running)
 
         if diff:
-            result = await adapter.push_full_config(device_ref, normalized_desired)
+            from app.services.device_writes import write_device_config
+
+            # Staged and applied here (``direct.bulk.config_push``): the row
+            # records who started the bulk job, what changed and the result.
+            result = await write_device_config(
+                db,
+                device,
+                actor_id=actor_id,
+                feature="bulk.config_push",
+                operation="update",
+                payload={"changes": len(diff)},
+                perform=lambda: adapter.push_full_config(device_ref, normalized_desired),
+            )
             _raise_if_adapter_failed(result, device, "push_config")
             logger.info("Config pushed to device %s (%d changes)", device.id, len(diff))
         else:
             logger.info("Device %s already compliant", device.id)
 
 
-async def _reboot_device(device: Device) -> None:
-    """Reboot a device via its adapter."""
+async def _reboot_device(db: AsyncSession, device: Device, *, actor_id: UUID | None = None) -> None:
+    """Reboot a device via its adapter (an audited action)."""
+    from app.services.device_writes import device_action
+
     adapter = _adapter_for_device(device)
-    async with adapter:
-        # The interface is ``reboot_device(device_id)``. This probed for a bare
-        # ``reboot()``, which no adapter the factory returns implements, so every
-        # bulk reboot raised NotImplementedError and was recorded as a device
-        # failure -- the operation could never succeed.
-        _require_adapter_capability(adapter, device, "reboot_device")
-        result = await adapter.reboot_device(device.external_id or device.mac_address)
-        _raise_if_adapter_failed(result, device, "reboot")
-        logger.info("Reboot sent to device %s", device.id)
+    # The interface is ``reboot_device(device_id)``. This probed for a bare
+    # ``reboot()``, which no adapter the factory returns implements, so every
+    # bulk reboot raised NotImplementedError and was recorded as a device
+    # failure -- the operation could never succeed.
+    _require_adapter_capability(adapter, device, "reboot_device")
+    _refuse_in_read_only_mode(device, "reboot")
+
+    async def _reboot() -> Any:
+        async with adapter:
+            return await adapter.reboot_device(device.external_id or device.mac_address)
+
+    result = await device_action(
+        db,
+        device,
+        actor_id=actor_id,
+        action="reboot_device",
+        parameters={"source": "bulk operation"},
+        perform=_reboot,
+    )
+    _raise_if_adapter_failed(result, device, "reboot")
+    logger.info("Reboot sent to device %s", device.id)
 
 
-async def _firmware_update_device(device: Device, config: dict[str, Any] | None) -> None:
+async def _firmware_update_device(
+    db: AsyncSession,
+    device: Device,
+    config: dict[str, Any] | None,
+    *,
+    actor_id: UUID | None = None,
+) -> None:
     """Trigger firmware update on a device via its adapter."""
     # No firmware_url REQUIREMENT. It is a leftover from the old
     # ``firmware_update(url, version)`` call shape, which was not the interface;
@@ -652,19 +712,34 @@ async def _firmware_update_device(device: Device, config: dict[str, Any] | None)
     firmware_version = (config or {}).get("firmware_version")
 
     adapter = _adapter_for_device(device)
-    async with adapter:
-        # The interface is ``upgrade_firmware(device_id)``. This called
-        # ``firmware_update(url, version)`` -- a name only OPNsense exposes,
-        # and there it takes no positional arguments, so the call raised
-        # TypeError. The URL/version belong to the firmware service, not to
-        # this layer; they are logged for the operator and the adapter is
-        # asked to upgrade the device it manages.
-        _require_adapter_capability(adapter, device, "upgrade_firmware")
-        result = await adapter.upgrade_firmware(device.external_id or device.mac_address)
-        _raise_if_adapter_failed(result, device, "firmware_update")
-        logger.info(
-            "Firmware update triggered for device %s (requested %s / %s)",
-            device.id,
-            firmware_version or "latest",
-            firmware_url,
-        )
+    # The interface is ``upgrade_firmware(device_id)``. This called
+    # ``firmware_update(url, version)`` -- a name only OPNsense exposes,
+    # and there it takes no positional arguments, so the call raised
+    # TypeError. The URL/version belong to the firmware service, not to
+    # this layer; they are logged for the operator and the adapter is
+    # asked to upgrade the device it manages.
+    _require_adapter_capability(adapter, device, "upgrade_firmware")
+    from app.services.device_writes import write_device_config
+
+    async def _upgrade() -> Any:
+        async with adapter:
+            return await adapter.upgrade_firmware(device.external_id or device.mac_address)
+
+    # Staged and applied here (``direct.bulk.firmware``); read-only mode refuses
+    # it before the device is contacted.
+    result = await write_device_config(
+        db,
+        device,
+        actor_id=actor_id,
+        feature="bulk.firmware",
+        operation="update",
+        payload={"firmware_version": firmware_version or "latest"},
+        perform=_upgrade,
+    )
+    _raise_if_adapter_failed(result, device, "firmware_update")
+    logger.info(
+        "Firmware update triggered for device %s (requested %s / %s)",
+        device.id,
+        firmware_version or "latest",
+        firmware_url,
+    )

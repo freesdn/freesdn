@@ -62,6 +62,7 @@ import {
 import { PageHeader } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
 import { gatewayApi, type GatewayConnection, type GatewaySummary } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 
 // ─── Vendor display helpers ────────────────────────────────────────────
@@ -154,7 +155,7 @@ export default function GatewayListPage() {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      toast({ title: t('GatewayListPage.toasts.error'), description: err?.response?.data?.detail || t('GatewayListPage.toasts.deleteFailed'), variant: 'destructive' });
+      toast({ title: t('GatewayListPage.toasts.error'), description: getApiErrorMessage(err, t('GatewayListPage.toasts.deleteFailed')), variant: 'destructive' });
     },
   });
 
@@ -166,7 +167,7 @@ export default function GatewayListPage() {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      toast({ title: t('GatewayListPage.toasts.syncFailed.title'), description: err?.response?.data?.detail || t('GatewayListPage.toasts.syncFailed.description'), variant: 'destructive' });
+      toast({ title: t('GatewayListPage.toasts.syncFailed.title'), description: getApiErrorMessage(err, t('GatewayListPage.toasts.syncFailed.description')), variant: 'destructive' });
     },
   });
 
@@ -190,7 +191,7 @@ export default function GatewayListPage() {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (err: any) => {
-      toast({ title: t('GatewayListPage.toasts.testFailed.title'), description: err?.response?.data?.detail || t('GatewayListPage.toasts.testFailed.description'), variant: 'destructive' });
+      toast({ title: t('GatewayListPage.toasts.testFailed.title'), description: getApiErrorMessage(err, t('GatewayListPage.toasts.testFailed.description')), variant: 'destructive' });
     },
   });
 

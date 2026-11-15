@@ -552,7 +552,22 @@ class ReconciliationService:
 
         push_result_data: dict[str, Any] = {"status": "drift_detected", "drift": drift}
 
-        if dc.auto_remediate:
+        from app.services.device_writes import full_config_push_refusal
+
+        refusal = (
+            full_config_push_refusal(adapter, "Drift auto-remediation")
+            if dc.auto_remediate
+            else None
+        )
+        if refusal is not None:
+            # No adapter implements push_full_config yet. Said before the
+            # pre-change backup contacts the device and before anything is
+            # staged, and nothing is recorded as pushed.
+            dc.push_result = ConfigPushResult.FAILED
+            dc.push_error = refusal
+            push_result_data["push_status"] = "failed"
+            push_result_data["push_error"] = refusal
+        elif dc.auto_remediate:
             # 6. Auto-fix: auto-backup before push, then push desired config
             try:
                 from app.services.auto_backup import AutoBackupService
@@ -567,9 +582,22 @@ class ReconciliationService:
                 )
 
             try:
-                result = await adapter.push_full_config(
-                    device.external_id or device.mac_address,
-                    desired,
+                from app.services.device_writes import write_device_config
+
+                # Staged and applied in this pass (``direct.device.config.drift``):
+                # refused in read-only mode before the device is contacted,
+                # run in the device's turn, and recorded.
+                result = await write_device_config(
+                    self.db,
+                    device,
+                    actor_id=None,
+                    feature="device.config.drift",
+                    operation="update",
+                    payload={"source": "drift auto-remediation"},
+                    perform=lambda: adapter.push_full_config(
+                        device.external_id or device.mac_address,
+                        desired,
+                    ),
                 )
                 dc.pushed_config = desired
                 dc.pushed_at = now
@@ -621,10 +649,13 @@ class ReconciliationService:
                     push_result_data["push_error"] = result.error
 
             except Exception as exc:
+                # A refusal before the device was contacted (read-only mode, a
+                # busy device) says why in its detail.
+                reason = str(getattr(exc, "detail", None) or exc)
                 dc.push_result = ConfigPushResult.FAILED
-                dc.push_error = str(exc)
+                dc.push_error = reason
                 push_result_data["push_status"] = "error"
-                push_result_data["push_error"] = str(exc)
+                push_result_data["push_error"] = reason
 
         dc.config_version += 1
         return push_result_data

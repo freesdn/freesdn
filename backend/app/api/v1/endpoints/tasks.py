@@ -63,7 +63,8 @@ MANUALLY_TRIGGERABLE_TASKS: dict[str, dict[str, Any]] = {
         "superadmin_only": True,
     },
     "sync.check_controller_health": {
-        "queue": "sync",
+        # Same lane as its beat entry (celery_app.py): a short probe, not I/O work.
+        "queue": "default",
         "allow_args": False,
         "allow_kwargs": False,
         "superadmin_only": True,
@@ -630,17 +631,12 @@ async def get_worker_stats(
 
     # Queue lengths (approximate)
     # Note: This requires redis-py
+    # Read from the BROKER database (1 in the shipped compose). This asked
+    # database 0, where no queue lives, and reported 0 pending everywhere.
     try:
-        from app.core.redis_client import get_sync_redis
+        from app.core.metrics import celery_queue_lengths
 
-        r = get_sync_redis()
-        queues = {
-            "default": r.llen("default") or 0,
-            "discovery": r.llen("discovery") or 0,
-            "sync": r.llen("sync") or 0,
-            "metrics": r.llen("metrics") or 0,
-            "priority": r.llen("priority") or 0,
-        }
+        queues = celery_queue_lengths()
     except Exception:
         queues = {}
 

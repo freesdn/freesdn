@@ -29,6 +29,18 @@ from __future__ import annotations
 
 from typing import Any
 
+#: The login a FreePBX connection uses when no username is saved or entered:
+#: FreePBX's own default for the AMI manager user and the first admin account.
+#: The saved-PBX path and the connection test both use it, so a test that
+#: passes means the saved PBX will log in the same way.
+DEFAULT_FREEPBX_USERNAME = "admin"
+
+
+def pbx_username(value: Any) -> str | None:
+    """A username as entered or stored, with blank meaning "none given"."""
+    text = str(value).strip() if value is not None else ""
+    return text or None
+
 
 def build_freepbx_adapter_from_pbx(pbx: Any) -> Any:
     """Build (but do NOT connect) a :class:`FreePBXAdapter` from a PBX row.
@@ -73,7 +85,10 @@ def build_freepbx_adapter_from_pbx(pbx: Any) -> Any:
 
     return FreePBXAdapter(
         host=pbx.ip_address,
-        username=settings.get("api_username", "admin"),
+        # A stored "" used to be passed through as the login (the API accepted a
+        # blank api_username), while the connection test turned the same blank
+        # into "admin": the test passed and the saved PBX could not log in.
+        username=pbx_username(settings.get("api_username")) or DEFAULT_FREEPBX_USERNAME,
         password=web_password,
         ami_username=settings.get("ami_username"),
         ami_secret=ami_secret,

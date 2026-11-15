@@ -28,6 +28,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { PageHeader, PageTabs, type PageTab } from '@/components/layout';
+import { CapabilityMaturityBadge } from '@/components/ui/capability-maturity-badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { Button } from '@/components/ui/button';
@@ -52,7 +53,19 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { api, getApiErrorMessage } from '@/lib/api';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useToast } from '@/hooks/use-toast';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow, format, isValid } from 'date-fns';
+
+// date-fns throws a RangeError on an invalid Date, which takes the whole page
+// down with the route error boundary. A missing or malformed timestamp on one
+// row should only blank that row's time.
+function relativeTime(value: string | null | undefined): string {
+  const d = value ? new Date(value) : null;
+  return d && isValid(d) ? formatDistanceToNow(d, { addSuffix: true }) : '-';
+}
+function absoluteTime(value: string | null | undefined): string {
+  const d = value ? new Date(value) : null;
+  return d && isValid(d) ? format(d, 'PPpp') : '-';
+}
 
 interface SecurityEvent {
   id: string;
@@ -167,6 +180,7 @@ export default function SecurityPage() {
         >
           <PageHeader
             title={t('SecurityPage.title')}
+            titleBadge={<CapabilityMaturityBadge capabilityId="audit_log" />}
             description={t('SecurityPage.description')}
             icon={Shield}
             secondaryActions={[
@@ -387,11 +401,19 @@ function SecurityEventsTab() {
                   {events.map((event) => (
                     <div
                       key={event.id}
-                      className="p-4 hover:bg-muted/30 cursor-pointer transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      className="p-4 hover:bg-muted/30 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                       onClick={() => setSelectedEvent(event)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedEvent(event);
+                        }
+                      }}
                     >
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                      <div className="flex items-start gap-3 sm:gap-4">
+                        <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted sm:flex">
                           {getEventIcon(event.event_type)}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -412,7 +434,7 @@ function SecurityEventsTab() {
                           <p className="text-sm text-muted-foreground mt-1">
                             {t('SecurityPage.events.eventFrom', { source: event.user_email || event.ip_address || t('SecurityPage.events.unknownSource') })}
                           </p>
-                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
                             {event.user_email && (
                               <span className="flex items-center gap-1">
                                 <User className="h-3 w-3" />
@@ -427,7 +449,7 @@ function SecurityEventsTab() {
                             )}
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {formatDistanceToNow(new Date(event.timestamp), { addSuffix: true })}
+                              {relativeTime(event.timestamp)}
                             </span>
                           </div>
                         </div>
@@ -462,7 +484,7 @@ function SecurityEventsTab() {
               {selectedEvent?.event_type.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
             </DialogTitle>
             <DialogDescription>
-              {selectedEvent?.timestamp && format(new Date(selectedEvent.timestamp), 'PPpp')}
+              {selectedEvent?.timestamp && absoluteTime(selectedEvent.timestamp)}
             </DialogDescription>
           </DialogHeader>
           {selectedEvent && (
@@ -645,11 +667,19 @@ function AuditLogsTab() {
                   {logs.map((log) => (
                     <div
                       key={log.id}
-                      className="p-4 hover:bg-muted/30 cursor-pointer transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      className="p-4 hover:bg-muted/30 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                       onClick={() => setSelectedLog(log)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedLog(log);
+                        }
+                      }}
                     >
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                      <div className="flex items-start gap-3 sm:gap-4">
+                        <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted sm:flex">
                           {getActionIcon(log.action)}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -670,7 +700,7 @@ function AuditLogsTab() {
                           <p className="text-sm text-muted-foreground mt-1">
                             {log.resource_name || log.resource_id || t('SecurityPage.common.notAvailable')}
                           </p>
-                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
                             {log.actor_name && (
                               <span className="flex items-center gap-1">
                                 <User className="h-3 w-3" />
@@ -685,7 +715,7 @@ function AuditLogsTab() {
                             )}
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
+                              {relativeTime(log.timestamp)}
                             </span>
                           </div>
                         </div>
@@ -708,7 +738,7 @@ function AuditLogsTab() {
               {selectedLog?.action.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
             </DialogTitle>
             <DialogDescription>
-              {selectedLog?.timestamp && format(new Date(selectedLog.timestamp), 'PPpp')}
+              {selectedLog?.timestamp && absoluteTime(selectedLog.timestamp)}
             </DialogDescription>
           </DialogHeader>
           {selectedLog && (

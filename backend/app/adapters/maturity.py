@@ -66,7 +66,7 @@ ADAPTER_MATURITY: dict[str, MaturityInfo] = {
         _VERIFIED,
         write_maturity=_W_MOCK,
         write_note="Config writes (VLAN/SSID/firewall/route/port-profile, ~70 methods) "
-        "are gated + unit-tested, but no real-device write is persisted yet — treat writes "
+        "are gated + unit-tested, but no real-device write is persisted yet; treat writes "
         "as unproven on hardware.",
     ),
     "hikvision": MaturityInfo(
@@ -86,7 +86,7 @@ ADAPTER_MATURITY: dict[str, MaturityInfo] = {
         write_maturity=_W_MOCK,
         write_note="~60 staged + dual-gated + pre-flighted write methods, mock-tested. ONE "
         "firewall-alias create was run live on a 26.1 box historically (not persisted; alias "
-        "delete was broken on 26.1) — treat the write surface as unproven.",
+        "delete was broken on 26.1); treat the write surface as unproven.",
     ),
     "truenas": MaturityInfo(
         _VERIFIED,
@@ -126,14 +126,21 @@ ADAPTER_MATURITY: dict[str, MaturityInfo] = {
     "proxmox": MaturityInfo(
         _VERIFIED,
         "Read-only monitoring is live-validated on a real cluster.",
-        write_maturity=_W_DISABLED,
-        write_note="Write code exists but is DISABLED by design (the owner runs Proxmox "
-        "read-only); ceph / replication appliers are intentionally stubbed.",
+        # CORRECTED 2026-11-12: this said DISABLED, and the UI badge told users
+        # "Writes are intentionally disabled". They are not: the Proxmox pages
+        # stage and apply VM/CT power, clone, migrate, snapshot, backup and config
+        # writes whenever ADAPTER_READ_ONLY is off, which is the shipped default.
+        # What is true is that the maintainer's cluster runs read-only, so none of
+        # those writes has been proven on real hardware.
+        write_maturity=_W_MOCK,
+        write_note="VM/CT power, clone, migrate, snapshot, backup and config writes are "
+        "implemented, staged and unit-tested, but none is proven on real hardware yet. "
+        "Ceph, replication and SDN writes are intentionally unavailable.",
     ),
     "unifi": MaturityInfo(
         _VERIFIED,
         "Reads + device discovery live-validated on a real UCG Fiber (UniFi OS "
-        "5.1.19 / Network 10.4.57) over Tailscale — both the v1 classic and v2 "
+        "5.1.19 / Network 10.4.57) over Tailscale: both the v1 classic and v2 "
         "modern (zone-based-firewall) API lanes.",
         write_maturity=_W_PARTIAL,
         # HONEST split (post release-honesty audit): only ONE write domain has
@@ -142,10 +149,10 @@ ADAPTER_MATURITY: dict[str, MaturityInfo] = {
         # NOT LIVE_VALIDATED, it is partial.
         write_note="VLAN/network create+delete is proven on the real UCG with a "
         "PERSISTED cassette (freesdn-cassettes/unifi/networkconf_vlan_networkgroup.json). "
-        "A broad write surface — clients (block/unblock/forget/reconnect), devices "
+        "A broad write surface (clients (block/unblock/forget/reconnect), devices "
         "(restart/disable/locate/PoE), WLAN/SSID, firewall groups + legacy rules, "
         "RADIUS, hotspot vouchers, NAT/QoS/static-DNS, and the cross-vendor "
-        "distribution targets (create_vlan_interface/dhcp_scope/alias) — was "
+        "distribution targets (create_vlan_interface/dhcp_scope/alias)) was "
         "create->read->delete EXERCISED live this session but NOT persisted as "
         "cassettes (so treat as provisional). ZBF zone create/delete is unexercised "
         "(this controller isn't ZBF-migrated). VLAN-create constraint: the VLAN-ID "
@@ -172,7 +179,7 @@ ADAPTER_MATURITY: dict[str, MaturityInfo] = {
     ),
     "onvif": MaturityInfo(
         _EXPERIMENTAL,
-        "Generic ONVIF — works in principle for Dahua / Axis / Reolink / Uniview "
+        "Generic ONVIF: works in principle for Dahua / Axis / Reolink / Uniview "
         "and other ONVIF cameras, but not verified per vendor.",
         write_maturity=_W_EXPERIMENTAL,
     ),

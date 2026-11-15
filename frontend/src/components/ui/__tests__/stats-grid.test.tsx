@@ -88,3 +88,53 @@ describe('StatsGrid', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });
+
+describe('StatsGrid columns', () => {
+  const five = ['Switches', 'Access points', 'Gateways', 'Cameras', 'Phones'].map((title, i) => ({
+    title,
+    value: i * 10 + 1,
+    icon: Server,
+  }));
+
+  it('lays five cards out as one row at full width, stepping down without a lone card', () => {
+    const { container } = render(<StatsGrid stats={five} columns={5} />);
+    const grid = container.firstElementChild as HTMLElement;
+    expect(grid.children).toHaveLength(5);
+    // full width: five across; tablet: three then two; phone: two, and the
+    // fifth (odd, last) spans the row
+    expect(grid.className).toMatch(/(^|\s)xl:grid-cols-5(\s|$)/);
+    expect(grid.className).toMatch(/(^|\s)sm:grid-cols-3(\s|$)/);
+    expect(grid.className).toMatch(/(^|\s)grid-cols-2(\s|$)/);
+    expect(grid.className).toContain('max-sm:[&>*:last-child:nth-child(odd)]:col-span-2');
+  });
+
+  it('does not strand the third card of three on a two-column row', () => {
+    const { container } = render(<StatsGrid stats={sampleStats} columns={3} />);
+    const grid = container.firstElementChild as HTMLElement;
+    expect(grid.className).toMatch(/(^|\s)sm:grid-cols-3(\s|$)/);
+    expect(grid.className).not.toMatch(/sm:grid-cols-2/);
+  });
+
+  it('shows one skeleton card per column while loading, on the same grid', () => {
+    render(<StatsGrid stats={five} columns={5} isLoading />);
+    const skeleton = screen.getByTestId('stats-skeleton');
+    expect(skeleton.children).toHaveLength(5);
+    expect(skeleton).toHaveAttribute('aria-busy', 'true');
+    expect(skeleton.className).toMatch(/(^|\s)xl:grid-cols-5(\s|$)/);
+  });
+
+  it('renders numbers with tabular figures so they line up across cards', () => {
+    render(<StatsGrid stats={five} columns={5} />);
+    expect(screen.getByText('41')).toHaveClass('tabular-nums');
+  });
+
+  it('gives a clickable card a visible keyboard focus ring', () => {
+    render(
+      <StatsGrid
+        columns={2}
+        stats={[{ title: 'Open alerts', value: 2, icon: AlertCircle, onClick: () => {} }]}
+      />,
+    );
+    expect(screen.getByRole('button')).toHaveClass('focus-visible:ring-2');
+  });
+});

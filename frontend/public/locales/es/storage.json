@@ -1,0 +1,208 @@
+{
+  "header": {
+    "title": "Almacenamiento",
+    "subtitle": "Estado de los pools ZFS, capacidad, redundancia, temperatura de los discos, alertas e instantáneas de tus dispositivos de almacenamiento, con cambios preparados para revisión."
+  },
+  "actions": {
+    "addTrueNAS": "Agregar almacenamiento TrueNAS",
+    "newDataset": "Nuevo dataset"
+  },
+  "errors": {
+    "loadAppliances": "No se pudieron cargar los dispositivos de almacenamiento.",
+    "unreachable": "No se pudo conectar con el dispositivo."
+  },
+  "empty": {
+    "title": "Todavía no hay dispositivos de almacenamiento",
+    "description": "Conecta un dispositivo TrueNAS para ver el estado de los pools, la capacidad, los discos y las alertas en un solo lugar."
+  },
+  "health": {
+    "ok": "Correcto",
+    "warning": "Degradado",
+    "error": "Falla"
+  },
+  "writes": {
+    "needWs": "Los cambios necesitan la API WebSocket JSON-RPC (TrueNAS SCALE 25.04 o posterior). Este dispositivo respondió con la API REST anterior."
+  },
+  "stats": {
+    "pools": "Pools",
+    "poolsHealthy": "{{healthy}}/{{total}} correctos",
+    "disks": "Discos",
+    "disksHottest": "máx. {{temp}}°C · {{raw}} sin formato",
+    "disksRaw": "{{raw}} sin formato",
+    "dataProtection": "Protección de datos",
+    "dataProtectionSummary": "{{snap}} instantánea · {{repl}} replicación · {{cloud}} nube",
+    "dataProtectionNone": "sin tareas de instantánea ni de replicación",
+    "alerts": "Alertas",
+    "alertsCritical": "{{n}} críticas",
+    "alertsActive": "activas",
+    "alertsClear": "sin alertas"
+  },
+  "capacity": {
+    "used": "usado",
+    "summary": "{{used}} de {{total}} usado · {{free}} libre"
+  },
+  "facts": {
+    "model": "Modelo",
+    "memory": "Memoria",
+    "uptime": "Tiempo activo",
+    "timezone": "Zona horaria"
+  },
+  "time": {
+    "uptimeDays": "{{d}} d {{h}} h",
+    "uptimeHours": "{{h}} h {{m}} min",
+    "uptimeMinutes": "{{m}} min",
+    "justNow": "ahora mismo",
+    "daysAgo_one": "hace {{count}} día",
+    "daysAgo_other": "hace {{count}} días",
+    "hoursAgo_one": "hace {{count}} hora",
+    "hoursAgo_other": "hace {{count}} horas",
+    "minutesAgo_one": "hace {{count}} minuto",
+    "minutesAgo_other": "hace {{count}} minutos"
+  },
+  "sections": {
+    "pools": "Pools",
+    "services": "Uso compartido y servicios",
+    "disks": "Discos",
+    "disksBadge": "{{disks}} · {{raw}} sin formato",
+    "datasets": "Datasets",
+    "snapshots": "Instantáneas",
+    "snapshotsBadgeOf": "{{shown}} de {{total}}"
+  },
+  "services": {
+    "running": "en ejecución",
+    "stopped": "detenido"
+  },
+  "disks": {
+    "device": "Dispositivo",
+    "type": "Tipo",
+    "model": "Modelo",
+    "size": "Tamaño",
+    "temp": "Temp.",
+    "status": "Estado",
+    "unassigned": "sin asignar",
+    "poolVdev": "Pool / vdev",
+    "errors": "Errores"
+  },
+  "datasets": {
+    "empty": "No hay datasets.",
+    "dataset": "Dataset",
+    "type": "Tipo",
+    "used": "Usado",
+    "usage": "Uso",
+    "available": "Disponible",
+    "flags": "Indicadores",
+    "encrypted": "Cifrado",
+    "locked": "Bloqueado",
+    "snapshotAction": "Instantánea"
+  },
+  "snapshots": {
+    "truncated": "Se muestran las {{shown}} más recientes de {{total}}. Busca las anteriores en el dispositivo.",
+    "empty": "Todavía no hay instantáneas. Crea una desde la tabla de datasets.",
+    "snapshot": "Instantánea",
+    "dataset": "Dataset",
+    "referenced": "Referenciado",
+    "created": "Creada",
+    "deleteAction": "Eliminar"
+  },
+  "pool": {
+    "usedFree": "<strong>{{used}}</strong> usado · {{free}} libre",
+    "ofTotal": "de {{total}} en total",
+    "width": "{{width}} discos",
+    "fragmentation": "fragmentación {{value}}",
+    "scrubState": "Scrub {{state}}",
+    "scrubStates": {
+      "finished": "terminado",
+      "scanning": "en curso",
+      "canceled": "cancelado"
+    },
+    "scrubErrors_one": "{{count}} error",
+    "scrubErrors_other": "{{count}} errores",
+    "noScrub": "Sin historial de scrub",
+    "scrubRunning": "Ya hay un scrub en curso",
+    "scrubbing": "Ejecutando scrub…",
+    "scrub": "Scrub",
+    "dataset": "Dataset"
+  },
+  "validation": {
+    "required": "{{label}} es obligatorio",
+    "zfsName": "{{label}} puede usar letras, números y . _ - :"
+  },
+  "stage": {
+    "staged": "Cambio preparado",
+    "failed": "No se pudo preparar el cambio",
+    "failedDetail": "El cambio no se preparó. Inténtalo de nuevo."
+  },
+  "dialog": {
+    "cancel": "Cancelar"
+  },
+  "snapshotDialog": {
+    "title": "Crear una instantánea",
+    "description": "Una instantánea de {{dataset}} en este momento. Agrega un punto de restauración y no cambia nada en el disco.",
+    "submit": "Preparar instantánea",
+    "staged": "Instantánea {{snapshot}} preparada para revisión.",
+    "nameLabel": "Nombre de la instantánea",
+    "namePlaceholder": "nombre",
+    "storedAs": "Se guarda como <mono>{{snapshot}}</mono>",
+    "recursiveLabel": "Incluir datasets secundarios",
+    "recursiveDescription": "Crea una instantánea de todos los datasets anidados bajo este, de forma atómica."
+  },
+  "datasetDialog": {
+    "title": "Crear un dataset",
+    "description": "Un nuevo dataset ZFS. Indica una ruta dentro del pool, como backups o media/photos, no una ruta /mnt.",
+    "submit": "Preparar dataset",
+    "staged": "Dataset {{dataset}} preparado para revisión.",
+    "nameLabel": "Nombre del dataset",
+    "pathLabel": "Ruta del dataset",
+    "namePlaceholder": "nombre",
+    "createdAs": "Se crea como <mono>{{dataset}}</mono>",
+    "commentLabel": "Comentario (opcional)",
+    "commentPlaceholder": "Para qué sirve este dataset"
+  },
+  "scrubDialog": {
+    "title": "¿Iniciar un scrub en {{pool}}?",
+    "description": "Un scrub comprueba cada bloque del pool con su suma de verificación y repara lo que puede. Es seguro, pero lee todo el pool, así que se ejecuta en segundo plano durante un tiempo y esta página muestra su progreso. Esto prepara la solicitud para que la apliques.",
+    "submit": "Preparar scrub",
+    "staged": "Scrub de {{pool}} preparado para revisión."
+  },
+  "deleteSnapshotDialog": {
+    "title": "¿Eliminar esta instantánea?",
+    "description": "<mono>{{snapshot}}</mono> se destruye cuando apliques el cambio. El dataset y sus datos actuales no se tocan: solo se quita este punto de restauración, y solo después de aplicar.",
+    "submit": "Preparar eliminación",
+    "staged": "Eliminación de {{snapshot}} preparada para revisión."
+  },
+  "addDialog": {
+    "title": "Agregar almacenamiento TrueNAS",
+    "description": "Conecta un dispositivo TrueNAS SCALE o CORE para ver el estado de los pools, la capacidad y los discos. Agregarlo no cambia nada en el dispositivo.",
+    "submit": "Agregar dispositivo",
+    "heading": "Almacenamiento TrueNAS",
+    "testNeedsFields": "Escribe el host, el propietario de la clave de API y la clave de API para probar la conexión.",
+    "name": "Nombre",
+    "namePlaceholder": "p. ej. NAS de respaldo",
+    "site": "Sitio",
+    "sitePlaceholder": "Selecciona un sitio",
+    "host": "Host",
+    "hostPlaceholder": "truenas.lan o 100.x.y.z",
+    "port": "Puerto",
+    "keyOwner": "Propietario de la clave de API",
+    "keyOwnerHelp": "La cuenta con inicio de sesión habilitado a la que pertenece la clave de API. En TrueNAS 25.x la cuenta <code>root</code> está deshabilitada de forma predeterminada; usa <code>truenas_admin</code>.",
+    "apiKey": "Clave de API",
+    "apiKeyPlaceholder": "3-…  (Credentials > API Keys)",
+    "showKey": "Mostrar la clave de API",
+    "hideKey": "Ocultar la clave de API",
+    "apiKeyHelp": "La conexión siempre usa TLS: TrueNAS revoca cualquier clave que vea sin cifrar. Una clave de solo lectura basta para supervisar el dispositivo; aplicar cambios preparados necesita una clave con permiso de escritura.",
+    "verifyTls": "Verificar el certificado TLS",
+    "verifyTlsHelp": "Desactívalo para el certificado autofirmado predeterminado del dispositivo.",
+    "test": "Probar conexión",
+    "testing": "Probando…",
+    "testOk": "Conexión correcta",
+    "testFailed": "La conexión falló",
+    "writesNote": "FreeSDN lee el estado de los pools, la capacidad, los discos, los datasets y las instantáneas. Una instantánea, un dataset o un scrub que inicies desde la página de almacenamiento se prepara en Cambios pendientes y llega al dispositivo solo cuando lo aplicas.",
+    "validation": {
+      "name": "El nombre es obligatorio",
+      "site": "El sitio es obligatorio",
+      "host": "El host es obligatorio",
+      "username": "El propietario de la clave de API es obligatorio",
+      "apiKey": "La clave de API es obligatoria"
+    }
+  }
+}

@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -91,6 +92,7 @@ import { firmwareDeviceOutcome } from './jobStatus';
 import { firmwareApi, FirmwareSummary, type FirmwareSchedule } from '@/lib/api';
 import { useSiteStore } from '@/stores/siteStore';
 import { BatchProgressDialog, BatchDeviceStatus } from '@/components/ui/batch-progress-dialog';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const DEVICES_PAGE_SIZE = 50;
 
@@ -157,6 +159,7 @@ export default function FirmwarePage() {
   const { t } = useTranslation('firmware');
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
   const [searchParams] = useSearchParams();
@@ -304,7 +307,7 @@ export default function FirmwarePage() {
     },
   });
 
-  const errDetail = (err: any) => err?.response?.data?.detail || err?.message || t('FirmwarePage.toasts.unknownError');
+  const errDetail = (err: any) => getApiErrorMessage(err, t('FirmwarePage.toasts.unknownError'));
 
   // Schedule create
   const createScheduleMut = useMutation({
@@ -1388,10 +1391,15 @@ export default function FirmwarePage() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive"
-                          onClick={() => {
-                            if (window.confirm(`${t('FirmwarePage.actions.delete')}: ${schedule.name}`)) {
-                              deleteScheduleMut.mutate(schedule.id);
-                            }
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: t('FirmwarePage.confirm.deleteSchedule.title', { name: schedule.name }),
+                              description: t('FirmwarePage.confirm.deleteSchedule.description'),
+                              items: [schedule.name],
+                              confirmLabel: t('FirmwarePage.confirm.deleteSchedule.confirmLabel'),
+                              destructive: true,
+                            });
+                            if (ok) deleteScheduleMut.mutate(schedule.id);
                           }}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />

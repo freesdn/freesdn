@@ -227,7 +227,19 @@ async def test_authorized_inventory_preserves_payload_and_firmware_is_fresh(
     assert first.status_code == 200 and MARKER in first.text
     f.calls.clear()
     second = await request(f, route)
-    assert second.status_code == 200 and second.json() == first.json()
+    # Live gateway reads now say when they were read (as_of/cached/cache_reason,
+    # app/services/device_live_read.py): two fresh firmware reads differ in
+    # as_of and in nothing else. packages/plugins declare a response model that
+    # drops those fields.
+    added = ("as_of", "cached", "cache_reason")
+
+    def original(body):
+        return {k: v for k, v in body.items() if k not in added}
+
+    assert second.status_code == 200 and original(second.json()) == original(first.json())
+    if route == "firmware":
+        assert first.json()["as_of"] < second.json()["as_of"]
+        assert second.json()["cached"] is False
     assert f.calls == (["construct", "connect", "firmware", "disconnect"] if route == "firmware" else [])
     assert await snapshot(f) == before
 

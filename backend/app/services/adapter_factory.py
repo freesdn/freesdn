@@ -183,6 +183,55 @@ def build_adapter_for_controller(controller: Any) -> "BaseAdapter":
     )
 
 
+#: What each adapter's per-device ``device_id`` means. Every registered adapter
+#: must be listed (tests/services/test_adapter_device_id.py enforces it), so a
+#: new adapter cannot ship without someone deciding how its devices are named.
+#:   "mac"       -- a MAC address (Omada also matches the serial number)
+#:   "node_name" -- a Proxmox node name (/nodes/{node}/status)
+#:   "ignored"   -- the adapter fronts one appliance and ignores the id
+DEVICE_ID_KIND: dict[str, str] = {
+    "omada": "mac",
+    "unifi": "mac",
+    "grandstream": "mac",
+    "unifi_protect": "mac",
+    "freepbx": "mac",
+    "proxmox": "node_name",
+    "truenas": "ignored",
+    "opnsense": "ignored",
+    "pfsense": "ignored",
+    "mikrotik": "ignored",
+    "openwrt": "ignored",
+    "hikvision": "ignored",
+    "onvif": "ignored",
+}
+
+
+def adapter_device_id(device: Any, controller_type: str | None) -> str | None:
+    """The identifier ``device``'s own adapter expects in per-device reads.
+
+    ``get_device_status`` / ``get_device_config`` / ``get_device_metrics`` take a
+    ``device_id`` whose meaning belongs to the adapter: a MAC for Omada, UniFi
+    and Grandstream (Omada also matches the serial), a node NAME for Proxmox
+    (``/nodes/{node}/status``), and nothing at all for the single-appliance
+    adapters, which ignore it. ``tasks/sync.py`` passed ``device.mac_address``
+    for every device, so each status cycle asked Proxmox for
+    ``/nodes/None/status`` (HTTP 500): a hypervisor node's Device row, written
+    by the hypervisor module, has no MAC. ``external_id`` is never the answer
+    either: device_sync stamps it ``"<prefix>:<source row id>"``, which no
+    adapter understands.
+
+    Returns None when the device carries nothing its adapter could resolve, so
+    the caller can skip it instead of sending a request for "None".
+    """
+    kind = DEVICE_ID_KIND.get(str(controller_type or "").lower(), "mac")
+    if kind == "node_name":
+        return getattr(device, "name", None) or None
+    ident = getattr(device, "mac_address", None) or getattr(device, "serial_number", None)
+    if ident:
+        return str(ident)
+    return "" if kind == "ignored" else None
+
+
 def _decrypt_secret(value: str | None) -> str:
     """Plaintext for a stored controller secret, tolerating already-plain values."""
     if not value:

@@ -58,6 +58,7 @@ from app.adapters.exceptions import (
     AdapterAuthenticationError,
     AdapterConnectionError,
 )
+from app.core.http_client import build_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,7 @@ class UniFiProtectAdapter(BaseAdapter):
         port: int = 443,
         verify_ssl: bool = True,
         timeout: float = 15.0,
+        connect_address: str | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(host, username, password, **kwargs)
@@ -145,10 +147,28 @@ class UniFiProtectAdapter(BaseAdapter):
         self.verify_ssl = verify_ssl
         self._timeout = timeout
 
+        # ``connect_address`` is the address a stored-host check accepted for
+        # ``host``. The connection goes there and is never resolved again, while
+        # TLS still sends ``host`` as the SNI name and verifies the certificate
+        # against it, and the Host header still names it.
+        target = connect_address or host
+        pinned = target != host
+        headers: dict[str, str] | None = None
+        event_hooks: dict[str, list[Any]] | None = None
+        if pinned:
+            headers = {"Host": host if port == 443 else f"{host}:{port}"}
+
+            async def _tls_name(request: httpx.Request) -> None:
+                request.extensions["sni_hostname"] = host
+
+            event_hooks = {"request": [_tls_name]}
+
         scheme = "https"
-        self.base_url = f"{scheme}://{host}:{port}"
-        self._client = httpx.AsyncClient(
+        self.base_url = f"{scheme}://{target}:{port}"
+        self._client = build_async_client(
             base_url=self.base_url,
+            headers=headers,
+            event_hooks=event_hooks,
             verify=appliance_tls_context(verify_ssl, adapter_id="unifi_protect"),
             trust_env=False,
             timeout=httpx.Timeout(timeout),

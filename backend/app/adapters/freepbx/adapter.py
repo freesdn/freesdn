@@ -317,15 +317,32 @@ class FreePBXAdapter(BaseAdapter):
         return self._circuit
 
     # ── Write-gate (read-only mode + per-call force=True) ──────────────
+    # Live call control and queue-agent state: operational actions that keep
+    # working in read-only mode when the caller passes force=True (see below).
+    # Must match the ``op`` strings passed to _check_write_allowed exactly.
+    _OPERATIONAL_OPS: frozenset[str] = frozenset(
+        {
+            "AMI Originate",
+            "AMI Hangup",
+            "AMI Redirect",
+            "queue add member",
+            "queue remove member",
+            "queue pause member",
+        }
+    )
+
     def _check_write_allowed(self, force: bool, op: str) -> None:
         """Raise ``FreePBXReadOnlyError`` when a write is blocked.
 
-        ``ADAPTER_READ_ONLY=true`` blocks unless the caller passes ``force=True``.
+        ``ADAPTER_READ_ONLY=true`` blocks every PBX config write (extensions,
+        trunks, ring groups, queues, IVRs, routes, reload) except inside an
+        approved staged apply; ``force=True`` does not lift it.
         NOTE:
-        FreePBX live call-control (AMI originate/hangup) is an OPERATIONAL action,
-        not a device-config mutation, so it intentionally proceeds with
-        ``force=True`` to keep working under the default read-only posture — i.e.
-        ``force=True`` DOES override the env lock for these live actions. The
+        FreePBX live call-control (AMI originate/hangup/redirect, queue member
+        add/remove/pause; ``_OPERATIONAL_OPS``) is an OPERATIONAL action, not a
+        device-config mutation, so it intentionally proceeds with ``force=True``
+        to keep working under the default read-only posture — i.e. ``force=True``
+        DOES override the env lock for these live actions ONLY. The
         cross-tenant / cross-site abuse vector is closed by the RBAC +
         per-user site-grant + operation-permission gates on EVERY caller
         (including the Fabric path, which now threads ``accessible_site_ids``),
@@ -342,10 +359,18 @@ class FreePBXAdapter(BaseAdapter):
             effective_ro = is_adapter_read_only()
         else:
             effective_ro = self._read_only
-        if effective_ro and not force:
+        from app.adapters.apply_context import (
+            FORCE_DOES_NOT_LIFT_READ_ONLY,
+            read_only_refuses_write,
+        )
+
+        if force and op in self._OPERATIONAL_OPS:
+            return
+        if read_only_refuses_write(effective_ro):
             raise FreePBXReadOnlyError(
                 f"Refusing {op}: adapter is in read-only mode "
                 "(set ADAPTER_READ_ONLY=false and pass force=True to override)"
+                + (FORCE_DOES_NOT_LIFT_READ_ONLY if force else "")
             )
 
     def _track(self) -> None:
@@ -443,7 +468,7 @@ class FreePBXAdapter(BaseAdapter):
             # At least one interface must be available
             if not (self._ami.connected or self._ari.connected or self._rest.api_available):
                 raise FreePBXConnectionError(
-                    "All interfaces failed — AMI, ARI, and REST are all unreachable"
+                    "All interfaces failed: AMI, ARI, and REST are all unreachable"
                 )
         except Exception:
             with contextlib.suppress(Exception):
@@ -527,7 +552,10 @@ class FreePBXAdapter(BaseAdapter):
             with contextlib.suppress(Exception):
                 await ari.disconnect()
 
-        # Test REST
+        # Test REST with the same auth the adapter's own client uses. The OAuth2
+        # client credentials used to be left out here, so a PBX configured for
+        # the Admin API (often with no web username at all) failed the test with
+        # a web-session login it never uses, while its syncs worked.
         rest = FreePBXRestClient(
             host=self.host,
             username=self.username,
@@ -535,6 +563,8 @@ class FreePBXAdapter(BaseAdapter):
             port=self._rest.port,
             use_ssl=self._rest.use_ssl,
             verify_ssl=self._rest.verify_ssl,
+            api_client_id=self._rest.api_client_id,
+            api_client_secret=self._rest.api_client_secret,
         )
         try:
             await rest.connect()
@@ -556,7 +586,7 @@ class FreePBXAdapter(BaseAdapter):
                 message="FreePBX connection successful",
             )
         return AdapterResult.fail(
-            error="All interfaces failed — at least AMI or REST must connect",
+            error="All interfaces failed: at least AMI or REST must connect",
             message=str(results),
         )
 
@@ -1339,7 +1369,20 @@ class FreePBXAdapter(BaseAdapter):
         limit: int = 100,
         offset: int = 0,
     ) -> AdapterResult:
-        """Search call detail records."""
+        """Search call detail records.
+
+        ``error_code="NOT_SUPPORTED"`` when this connection cannot read CDR at
+        all (web-session auth has no CDR endpoint), so a caller can tell "this
+        PBX cannot provide call history" from "no calls" and from a failure.
+        """
+        if getattr(self._rest, "_auth_mode", None) != "oauth2":
+            return AdapterResult.fail(
+                error=(
+                    "Call records are only available through the FreePBX Admin API: "
+                    "add an OAuth2 API application to this PBX's connection"
+                ),
+                error_code="NOT_SUPPORTED",
+            )
         try:
             if self._rest.api_available:
                 data = await self._rest.search_cdr(

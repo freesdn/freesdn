@@ -46,6 +46,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { agentsApi } from '@/lib/api/agents';
 import type { AgentTask } from '@/lib/api/types';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
@@ -102,7 +103,7 @@ export function RunScanDialog({
     onError: (err: any) => {
       toast({
         title: t('RunScanDialog.toast.cancelFailed'),
-        description: err?.response?.data?.detail || String(err),
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },
@@ -134,7 +135,7 @@ export function RunScanDialog({
     onError: (err: any) => {
       toast({
         title: t('RunScanDialog.toast.failedToStart'),
-        description: err?.response?.data?.detail || String(err),
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },

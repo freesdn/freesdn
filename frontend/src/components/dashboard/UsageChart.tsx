@@ -68,14 +68,20 @@ export function UsageChart({
     setActiveRange(range);
     onRangeChange?.(range);
   };
+  // A range selector that nothing listens to is a dead control: it moved the
+  // highlight and left the data alone. Only render it when it is wired.
+  const showRanges = !!onRangeChange && timeRanges.length > 0;
+  const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
 
   return (
     <div className={cn('space-y-4', className)}>
       {/* Header with title and time range selector */}
+      {(title || showRanges) && (
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         {title && (
           <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
         )}
+        {showRanges && (
         <div className="flex gap-1 rounded-lg bg-muted p-1 overflow-x-auto scrollbar-hide -mx-1 px-1 sm:mx-0 sm:px-1">
           {timeRanges.map((range) => (
             <Button
@@ -92,7 +98,9 @@ export function UsageChart({
             </Button>
           ))}
         </div>
+        )}
       </div>
+      )}
 
       {/* Chart */}
       <motion.div
@@ -104,7 +112,8 @@ export function UsageChart({
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={data}
-            margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+            // left: -20 clipped any tick wider than four digits ("40000" read "0000").
+            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
           >
             <defs>
               {series.map((s) => (
@@ -138,6 +147,8 @@ export function UsageChart({
               tickLine={false}
               tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
               tickMargin={8}
+              width={48}
+              tickFormatter={(v: number) => compact.format(v)}
             />
             <Tooltip
               content={({ active, payload, label }) => {

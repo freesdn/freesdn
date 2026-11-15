@@ -101,7 +101,9 @@ import { EmptyState, NoResultsState } from '@/components/ui/empty-state';
 import { StatsGrid } from '@/components/ui/stats-grid';
 import { PageHeader } from '@/components/layout';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
 import { escapeCell } from '@/lib/csv';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // =============================================================================
 // Types
@@ -861,6 +863,7 @@ function resolveTabFromPath(pathname: string): string {
 export default function VoIPPage() {
   const { t } = useTranslation('voip');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -988,7 +991,7 @@ export default function VoIPPage() {
       queryClient.invalidateQueries({ queryKey: ['voip-pbx'] });
       setShowAddPBX(false);
     },
-    onError: (err: any) => toast({ title: t('VoIPPage.toasts.createPbxFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.toasts.createPbxFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const deletePBXMutation = useMutation({
@@ -996,7 +999,7 @@ export default function VoIPPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['voip-pbx'] });
     },
-    onError: (err: any) => toast({ title: t('VoIPPage.toasts.deletePbxFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.toasts.deletePbxFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   // ─────────────────────────────────────────────────────────────────
@@ -1020,7 +1023,7 @@ export default function VoIPPage() {
       setShowAddRingGroup(false);
       setRgForm(emptyRgForm);
     },
-    onError: (err: any) => toast({ title: t('VoIPPage.ringGroupsTab.addRingGroup'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.ringGroupsTab.addRingGroup'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const deleteRingGroupMutation = useMutation({
@@ -1028,7 +1031,7 @@ export default function VoIPPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['voip-ring-groups'] });
     },
-    onError: (err: any) => toast({ title: t('common:delete'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('common:delete'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const syncPBXMutation = useMutation({
@@ -1037,7 +1040,7 @@ export default function VoIPPage() {
       queryClient.invalidateQueries({ queryKey: ['voip-pbx'] });
       queryClient.invalidateQueries({ queryKey: ['voip-all-extensions'] });
     },
-    onError: (err: any) => toast({ title: t('VoIPPage.toasts.syncFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.toasts.syncFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const testConnectionMutation = useMutation({
@@ -1049,7 +1052,7 @@ export default function VoIPPage() {
       api_password?: string;
       api_key?: string;
     }) => voipApi.testPBXConnection(data),
-    onError: (err: any) => toast({ title: t('VoIPPage.toasts.connectionTestFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.toasts.connectionTestFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   // ─────────────────────────────────────────────────────────────────
@@ -1063,7 +1066,7 @@ export default function VoIPPage() {
       queryClient.invalidateQueries({ queryKey: ['voip-phone-stats'] });
       setShowAddPhone(false);
     },
-    onError: (err: any) => toast({ title: t('VoIPPage.toasts.createPhoneFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.toasts.createPhoneFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const deletePhoneMutation = useMutation({
@@ -1072,7 +1075,7 @@ export default function VoIPPage() {
       queryClient.invalidateQueries({ queryKey: ['voip-phones'] });
       queryClient.invalidateQueries({ queryKey: ['voip-phone-stats'] });
     },
-    onError: (err: any) => toast({ title: t('VoIPPage.toasts.deletePhoneFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.toasts.deletePhoneFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   // ─────────────────────────────────────────────────────────────────
@@ -1085,7 +1088,7 @@ export default function VoIPPage() {
       queryClient.invalidateQueries({ queryKey: ['voip-voicemails'] });
       queryClient.invalidateQueries({ queryKey: ['voip-voicemail-stats'] });
     },
-    onError: (err: any) => toast({ title: t('VoIPPage.toasts.markReadFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.toasts.markReadFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   const deleteVoicemailMutation = useMutation({
@@ -1094,7 +1097,7 @@ export default function VoIPPage() {
       queryClient.invalidateQueries({ queryKey: ['voip-voicemails'] });
       queryClient.invalidateQueries({ queryKey: ['voip-voicemail-stats'] });
     },
-    onError: (err: any) => toast({ title: t('VoIPPage.toasts.deleteVoicemailFailed'), description: err?.response?.data?.detail || err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: t('VoIPPage.toasts.deleteVoicemailFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 
   // ─────────────────────────────────────────────────────────────────
@@ -1259,8 +1262,15 @@ export default function VoIPPage() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-red-500 focus:text-red-500"
-              onClick={() => {
-                if (window.confirm(t('VoIPPage.confirm.deletePhone', { name: phone.name }))) {
+              onClick={async () => {
+                const ok = await confirm({
+                  title: t('VoIPPage.confirm.deletePhone', { name: phone.name }),
+                  description: t('VoIPPage.confirm.deletePhoneBody'),
+                  items: [phone.name],
+                  confirmLabel: t('VoIPPage.phoneActions.deletePhone'),
+                  destructive: true,
+                });
+                if (ok) {
                   deletePhoneMutation.mutate(phone.id);
                 }
               }}
@@ -1340,8 +1350,15 @@ export default function VoIPPage() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-red-500 focus:text-red-500"
-              onClick={() => {
-                if (confirm(t('VoIPPage.confirm.deletePbx', { name: pbx.name }))) {
+              onClick={async () => {
+                const ok = await confirm({
+                  title: t('VoIPPage.confirm.deletePbxTitle', { name: pbx.name }),
+                  description: t('VoIPPage.confirm.deletePbxBody'),
+                  items: [pbx.name],
+                  confirmLabel: t('PBXSettingsTab.actions.deletePBX'),
+                  destructive: true,
+                });
+                if (ok) {
                   deletePBXMutation.mutate(pbx.id);
                 }
               }}
@@ -1472,8 +1489,15 @@ export default function VoIPPage() {
           variant="ghost"
           size="sm"
           className="text-destructive"
-          onClick={() => {
-            if (window.confirm(`${t('common:delete')}, ${rg.name} (#${rg.group_number})`)) {
+          onClick={async () => {
+            const ok = await confirm({
+              title: t('VoIPPage.confirm.deleteRingGroupTitle', { name: rg.name }),
+              description: t('VoIPPage.confirm.deleteRingGroupBody'),
+              items: [`${rg.name} (#${rg.group_number})`],
+              confirmLabel: t('VoIPPage.confirm.deleteRingGroupAction'),
+              destructive: true,
+            });
+            if (ok) {
               deleteRingGroupMutation.mutate(rg.id);
             }
           }}
@@ -2152,8 +2176,19 @@ export default function VoIPPage() {
                     size="icon"
                     title={t('VoIPPage.voicemail.delete')}
                     className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                    onClick={() => {
-                      if (window.confirm(t('VoIPPage.confirm.deleteVoicemail'))) {
+                    onClick={async () => {
+                      const when = vm.message_date && isValid(new Date(vm.message_date))
+                        ? new Date(vm.message_date).toLocaleString()
+                        : '';
+                      const label = [vm.caller_id, when].filter(Boolean).join(' · ');
+                      const ok = await confirm({
+                        title: t('VoIPPage.confirm.deleteVoicemail'),
+                        description: t('VoIPPage.confirm.deleteVoicemailBody'),
+                        items: label ? [label] : undefined,
+                        confirmLabel: t('VoIPPage.confirm.deleteVoicemailAction'),
+                        destructive: true,
+                      });
+                      if (ok) {
                         deleteVoicemailMutation.mutate(vm.id);
                       }
                     }}

@@ -82,7 +82,9 @@
       "warningMany": "Warning: {{count}} users are currently assigned to this role."
     },
     "matrix": {
-      "permissionHeader": "Permission"
+      "permissionHeader": "Permission",
+      "granted": "Granted",
+      "notGranted": "Not granted"
     },
     "levels": {
       "superAdmin": "Super Admin",

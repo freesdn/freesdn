@@ -176,7 +176,7 @@ jobs:
       - name: Offline queue and report recovery safety guards
         if: matrix.part == 1
         working-directory: backend
-        run: poetry run pytest ../scripts/tests/test_queue_inventory.py ../scripts/tests/test_queue_backup_recovery.py ../scripts/tests/test_report_recovery.py ../scripts/tests/test_auth_recovery.py ../scripts/tests/test_install_config.py ../scripts/tests/test_install_acceptance.py ../scripts/tests/test_runtime_marker_parity.py ../scripts/tests/test_event_retention.py ../scripts/tests/test_postgres_pressure.py ../scripts/tests/test_check_image_findings.py --tb=short -q
+        run: poetry run pytest ../scripts/tests/test_queue_inventory.py ../scripts/tests/test_queue_backup_recovery.py ../scripts/tests/test_report_recovery.py ../scripts/tests/test_auth_recovery.py ../scripts/tests/test_install_config.py ../scripts/tests/test_backup_keygen.py ../scripts/tests/test_install_acceptance.py ../scripts/tests/test_runtime_marker_parity.py ../scripts/tests/test_event_retention.py ../scripts/tests/test_postgres_pressure.py ../scripts/tests/test_check_image_findings.py --tb=short -q
 
       - name: Offline database qualification evidence and interruption guards
         if: matrix.part == 1
@@ -354,7 +354,12 @@ jobs:
         working-directory: backend
         run: |
           poetry install --only main --no-root
-          poetry run pip install pip-audit
+          # pip-audit and every package it pulls in are dev-group entries in
+          # poetry.lock. Install them at those locked versions, never at
+          # whatever PyPI calls latest when the job runs: an unpinned install
+          # here ran code no review or 72-hour hold had seen, in the gate itself.
+          python -c "import tomllib; print('\n'.join(f\"{p['name']}=={p['version']}\" for p in tomllib.load(open('poetry.lock', 'rb'))['package']))" > "$RUNNER_TEMP/lock-constraints.txt"
+          poetry run pip install --constraint "$RUNNER_TEMP/lock-constraints.txt" pip-audit
           # No --ignore-vuln flags. Five starlette suppressions lived here on the
           # rationale that the project was "held on starlette 0.52.1 until
           # prometheus-fastapi-instrumentator supports fastapi >=0.137". That
@@ -683,6 +688,10 @@ jobs:
             context: backend
             dockerfile: backend/Dockerfile
             target: tailscale-access
+          - component: tailscale
+            context: backend
+            dockerfile: backend/Dockerfile
+            target: tailscale-runtime
           - component: backup-metrics
             context: docker
             dockerfile: docker/Dockerfile.backup-metrics

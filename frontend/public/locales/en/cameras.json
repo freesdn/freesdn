@@ -187,7 +187,11 @@
         "download": "Download sealed copy",
         "release": "Release hold (delete archive)",
         "confirmRelease": "Release this evidence hold? The archived copy and its hash will be permanently deleted.",
-        "hint": "Holds are durable, server-side copies sealed with a SHA-256 hash for chain-of-custody. They survive NVR retention rollover and are recorded in the audit log."
+        "hint": "Holds are durable, server-side copies sealed with a SHA-256 hash for chain-of-custody. They survive NVR retention rollover and are recorded in the audit log.",
+        "confirmReleaseTitle": "Release this evidence hold?",
+        "confirmReleaseBody": "The sealed copy and its SHA-256 hash are permanently deleted. If the NVR has already overwritten this time window, no copy of it remains.",
+        "releaseAction": "Release hold",
+        "releaseFailed": "Could not release the evidence hold"
       },
       "list": {
         "title": "Recordings",

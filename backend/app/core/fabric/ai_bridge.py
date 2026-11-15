@@ -116,6 +116,11 @@ def register_fabric_ops_as_ai_tools() -> int:
                 continue
             if op.handler is None and not op.write:
                 continue
+            # A live action (e.g. placing a phone call) neither reads nor stages
+            # for sign-off, so an AI tool call -- possibly steered by injected
+            # text -- would act on the world with no human in the loop.
+            if op.live_action:
+                continue
             if op.id in _WRAPPED:
                 continue
             tool_name = _ai_tool_name(op.id)  # provider-legal (op-ids are dotted)

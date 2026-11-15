@@ -488,6 +488,20 @@ def _service_for_feature(feature: str, session: AsyncSession) -> GatewayServiceB
     not — every feature module knows how to dispatch its own
     (feature, operation) pairs to client methods.
     """
+    # A change made by the request that recorded it has no applier and is never
+    # applied from the queue (AdapterStagingService.apply_now).
+    from app.services.adapter_staging import DIRECT_FEATURE_PREFIX
+
+    if feature.startswith(DIRECT_FEATURE_PREFIX):
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            409,
+            detail=(
+                "this change was made directly by the request that recorded it; "
+                "it cannot be applied from the pending-change queue"
+            ),
+        )
     # Appliance-local overlay (daemon) VPN writes — NO controller, NO adapter
     # client. Checked first; ``overlay.`` does not collide with the Omada ``vpn.``
     # gateway family below.

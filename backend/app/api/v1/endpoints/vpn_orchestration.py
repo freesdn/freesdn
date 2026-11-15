@@ -31,7 +31,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.deps import get_db
 from app.core.dependencies import CurrentUser, require_permissions
 from app.core.site_access import assert_can_access_site
-from app.services.vpn_orchestration import VPNOrchestrationService
+from app.db.session import get_logdb_session
+from app.services.vpn_orchestration import TunnelTeardownError, VPNOrchestrationService
 
 logger = logging.getLogger(__name__)
 
@@ -135,16 +136,28 @@ class MeshTunnelCreate(BaseModel):
 _SENSITIVE_CONFIG_KEYS = {"private_key", "preshared_key", "secret", "password", "key", "token"}
 
 
-def _redact_sensitive(obj: Any) -> Any:
-    """Recursively redact sensitive keys in dicts and lists."""
+def _redact_exact(obj: Any) -> Any:
     if isinstance(obj, dict):
         return {
-            k: ("***" if k in _SENSITIVE_CONFIG_KEYS else _redact_sensitive(v))
-            for k, v in obj.items()
+            k: ("***" if k in _SENSITIVE_CONFIG_KEYS else _redact_exact(v)) for k, v in obj.items()
         }
     if isinstance(obj, list):
-        return [_redact_sensitive(item) for item in obj]
+        return [_redact_exact(item) for item in obj]
     return obj
+
+
+def _redact_sensitive(obj: Any) -> Any:
+    """Recursively redact secrets in a template or tunnel config.
+
+    The shared redactor (``redact_secrets``) knows the vendor-native names a
+    template copied from a gateway carries (OPNsense ``privkey`` and ``psk``,
+    camelCase ``presharedKey`` ...); this module's own exact set adds a bare
+    ``key``. Six exact, case-sensitive names alone let ``server.privkey`` and
+    ``peer.psk`` through to any ``vpn:read`` user.
+    """
+    from app.core.redaction import redact_secrets
+
+    return redact_secrets(_redact_exact(obj))
 
 
 class SiteToSiteTunnelResponse(BaseModel):
@@ -332,13 +345,28 @@ async def create_mesh(
     return [SiteToSiteTunnelResponse.model_validate(t) for t in tunnels]
 
 
-@router.delete("/tunnels/{tunnel_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/tunnels/{tunnel_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    # 204 when the tunnel is gone; a kept tunnel answers 200 with a JSON body.
+    response_model=None,
+)
 async def teardown_tunnel(
     tunnel_id: UUID,
+    local_only: bool = Query(
+        False,
+        description="Remove only FreeSDN's record and leave both gateways unchanged "
+        "(for a tunnel a gateway refuses to remove or that FreeSDN no longer reaches).",
+    ),
     db: AsyncSession = Depends(get_db),
     user: CurrentUser = Depends(require_permissions("vpn:write")),
-) -> None:
-    """Tear down (delete) a site-to-site VPN tunnel."""
+) -> Any:
+    """Tear down (delete) a site-to-site VPN tunnel.
+
+    The tunnel is removed from both gateways first (204 when it is gone). When
+    a gateway refuses, or read-only mode is on, FreeSDN keeps the tunnel and
+    answers 200 ``{"success": false, "record_kept": true, "reason": ...}``.
+    """
     from sqlalchemy import select
 
     from app.models.vpn import SiteToSiteTunnel
@@ -356,7 +384,25 @@ async def teardown_tunnel(
         raise HTTPException(status_code=404, detail="Tunnel not found")
     _assert_tunnel_sites(user, _t.site_a_id, _t.site_b_id)
     service = VPNOrchestrationService(db)
-    deleted = await service.teardown_tunnel(tunnel_id, org_id)
+    try:
+        deleted = await service.teardown_tunnel(tunnel_id, org_id, local_only=local_only)
+    except TunnelTeardownError as exc:
+        # Keep the tunnel, with the reason recorded on it.
+        await db.commit()
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": False,
+                "record_kept": True,
+                "reason": (
+                    f"The tunnel was not removed from every gateway, so FreeSDN kept it: "
+                    f"{exc}. To remove only FreeSDN's record, delete again with "
+                    "local_only=true."
+                ),
+            },
+        )
     if not deleted:
         raise HTTPException(status_code=404, detail="Tunnel not found")
     await db.commit()
@@ -429,40 +475,74 @@ async def tunnel_action(
     _assert_tunnel_sites(user, tunnel.site_a_id, tunnel.site_b_id)
 
     action = body.action
-    reprovision_failed = False
 
-    if action == "enable":
-        tunnel.status = "active"
-        tunnel.error_message = None
-    elif action == "disable":
-        tunnel.status = "disabled"
-    elif action == "reprovision":
-        # Re-run provisioning via the orchestration service
+    async def _push() -> bool:
         tunnel.status = "provisioning"
         tunnel.error_message = None
         tunnel.provisioned_at = None
         await db.flush()
-        svc = VPNOrchestrationService(db)
         try:
-            await svc._reprovision_tunnel(tunnel)
+            return await VPNOrchestrationService(db)._reprovision_tunnel(tunnel)
         except Exception as exc:
             # Persist the error state for the tunnel, but do NOT mask the
             # failure: log it with a traceback and report success=False so the
-            # client knows the reprovision did not complete.
-            logger.error("VPN tunnel %s reprovision failed: %s", tunnel_id, exc, exc_info=True)
-            reprovision_failed = True
+            # client knows the push did not complete.
+            logger.error("VPN tunnel %s push failed: %s", tunnel_id, exc, exc_info=True)
             tunnel.status = "error"
             tunnel.error_message = str(exc)[:500]
+            return False
+
+    # "active" means the config reached both gateways and FreeSDN has no
+    # evidence it is broken. Enable used to set it directly, so a tunnel whose
+    # push had failed, or that was never pushed, turned green with nothing on
+    # either gateway. Disable only changes FreeSDN's record (nothing removes the
+    # config from the gateways), so its message says so instead of claiming the
+    # traffic stopped.
+    if action == "enable":
+        if tunnel.provisioned_at is None:
+            success = await _push()
+            message = (
+                "Tunnel pushed to its gateways and enabled"
+                if success
+                else "Tunnel not enabled: the push to its gateways did not complete"
+            )
+        elif tunnel.status == "active":
+            success, message = True, "Tunnel is already enabled"
+        elif tunnel.status == "disabled":
+            tunnel.status = "active"
+            tunnel.error_message = None
+            success = True
+            message = (
+                "Tunnel enabled. Its configuration was still on the gateways; "
+                "the next health check confirms it is passing traffic."
+            )
+        else:
+            success = False
+            message = (
+                "This tunnel is already on its gateways and its last health check "
+                "failed. Enable does not change that: check the link between the sites."
+            )
+    elif action == "disable":
+        never_pushed = tunnel.provisioned_at is None
+        tunnel.status = "disabled"
+        success = True
+        message = (
+            "Tunnel marked disabled. Nothing had been pushed to its gateways."
+            if never_pushed
+            else "Tunnel marked disabled and no longer health-checked. Its configuration "
+            "is still on the gateways, so traffic keeps flowing until you tear it down."
+        )
+    else:  # reprovision
+        success = await _push()
+        message = "Tunnel reprovisioned" if success else "Tunnel reprovision failed"
 
     await db.commit()
-    success = not reprovision_failed
-    message = f"Tunnel {action} failed" if reprovision_failed else f"Tunnel {action}d"
     return TunnelActionResponse(
         success=success,
         message=message,
         tunnel_id=str(tunnel_id),
         new_status=tunnel.status,
-        error_message=tunnel.error_message if reprovision_failed else None,
+        error_message=None if success else tunnel.error_message,
     )
 
 
@@ -477,9 +557,14 @@ async def get_tunnel_health_history(
     hours: int = Query(24, ge=1, le=720),
     limit: int = Query(100, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
+    logdb: AsyncSession = Depends(get_logdb_session),
     user: CurrentUser = Depends(require_permissions("vpn:read")),
 ) -> Any:
-    """Return time-series health data for a site-to-site tunnel."""
+    """Return time-series health data for a site-to-site tunnel.
+
+    The health checks are in the LogDB, a separate server on every installed
+    tier; the main database has no ``vpn.vpn_health_checks``.
+    """
     from datetime import timedelta
 
     from sqlalchemy import select, text
@@ -501,7 +586,7 @@ async def get_tunnel_health_history(
     from datetime import datetime
 
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
-    rows = await db.execute(
+    rows = await logdb.execute(
         text("""
             SELECT time, is_healthy, latency_ms, status, error_message, rx_bytes, tx_bytes, peer_count
             FROM vpn.vpn_health_checks

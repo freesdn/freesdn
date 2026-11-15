@@ -42,20 +42,6 @@ def _granted_roaming_pred():
     )
 
 
-def _safe_decrypt(value: str | None) -> str:
-    """Decrypt a credential, falling back to the raw value if not encrypted."""
-    if not value:
-        return ""
-    from app.core.crypto import decrypt_credential, is_encrypted
-
-    if not is_encrypted(value):
-        return value
-    try:
-        return decrypt_credential(value)
-    except ValueError:
-        raise ValueError("Stored controller credential could not be decrypted") from None
-
-
 class RoamingAnalyticsService:
     """Service for client roaming analytics and configuration."""
 
@@ -370,47 +356,90 @@ class RoamingAnalyticsService:
         # Push to controller via adapter if possible
         try:
             from app.models.core import Controller, Site
-            from app.services.adapter_factory import get_adapter
+            from app.services.adapter_factory import build_adapter_for_controller
 
-            # Load the site + controller for this WiFi network
-            site_q = await self.db.execute(select(Site).where(Site.id == wifi.site_id))
-            site = site_q.scalar_one_or_none()
-            if site:
+            # The controller knows this SSID by its own id (``external_id``,
+            # recorded when the SSID was synced or created), not by FreeSDN's
+            # UUID; the WiFi pages address it the same way. This sent
+            # ``str(wifi.id)``, which no controller has, so every roaming push
+            # was answered "SSID not found". Without the controller's id there
+            # is nothing to address, so nothing is sent.
+            ssid_ref = wifi.external_id
+            controller = None
+            if not ssid_ref:
+                logger.warning(
+                    "Roaming config for WiFi %s saved but not pushed: the controller's "
+                    "id for this SSID is not known yet (sync the controller first)",
+                    wifi_network_id,
+                )
+            elif wifi.controller_id:
                 ctrl_q = await self.db.execute(
                     select(Controller).where(
-                        Controller.site_id == site.id,
+                        Controller.id == wifi.controller_id,
                         Controller.deleted_at.is_(None),
                     )
                 )
-                controller = ctrl_q.scalars().first()
-                if controller and hasattr(controller, "host"):
-                    try:
-                        adapter = get_adapter(
-                            controller.controller_type,
-                            host=controller.host,
-                            username=_safe_decrypt(controller.username),
-                            password=_safe_decrypt(controller.password),
-                            port=controller.port,
-                            ssl=controller.use_ssl,
-                            verify_ssl=controller.verify_ssl,
+                controller = ctrl_q.scalar_one_or_none()
+            else:
+                site_q = await self.db.execute(select(Site).where(Site.id == wifi.site_id))
+                site = site_q.scalar_one_or_none()
+                if site:
+                    ctrl_q = await self.db.execute(
+                        select(Controller).where(
+                            Controller.site_id == site.id,
+                            Controller.deleted_at.is_(None),
                         )
-                        if hasattr(adapter, "update_ssid_config"):
-                            roaming_payload = {
-                                "fast_roaming": wifi.fast_roaming,
-                                "roaming_protocol": wifi.roaming_protocol,
-                                "minimum_rssi": wifi.minimum_rssi,
-                            }
+                    )
+                    controller = ctrl_q.scalars().first()
+            if ssid_ref and controller and hasattr(controller, "host"):
+                ref: str = ssid_ref
+                try:
+                    adapter = build_adapter_for_controller(controller)
+                    if hasattr(adapter, "update_ssid_config"):
+                        from app.services.device_writes import (
+                            request_actor_id,
+                            write_controller_config,
+                        )
+
+                        roaming_payload = {
+                            "fast_roaming": wifi.fast_roaming,
+                            "roaming_protocol": wifi.roaming_protocol,
+                            "minimum_rssi": wifi.minimum_rssi,
+                        }
+
+                        async def _push():
                             async with adapter:
-                                await adapter.update_ssid_config(str(wifi.id), roaming_payload)
-                            logger.info(
-                                "Pushed roaming config to controller for WiFi %s", wifi_network_id
-                            )
-                    except Exception:
-                        logger.warning(
-                            "Failed to push roaming config to controller for WiFi %s — DB updated, device push pending",
-                            wifi_network_id,
-                            exc_info=True,
+                                return await adapter.update_ssid_config(ref, roaming_payload)
+
+                        # Staged and applied in this request; read-only
+                        # mode refuses it before the controller is asked.
+                        pushed = await write_controller_config(
+                            self.db,
+                            controller.id,
+                            actor_id=request_actor_id(),
+                            feature="roaming.ssid",
+                            operation="update",
+                            target_id=ref,
+                            payload=dict(roaming_payload),
+                            perform=_push,
                         )
+                        if getattr(pushed, "success", False):
+                            logger.info(
+                                "Pushed roaming config to controller for WiFi %s",
+                                wifi_network_id,
+                            )
+                        else:
+                            logger.warning(
+                                "Controller refused the roaming config for WiFi %s: %s",
+                                wifi_network_id,
+                                getattr(pushed, "error", None),
+                            )
+                except Exception:
+                    logger.warning(
+                        "Failed to push roaming config to controller for WiFi %s — DB updated, device push pending",
+                        wifi_network_id,
+                        exc_info=True,
+                    )
         except Exception:
             logger.debug("Roaming config push skipped — no controller available", exc_info=True)
 

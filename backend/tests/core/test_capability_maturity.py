@@ -66,3 +66,16 @@ def test_nonstable_modules_carry_the_beta_flag():
 
     assert CollectorModule.get_manifest().is_beta is True
     assert AccessControlModule.get_manifest().is_beta is True
+
+
+def test_freepbx_write_note_agrees_with_the_adapter_record():
+    """The two maturity records disagreed: this note said the FreePBX write
+    transport was stubbed while the adapter record said it was implemented and
+    proven live. Whatever the grade, the capability note must not contradict it."""
+    from app.adapters.base import WriteMaturity
+    from app.adapters.maturity import ADAPTER_MATURITY
+
+    assert ADAPTER_MATURITY["freepbx"].write_maturity is WriteMaturity.PARTIAL
+    note = get_capability_maturity("voip_freepbx_write").notes.lower()
+    assert "stubbed" not in note
+    assert "not yet functional" not in note

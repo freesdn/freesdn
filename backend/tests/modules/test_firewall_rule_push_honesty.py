@@ -37,30 +37,56 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
+import pytest_asyncio
 
 from app.adapters.base import AdapterResult
 from app.adapters.exceptions import AdapterError
 from app.modules.firewall.gateway_service import GatewayService
 
 
-def _service(result: AdapterResult) -> GatewayService:
-    """A GatewayService whose adapter returns the given result for both writes."""
-    svc = GatewayService.__new__(GatewayService)
+@pytest.fixture
+def _writable(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.core.runtime_flags as rf
+
+    monkeypatch.setattr(rf, "is_adapter_read_only", lambda: False)
+
+
+@pytest_asyncio.fixture
+async def _org(db_session):
+    from app.models.core import Organization
+
+    org = Organization(name="rule push honesty", slug=uuid.uuid4().hex)
+    db_session.add(org)
+    await db_session.commit()
+    return org
+
+
+def _service(result: AdapterResult, db, org) -> GatewayService:
+    """A GatewayService whose adapter returns the given result for both writes.
+
+    Since the gateway writes go through the staging chokepoint, the write is
+    recorded in the test database: the gateway lookup and the connection are
+    replaced, the ledger is real.
+    """
+    svc = GatewayService(db)
 
     adapter = SimpleNamespace(
         create_firewall_rule=lambda _payload: _async(result),
         delete_firewall_rule=lambda _vendor_id: _async(result),
     )
-    gateway = SimpleNamespace(id=uuid.uuid4(), vendor="opnsense")
+    gateway = SimpleNamespace(
+        id=uuid.uuid4(), vendor="opnsense", org_id=org.id, site_id=None, host="192.0.2.1"
+    )
+
+    async def _get_gw(*_a, **_kw):
+        return gateway
 
     @asynccontextmanager
-    async def _ctx(*_a, **_kw):
-        yield (gateway, adapter)
+    async def _connected(*_a, **_kw):
+        yield adapter
 
-    async def _adapter_for(*_a, **_kw):
-        return _ctx()
-
-    svc._adapter_for = _adapter_for  # type: ignore[method-assign]
+    svc._get_gw = _get_gw  # type: ignore[method-assign]
+    svc._connected = _connected  # type: ignore[method-assign]
     svc._translate_rule_to_vendor = lambda _vendor, rule: rule  # type: ignore[method-assign]
     svc._extract_vendor_rule_id = lambda _vendor, _result: "vendor-1"  # type: ignore[method-assign]
     return svc
@@ -73,31 +99,39 @@ async def _async(value):
 # ── The regression ───────────────────────────────────────────────
 
 
-async def test_refused_push_raises_instead_of_returning_success_false() -> None:
+async def test_refused_push_raises_instead_of_returning_success_false(
+    db_session, _org, _writable
+) -> None:
     """
     raise_for_adapter_result maps an uncoded device failure to AdapterError,
     which the app's exception handler turns into HTTP 502. What matters here is
     that it RAISES rather than returning a 200 body with success:false.
     """
-    svc = _service(AdapterResult.fail("the firewall rejected the rule"))
+    svc = _service(AdapterResult.fail("the firewall rejected the rule"), db_session, _org)
 
     with pytest.raises(AdapterError):
         await svc.push_firewall_rule(uuid.uuid4(), uuid.uuid4(), {"action": "pass"})
 
 
-async def test_refused_delete_raises_instead_of_returning_success_false() -> None:
-    svc = _service(AdapterResult.fail("no such rule on the device"))
+async def test_refused_delete_raises_instead_of_returning_success_false(
+    db_session, _org, _writable
+) -> None:
+    svc = _service(AdapterResult.fail("no such rule on the device"), db_session, _org)
 
     with pytest.raises(AdapterError):
         await svc.delete_vendor_rule(uuid.uuid4(), uuid.uuid4(), "vendor-1")
 
 
-async def test_read_only_refusal_is_not_reported_as_a_successful_push() -> None:
+async def test_read_only_refusal_is_not_reported_as_a_successful_push(
+    db_session, _org, _writable
+) -> None:
     """
     The dev compose sets ADAPTER_READ_ONLY, so this is the refusal an operator
     is most likely to hit -- and the one most likely to be mistaken for success.
     """
-    svc = _service(AdapterResult.fail("ADAPTER_READ_ONLY is set", error_code="READ_ONLY"))
+    svc = _service(
+        AdapterResult.fail("ADAPTER_READ_ONLY is set", error_code="READ_ONLY"), db_session, _org
+    )
     with pytest.raises(Exception) as exc:
         await svc.push_firewall_rule(uuid.uuid4(), uuid.uuid4(), {"action": "pass"})
     assert "READ_ONLY" in str(exc.value) or "read" in str(exc.value).lower()
@@ -106,13 +140,13 @@ async def test_read_only_refusal_is_not_reported_as_a_successful_push() -> None:
 # ── The success path, and its response shape ─────────────────────
 
 
-async def test_successful_push_keeps_its_response_shape() -> None:
+async def test_successful_push_keeps_its_response_shape(db_session, _org, _writable) -> None:
     """
     GatewayRulePushResponse needs vendor_rule_id and applied, which is why these
     methods build their body by hand instead of delegating to _write_result.
     Changing that shape would break the endpoint's response model.
     """
-    svc = _service(AdapterResult.ok({"uuid": "abc"}, message="Rule pushed"))
+    svc = _service(AdapterResult.ok({"uuid": "abc"}, message="Rule pushed"), db_session, _org)
 
     out = await svc.push_firewall_rule(uuid.uuid4(), uuid.uuid4(), {"action": "pass"})
 
@@ -122,8 +156,8 @@ async def test_successful_push_keeps_its_response_shape() -> None:
     assert "message" in out
 
 
-async def test_successful_delete_keeps_its_response_shape() -> None:
-    svc = _service(AdapterResult.ok(None, message="Rule deleted"))
+async def test_successful_delete_keeps_its_response_shape(db_session, _org, _writable) -> None:
+    svc = _service(AdapterResult.ok(None, message="Rule deleted"), db_session, _org)
 
     out = await svc.delete_vendor_rule(uuid.uuid4(), uuid.uuid4(), "vendor-1")
 

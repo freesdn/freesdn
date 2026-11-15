@@ -411,6 +411,12 @@
       "targetNodePlaceholder": "Selecciona el nodo de destino",
       "targetNodeRequired": "Selecciona un nodo de destino",
       "onlineLabel": "Migración en vivo (solo máquinas QEMU)"
+    },
+    "confirmDetail": {
+      "start": "Los invitados seleccionados se inician en sus nodos de Proxmox. Las solicitudes se envían al host ahora.",
+      "shutdown": "Se pide al sistema operativo de cada invitado que se apague de forma ordenada. Un invitado que ignore la solicitud sigue en ejecución.",
+      "stop": "Los invitados seleccionados se apagan de inmediato, como al desconectar el cable de alimentación. Se pierden las escrituras de disco pendientes. Prefiera Apagar salvo que un invitado esté colgado.",
+      "reboot": "Los invitados seleccionados se reinician en sus nodos de Proxmox. Sus servicios no estarán disponibles hasta que cada uno vuelva a arrancar."
     }
   },
   "EditConfigDialog": {

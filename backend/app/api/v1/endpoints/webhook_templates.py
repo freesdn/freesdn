@@ -29,105 +29,125 @@ router = APIRouter()
 # Template definitions
 # ─────────────────────────────────────────────────────────────────────────────
 
+
+def _example(event: str, data: dict[str, Any]) -> dict[str, Any]:
+    """The body a webhook really receives (``webhook_events.build_envelope``)."""
+    return {
+        "id": "7d0c3c3e-0000-4000-8000-000000000000",
+        "event": event,
+        "timestamp": "2026-01-01T12:00:00+00:00",
+        "organization_id": "org-uuid",
+        "category": event.split(".", 1)[0],
+        "source": "freesdn",
+        "correlation_id": "uuid-here",
+        "data": data,
+    }
+
+
+# Every event named here must be one the platform publishes; a template that
+# subscribes to a name nothing emits creates a webhook that never fires
+# (tests/api/test_webhook_template_events.py). These listed eleven such names --
+# device.offline/online, discovery.complete, alert.created/escalated,
+# audit.login_failed, security.anomaly/ip_blocked, backup.started/complete/
+# failed, camera.motion/offline -- and their example payloads showed a
+# {"type", "payload"} body no delivery has ever had.
 WEBHOOK_TEMPLATES: list[dict[str, Any]] = [
     {
         "id": "device-status",
         "name": "Device Status Changes",
-        "description": "Trigger when any device goes online, offline, or changes status",
+        "description": "Trigger when a device goes offline, comes back online, or changes status",
         "category": "network",
         "icon": "Server",
-        "events": ["device.status.changed", "device.offline", "device.online"],
-        "example_payload": {
-            "type": "device.offline",
-            "payload": {
+        "events": ["device.status.changed"],
+        "example_payload": _example(
+            "device.status.changed",
+            {
                 "device_id": "uuid-here",
-                "name": "switch-core-01",
-                "status": "offline",
                 "site_id": "site-uuid",
+                "data": {"name": "switch-core-01", "old_status": "online", "new_status": "offline"},
+                "device_type": "switch",
             },
-        },
+        ),
     },
     {
         "id": "new-device",
         "name": "New Device Discovered",
-        "description": "Trigger when a new device is found during network discovery",
+        "description": "Trigger when a new device is found and when a discovery run finishes",
         "category": "network",
         "icon": "ScanSearch",
-        "events": ["device.discovered", "discovery.complete"],
-        "example_payload": {
-            "type": "device.discovered",
-            "payload": {
-                "ip_address": "192.168.1.100",
-                "mac_address": "aa:bb:cc:dd:ee:ff",
-                "device_type": "switch",
+        "events": ["device.discovered", "discovery.completed"],
+        "example_payload": _example(
+            "device.discovered",
+            {
+                "device_id": "uuid-here",
+                "site_id": "site-uuid",
+                "data": {"name": "AP-Lobby", "mac": "AA:BB:CC:DD:EE:FF"},
+                "device_type": "access_point",
             },
-        },
+        ),
     },
     {
         "id": "security-events",
-        "name": "Security Events",
-        "description": "Trigger on security anomalies, failed logins, and IP blocks",
+        "name": "Security Alerts",
+        "description": (
+            "Trigger on security alerts raised by the audit service. Failed logins "
+            "and IP blocks are recorded in the audit log, not published as events."
+        ),
         "category": "security",
         "icon": "ShieldAlert",
-        "events": ["security.anomaly", "audit.login_failed", "security.ip_blocked"],
-        "example_payload": {
-            "type": "security.anomaly",
-            "payload": {
-                "anomaly_type": "brute_force",
-                "source_ip": "1.2.3.4",
-                "severity": "high",
-            },
-        },
+        "events": ["security.alert"],
+        "example_payload": _example(
+            "security.alert",
+            {"event_type": "brute_force", "severity": "high", "source_ip": "198.51.100.4"},
+        ),
     },
     {
         "id": "backup-status",
-        "name": "Backup Job Status",
-        "description": "Trigger when backups start, complete, or fail",
+        "name": "Backup Validation Failures",
+        "description": (
+            "Trigger when a backup fails validation. Backup start and completion "
+            "are not published as events yet."
+        ),
         "category": "backup",
         "icon": "Archive",
-        "events": ["backup.complete", "backup.failed", "backup.started"],
-        "example_payload": {
-            "type": "backup.complete",
-            "payload": {
-                "backup_id": "uuid-here",
-                "device_name": "switch-core-01",
-                "storage_location": "s3-primary",
-                "size_bytes": 245760,
-            },
-        },
+        "events": ["backup.validation.failed"],
+        "example_payload": _example(
+            "backup.validation.failed", {"backup_id": "uuid-here", "reason": "checksum mismatch"}
+        ),
     },
     {
         "id": "alert-events",
         "name": "Alert Lifecycle",
-        "description": "Trigger when alerts are created, resolved, or escalated",
+        "description": "Trigger when an alert fires and when it resolves",
         "category": "monitoring",
         "icon": "Bell",
-        "events": ["alert.created", "alert.resolved", "alert.escalated"],
-        "example_payload": {
-            "type": "alert.created",
-            "payload": {
+        "events": ["alert.fired", "alert.resolved"],
+        "example_payload": _example(
+            "alert.fired",
+            {
                 "alert_id": "uuid-here",
-                "title": "High CPU usage",
-                "severity": "warning",
+                "title": "[CRITICAL] CPU hot",
+                "severity": "critical",
                 "device_id": "uuid-here",
             },
-        },
+        ),
     },
     {
         "id": "camera-events",
         "name": "Camera Events",
-        "description": "Trigger on camera motion, alerts, or connectivity changes",
+        "description": "Trigger on camera smart-detection alerts and connectivity changes",
         "category": "surveillance",
         "icon": "Camera",
-        "events": ["camera.motion", "camera.alert", "camera.offline"],
-        "example_payload": {
-            "type": "camera.motion",
-            "payload": {
+        "events": ["camera.alert.*", "camera.status.offline", "camera.status.online"],
+        "example_payload": _example(
+            "camera.alert.motion",
+            {
                 "camera_id": "uuid-here",
                 "camera_name": "Entrance Camera",
+                "event_type": "motion",
                 "timestamp": "2026-01-01T12:00:00Z",
             },
-        },
+        ),
     },
 ]
 

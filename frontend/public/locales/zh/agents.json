@@ -236,7 +236,10 @@
       "runScan": "运行扫描",
       "disconnect": "断开连接",
       "disconnectConfirm": "确定要移除此代理吗？",
-      "menuLabel": "{{name}} 的操作"
+      "menuLabel": "{{name}} 的操作",
+      "disconnectTitle": "移除代理 \"{{name}}\"？",
+      "disconnectBody": "其密钥将失效，因此无法再连接，其心跳历史记录也会被删除。FreeSDN 还会吊销其站点的所有 WireGuard VPN 配置。发现和运行记录将被保留。",
+      "disconnectAction": "移除代理"
     },
     "stats": {
       "total": {
@@ -312,7 +315,12 @@
         "confirm": "删除 {{count}} 个代理？此操作为软删除注册记录；现有的发现和运行记录将被保留。",
         "result": "已删除 {{ok}} 个",
         "resultWithFailures": "已删除 {{ok}} 个，{{fail}} 个失败",
-        "toastTitle": "批量删除完成"
+        "toastTitle": "批量删除完成",
+        "confirmTitle_one": "删除 {{count}} 个代理？",
+        "confirmTitle_other": "删除 {{count}} 个代理？",
+        "confirmBody": "每个代理的密钥都将失效，其心跳历史记录也会被删除。FreeSDN 还会吊销这些代理所在站点的所有 WireGuard VPN 配置。发现和运行记录将被保留。",
+        "confirmAction_one": "删除代理",
+        "confirmAction_other": "删除代理"
       }
     },
     "register": {
@@ -346,7 +354,8 @@
         "name": "代理名称为必填项",
         "siteRequired": "选择一个站点",
         "nameRequired": "代理名称为必填项"
-      }
+      },
+      "copyField": "复制{{label}}"
     },
     "pageHeader": {
       "title": "远程代理",

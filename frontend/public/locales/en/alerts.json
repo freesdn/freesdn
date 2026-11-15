@@ -129,6 +129,34 @@
       "errorTitle": "Error",
       "operationFailed": "Operation failed",
       "securityReviewUnavailable": "Security event review isn't available yet"
+    },
+    "status": {
+      "firing": "Firing",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved",
+      "suppressed": "Suppressed",
+      "open": "Open",
+      "investigating": "Investigating",
+      "mitigating": "Mitigating",
+      "closed": "Closed",
+      "failed": "Failed",
+      "success": "Succeeded"
+    },
+    "securityRow": {
+      "description": "{{user}} from {{ip}} · risk {{risk}}",
+      "unknownUser": "Unknown user",
+      "unknownIp": "unknown IP"
+    },
+    "incidentRow": {
+      "fallbackDescription": "Incident with {{count}} correlated events"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "warning": "Warning",
+      "medium": "Medium",
+      "low": "Low",
+      "info": "Info"
     }
   }
 }

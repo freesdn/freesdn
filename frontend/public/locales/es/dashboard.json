@@ -95,7 +95,9 @@
       "last24h": "Últimas 24 h",
       "downloadMiB": "Descarga (MiB)",
       "uploadMiB": "Subida (MiB)",
-      "counterSnapshot": "Contadores acumulados actuales; los reinicios varían"
+      "counterSnapshot": "Contadores acumulados actuales; los reinicios varían",
+      "download": "Recibido (descarga)",
+      "upload": "Enviado (subida)"
     },
     "networkHealth": {
       "notAvailable": "N/D",

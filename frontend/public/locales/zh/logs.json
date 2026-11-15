@@ -106,7 +106,8 @@
       "ip": "IP:",
       "request": "请求:",
       "device": "设备:",
-      "site": "站点:"
+      "site": "站点:",
+      "copyRequestId": "复制请求 ID"
     },
     "allLogs": {
       "loadError": "无法加载日志数据。请重试。",

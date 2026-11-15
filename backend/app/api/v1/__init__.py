@@ -7,6 +7,8 @@ FreeSDN - API v1 Router
 Main API router that includes all endpoint modules.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from app.api.v1.endpoints import (
@@ -120,6 +122,7 @@ from app.api.v1.endpoints import (
     credentials,
     dashboard,
     data,
+    device_config_backups,
     devices,
     discovery,
     dpi,
@@ -165,8 +168,35 @@ from app.api.v1.endpoints import (
     ztp,
 )
 from app.api.v1.endpoints.staging_guards import enforce_catastrophic_stage_role
+from app.modules.enablement import module_enabled_dependency, module_owner_for_router_prefix
 
-api_router = APIRouter()
+
+class _CoreAPIRouter(APIRouter):
+    """The core API router, which closes a disabled module's vendor routers.
+
+    Proxmox, FreePBX, TrueNAS, OPNsense and pfSense have routers here, outside
+    their module's router, so the module gate that ``ModuleLoader.register_routes``
+    puts on ``/api/v1/{module_id}/`` never reached them: with the hypervisor
+    module disabled every ``/gateway-proxmox-*`` route still staged and read.
+    Every router whose prefix ``MODULE_OWNED_ROUTER_PREFIXES``
+    (app/modules/enablement.py) assigns to a module is mounted here with that
+    module's gate FIRST, before any other dependency, so a disabled module
+    answers 403 ``module_disabled`` before its routes do any work. Doing it in
+    ``include_router`` rather than on each call below means a router added later
+    with one of those prefixes cannot arrive ungated.
+    """
+
+    def include_router(self, router: APIRouter, *args: Any, **kwargs: Any) -> None:
+        owner = module_owner_for_router_prefix(str(kwargs.get("prefix") or "") + router.prefix)
+        if owner is not None:
+            kwargs["dependencies"] = [
+                Depends(module_enabled_dependency(owner)),
+                *(kwargs.get("dependencies") or []),
+            ]
+        super().include_router(router, *args, **kwargs)
+
+
+api_router = _CoreAPIRouter()
 
 # WP-08: stage-time catastrophic-role gate, attached router-wide to EVERY
 # adapter router whose stage endpoint can accept a catastrophic feature
@@ -201,6 +231,9 @@ api_router.include_router(adapters.router, prefix="/adapters", tags=["Adapters"]
 api_router.include_router(events.router, prefix="/events", tags=["Events"])
 api_router.include_router(actions.router, prefix="/actions", tags=["Actions"])
 api_router.include_router(backups.router, prefix="/backups", tags=["Backups"])
+api_router.include_router(
+    device_config_backups.router, prefix="/config-backups", tags=["Config Backups"]
+)
 api_router.include_router(capabilities.router, prefix="/capabilities", tags=["Capabilities"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 api_router.include_router(audit.router, prefix="/audit", tags=["Audit"])

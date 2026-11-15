@@ -30,6 +30,8 @@ import {
   XCircle,
   AlertCircle,
   Copy,
+  Check,
+  X,
   Settings,
   MoreHorizontal,
   Shield,
@@ -100,6 +102,8 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/comp
 import { z } from 'zod';
 import { DataTable, DataTableColumn } from '@/components/ui/data-table';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { cn } from '@/lib/utils';
 
 
@@ -161,8 +165,16 @@ function DetailRow({ label, value, mono, copyable }: {
   label: string; value: string | number | null | undefined; mono?: boolean; copyable?: boolean;
 }) {
   const { t } = useTranslation('sites');
+  const { copy, state: copyState } = useCopyToClipboard();
   const display = value != null && value !== '' ? String(value) : '-';
   const isEmpty = display === '-';
+  const CopyIcon = copyState === 'copied' ? Check : copyState === 'failed' ? X : Copy;
+  const copyHint =
+    copyState === 'copied'
+      ? t('SiteDetailPage.common.copied')
+      : copyState === 'failed'
+        ? t('CopyButton.failedHint', { ns: 'common' })
+        : t('SiteDetailPage.common.clickToCopy');
 
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-border last:border-0">
@@ -177,15 +189,24 @@ function DetailRow({ label, value, mono, copyable }: {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="inline-flex items-center gap-1.5 hover:text-primary transition-colors"
-                  onClick={() => navigator.clipboard.writeText(display).catch(() => {})}
+                  type="button"
+                  className={cn(
+                    'inline-flex items-center gap-1.5 hover:text-primary transition-colors',
+                    copyState === 'copied' && 'text-success',
+                    copyState === 'failed' && 'text-destructive',
+                  )}
+                  data-copy-state={copyState}
+                  onClick={() => void copy(display)}
                 >
                   {display}
-                  <Copy className="h-3 w-3 opacity-40" />
+                  <CopyIcon className={cn('h-3 w-3', copyState === 'idle' && 'opacity-40')} aria-hidden="true" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent><p className="text-xs">{t('SiteDetailPage.common.clickToCopy')}</p></TooltipContent>
+              <TooltipContent><p className="text-xs">{copyHint}</p></TooltipContent>
             </Tooltip>
+            <span className="sr-only" role="status" aria-live="polite">
+              {copyState === 'idle' ? '' : copyHint}
+            </span>
           </TooltipProvider>
         ) : display}
       </dd>
@@ -356,7 +377,7 @@ export default function SiteDetailPage() {
       toast({ title: t('SiteDetailPage.toasts.siteUpdated') });
     },
     onError: (err: any) => {
-      toast({ title: t('SiteDetailPage.common.error'), description: err?.response?.data?.detail || t('SiteDetailPage.toasts.updateFailed'), variant: 'destructive' });
+      toast({ title: t('SiteDetailPage.common.error'), description: getApiErrorMessage(err, t('SiteDetailPage.toasts.updateFailed')), variant: 'destructive' });
     },
   });
 
@@ -368,7 +389,7 @@ export default function SiteDetailPage() {
       navigate('/sites');
     },
     onError: (err: any) => {
-      toast({ title: t('SiteDetailPage.common.error'), description: err?.response?.data?.detail || t('SiteDetailPage.toasts.deleteFailed'), variant: 'destructive' });
+      toast({ title: t('SiteDetailPage.common.error'), description: getApiErrorMessage(err, t('SiteDetailPage.toasts.deleteFailed')), variant: 'destructive' });
     },
   });
 
@@ -856,6 +877,7 @@ function SiteNetworkTab({ site, siteId, onUpdate, isPending, agents, toast }: {
   toast: ReturnType<typeof useToast>['toast'];
 }) {
   const { t } = useTranslation('sites');
+  const confirmAction = useConfirm();
   const [showAddSubnet, setShowAddSubnet] = useState(false);
   const [editGateway, setEditGateway] = useState(false);
   const [gatewayIp, setGatewayIp] = useState(site.gateway_ip ?? '');
@@ -1021,7 +1043,18 @@ function SiteNetworkTab({ site, siteId, onUpdate, isPending, agents, toast }: {
                     </div>
                   </div>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-600"
-                    onClick={() => { if (confirm(t('SiteDetailPage.network.confirmRemoveSubnet'))) handleRemoveSubnet(idx); }}>
+                    aria-label={t('SiteDetailPage.network.removeSubnetAction')}
+                    onClick={async () => {
+                      const ok = await confirmAction({
+                        title: t('SiteDetailPage.network.confirmRemoveSubnet'),
+                        description: t('SiteDetailPage.network.removeSubnetBody'),
+                        items: [subnet.name ? `${subnet.cidr} (${subnet.name})` : subnet.cidr],
+                        confirmLabel: t('SiteDetailPage.network.removeSubnetAction'),
+                        destructive: true,
+                      });
+                      if (!ok) return;
+                      handleRemoveSubnet(idx);
+                    }}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1132,6 +1165,7 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
   toast: ReturnType<typeof useToast>['toast'];
 }) {
   const { t } = useTranslation('sites');
+  const confirmAction = useConfirm();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [showOvpnImport, setShowOvpnImport] = useState(false);
@@ -1219,7 +1253,7 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
       setEditing(false);
     },
     onError: (err: any) => {
-      toast({ title: t('SiteDetailPage.common.error'), description: err?.response?.data?.detail || t('SiteDetailPage.vpn.toasts.saveFailed'), variant: 'destructive' });
+      toast({ title: t('SiteDetailPage.common.error'), description: getApiErrorMessage(err, t('SiteDetailPage.vpn.toasts.saveFailed')), variant: 'destructive' });
     },
   });
 
@@ -1236,7 +1270,7 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
       queryClient.invalidateQueries({ queryKey: ['site-vpn', siteId] });
     },
     onError: (err: any) => {
-      toast({ title: t('SiteDetailPage.vpn.toasts.testError'), description: err?.response?.data?.detail || t('SiteDetailPage.vpn.toasts.connectivityFailed'), variant: 'destructive' });
+      toast({ title: t('SiteDetailPage.vpn.toasts.testError'), description: getApiErrorMessage(err, t('SiteDetailPage.vpn.toasts.connectivityFailed')), variant: 'destructive' });
     },
   });
 
@@ -1330,7 +1364,7 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
       setAddConfigForm({ vpn_type: 'tailscale', enabled: true, auto_connect: false });
     },
     onError: (err: any) => {
-      toast({ title: t('SiteDetailPage.common.error'), description: err?.response?.data?.detail || t('SiteDetailPage.vpn.toasts.createConfigFailed'), variant: 'destructive' });
+      toast({ title: t('SiteDetailPage.common.error'), description: getApiErrorMessage(err, t('SiteDetailPage.vpn.toasts.createConfigFailed')), variant: 'destructive' });
     },
   });
 
@@ -1342,7 +1376,7 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
       toast({ title: t('SiteDetailPage.vpn.toasts.configRemoved') });
     },
     onError: (err: any) => {
-      toast({ title: t('SiteDetailPage.common.error'), description: err?.response?.data?.detail || t('SiteDetailPage.vpn.toasts.removeConfigFailed'), variant: 'destructive' });
+      toast({ title: t('SiteDetailPage.common.error'), description: getApiErrorMessage(err, t('SiteDetailPage.vpn.toasts.removeConfigFailed')), variant: 'destructive' });
     },
   });
 
@@ -1354,7 +1388,7 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
       toast({ title: t('SiteDetailPage.vpn.toasts.primaryUpdated') });
     },
     onError: (err: any) => {
-      toast({ title: t('SiteDetailPage.common.error'), description: err?.response?.data?.detail || t('SiteDetailPage.vpn.toasts.setPrimaryFailed'), variant: 'destructive' });
+      toast({ title: t('SiteDetailPage.common.error'), description: getApiErrorMessage(err, t('SiteDetailPage.vpn.toasts.setPrimaryFailed')), variant: 'destructive' });
     },
   });
 
@@ -1512,10 +1546,19 @@ function SiteVPNTab({ siteId, vpnConfig, vpnLoading, vpnError, toast }: {
                         variant="ghost"
                         size="sm"
                         className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                        onClick={() => {
-                          if (cfg.id && confirm(t('SiteDetailPage.vpn.confirmRemoveConfig'))) {
-                            deleteSiteConfig.mutate(cfg.id);
-                          }
+                        aria-label={t('SiteDetailPage.vpn.removeConfigAction')}
+                        onClick={async () => {
+                          if (!cfg.id) return;
+                          const endpoint = cfg.vpn_endpoint || cfg.tailscale_hostname || cfg.netbird_peer_id || cfg.zerotier_network_id;
+                          const ok = await confirmAction({
+                            title: t('SiteDetailPage.vpn.confirmRemoveConfig'),
+                            description: t('SiteDetailPage.vpn.removeConfigBody'),
+                            items: [endpoint ? `${cfg.vpn_type} \u00b7 ${endpoint}` : cfg.vpn_type],
+                            confirmLabel: t('SiteDetailPage.vpn.removeConfigAction'),
+                            destructive: true,
+                          });
+                          if (!ok) return;
+                          deleteSiteConfig.mutate(cfg.id);
                         }}
                         disabled={deleteSiteConfig.isPending}
                       >
@@ -2162,6 +2205,18 @@ function SiteAgentTab({ siteId, siteName, agents, agentsLoading, toast }: {
 }) {
   const { t } = useTranslation('sites');
   const queryClient = useQueryClient();
+  const { copy } = useCopyToClipboard();
+  const copyWithToast = async (text: string, successTitle: string) => {
+    if (await copy(text)) {
+      toast({ title: successTitle });
+    } else {
+      toast({
+        title: t('CopyButton.failed', { ns: 'common' }),
+        description: t('CopyButton.failedHint', { ns: 'common' }),
+        variant: 'destructive',
+      });
+    }
+  };
   const [showRegister, setShowRegister] = useState(false);
   const [agentName, setAgentName] = useState('');
   const [withWireGuard, setWithWireGuard] = useState(false);
@@ -2201,7 +2256,7 @@ function SiteAgentTab({ siteId, siteName, agents, agentsLoading, toast }: {
       toast({ title: t('SiteDetailPage.agent.toasts.registered') });
     },
     onError: (err: any) => {
-      toast({ title: t('SiteDetailPage.common.error'), description: err?.response?.data?.detail || t('SiteDetailPage.agent.toasts.registerFailed'), variant: 'destructive' });
+      toast({ title: t('SiteDetailPage.common.error'), description: getApiErrorMessage(err, t('SiteDetailPage.agent.toasts.registerFailed')), variant: 'destructive' });
     },
   });
 
@@ -2212,7 +2267,7 @@ function SiteAgentTab({ siteId, siteName, agents, agentsLoading, toast }: {
       toast({ title: t('SiteDetailPage.agent.toasts.approved') });
     },
     onError: (err: any) => {
-      toast({ title: t('SiteDetailPage.common.error'), description: err?.response?.data?.detail || t('SiteDetailPage.agent.toasts.approveFailed'), variant: 'destructive' });
+      toast({ title: t('SiteDetailPage.common.error'), description: getApiErrorMessage(err, t('SiteDetailPage.agent.toasts.approveFailed')), variant: 'destructive' });
     },
   });
 
@@ -2376,7 +2431,8 @@ function SiteAgentTab({ siteId, siteName, agents, agentsLoading, toast }: {
                   <div className="flex items-center gap-2 mt-1">
                     <code className="flex-1 text-xs bg-muted p-2 rounded font-mono break-all">{regResult.agent_id}</code>
                     <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0"
-                      onClick={() => { navigator.clipboard.writeText(regResult.agent_id); toast({ title: t('SiteDetailPage.common.copied') }); }}>
+                      aria-label={t('SiteDetailPage.agent.result.copyField', { label: t('SiteDetailPage.agent.result.agentId') })}
+                      onClick={() => void copyWithToast(regResult.agent_id, t('SiteDetailPage.common.copied'))}>
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -2386,7 +2442,8 @@ function SiteAgentTab({ siteId, siteName, agents, agentsLoading, toast }: {
                   <div className="flex items-center gap-2 mt-1">
                     <code className="flex-1 text-xs bg-muted p-2 rounded font-mono break-all">{regResult.agent_key}</code>
                     <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0"
-                      onClick={() => { navigator.clipboard.writeText(regResult.agent_key); toast({ title: t('SiteDetailPage.common.copied') }); }}>
+                      aria-label={t('SiteDetailPage.agent.result.copyField', { label: t('SiteDetailPage.agent.result.apiKey') })}
+                      onClick={() => void copyWithToast(regResult.agent_key, t('SiteDetailPage.common.copied'))}>
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -2396,7 +2453,8 @@ function SiteAgentTab({ siteId, siteName, agents, agentsLoading, toast }: {
                   <div className="flex items-center gap-2 mt-1">
                     <code className="flex-1 text-xs bg-muted p-2 rounded font-mono break-all">{regResult.websocket_url}</code>
                     <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0"
-                      onClick={() => { navigator.clipboard.writeText(regResult.websocket_url); toast({ title: t('SiteDetailPage.common.copied') }); }}>
+                      aria-label={t('SiteDetailPage.agent.result.copyField', { label: t('SiteDetailPage.agent.result.websocketUrl') })}
+                      onClick={() => void copyWithToast(regResult.websocket_url, t('SiteDetailPage.common.copied'))}>
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -2413,7 +2471,7 @@ function SiteAgentTab({ siteId, siteName, agents, agentsLoading, toast }: {
                     <div className="flex items-center justify-between mb-2">
                       <Label className="text-xs text-muted-foreground">{t('SiteDetailPage.agent.result.wgAgentConfig')}</Label>
                       <Button size="sm" variant="outline" className="h-7 text-xs"
-                        onClick={() => { navigator.clipboard.writeText(regResult.wg_config!); toast({ title: t('SiteDetailPage.agent.result.configCopied') }); }}>
+                        onClick={() => void copyWithToast(regResult.wg_config!, t('SiteDetailPage.agent.result.configCopied'))}>
                         <Copy className="mr-1.5 h-3 w-3" /> {t('SiteDetailPage.actions.copy')}
                       </Button>
                     </div>
@@ -2425,7 +2483,7 @@ function SiteAgentTab({ siteId, siteName, agents, agentsLoading, toast }: {
                     <div className="flex items-center justify-between mb-2">
                       <Label className="text-xs text-muted-foreground">{t('SiteDetailPage.agent.result.addToServerConf')}</Label>
                       <Button size="sm" variant="outline" className="h-7 text-xs"
-                        onClick={() => { navigator.clipboard.writeText(regResult.wg_server_peer!); toast({ title: t('SiteDetailPage.agent.result.peerBlockCopied') }); }}>
+                        onClick={() => void copyWithToast(regResult.wg_server_peer!, t('SiteDetailPage.agent.result.peerBlockCopied'))}>
                         <Copy className="mr-1.5 h-3 w-3" /> {t('SiteDetailPage.actions.copy')}
                       </Button>
                     </div>

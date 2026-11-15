@@ -138,6 +138,17 @@
       "loadGeneric": "Failed to load organizations",
       "create": "Failed to create organization ({{status}})",
       "createGeneric": "Failed to create organization"
+    },
+    "confirm": {
+      "delete": {
+        "title": "Delete organization \"{{name}}\"?",
+        "description": "It is removed from FreeSDN and cannot be restored from the interface. Scheduled work for its sites, such as config backups, stops."
+      },
+      "deleteMany": {
+        "title": "Delete the selected organizations?",
+        "description": "They are removed from FreeSDN and cannot be restored from the interface. Scheduled work for their sites, such as config backups, stops.",
+        "confirmLabel": "Delete organizations"
+      }
     }
   },
   "AddDeviceDialog": {
@@ -430,7 +441,8 @@
     "empty": {
       "noOpenPorts": "No open ports detected",
       "noDriverMatch": "No driver match found"
-    }
+    },
+    "copyValue": "Copy {{label}}"
   },
   "CameraHealthPanel": {
     "chart": {
@@ -514,7 +526,9 @@
     "searchPlaceholder": "Search...",
     "selectAllRows": "Select all rows",
     "selectRow": "Select row",
+    "selectRowNamed": "Select {{name}}",
     "tableAriaLabel": "{{itemName}} data table",
+    "loading": "Loading {{itemName}}",
     "empty": {
       "title": "No {{itemName}} found",
       "description": "No {{itemName}} available. Items will appear here once added.",
@@ -528,6 +542,11 @@
       "previousPage": "Previous page",
       "nextPage": "Next page",
       "lastPage": "Last page"
+    },
+    "columns": {
+      "button": "Choose columns",
+      "title": "Columns",
+      "reset": "Reset to default"
     }
   },
   "ModuleGuard": {
@@ -830,7 +849,8 @@
       "statusEnabledDescription": "Your account is protected with two-factor authentication",
       "statusDisabledDescription": "Add an extra layer of security to your account",
       "disable": "Disable MFA",
-      "enable": "Enable MFA"
+      "enable": "Enable MFA",
+      "copyKey": "Copy manual entry key"
     },
     "messages": {
       "profileUpdated": "Profile updated successfully",
@@ -871,7 +891,10 @@
     "morePorts": "+{{count}} more",
     "driverLabel": "Driver:",
     "manageable": "Manageable",
-    "deviceAdopted": "Device adopted"
+    "deviceAdopted": "Device adopted",
+    "toast": {
+      "ipCopied": "IP address copied"
+    }
   },
   "RecordingTimeline": {
     "zoomIn": "Zoom in",
@@ -985,8 +1008,60 @@
     },
     "cancel": "Cancel",
     "readOnly": {
-      "message": "Read-only mode is on — this change will be refused.",
+      "message": "Read-only mode is on, so this change will be refused.",
       "link": "Turn it off in Settings"
+    }
+  },
+  "ConfirmDialog": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "affects_one": "This affects {{count}} item.",
+    "affects_other": "This affects {{count}} items.",
+    "moreItems": "and {{count}} more",
+    "itemsLabel": "Affected items",
+    "typePrompt": "Type {{text}} to confirm"
+  },
+  "CopyButton": {
+    "copy": "Copy",
+    "copied": "Copied",
+    "failed": "Copy failed",
+    "failedHint": "Could not copy to the clipboard. Select the text and copy it manually."
+  },
+  "CapabilityMaturityBadge": {
+    "stable": "Stable",
+    "beta": "Beta",
+    "experimental": "Experimental",
+    "experimentalNote": "Built but not yet verified end-to-end against real infrastructure. Treat it as experimental."
+  },
+  "MaturityBadge": {
+    "readsVerified": "Reads: Verified",
+    "experimental": "Experimental",
+    "experimentalNote": "Implemented but not yet verified on real hardware. Please report results.",
+    "write": {
+      "live_validated": {
+        "label": "Writes: Live",
+        "note": "Write paths proven on real hardware with persisted evidence."
+      },
+      "partial": {
+        "label": "Writes: Partial",
+        "note": "Some write paths proven live; others unit-tested against mocks only."
+      },
+      "mock_tested": {
+        "label": "Writes: Mock-tested",
+        "note": "Write code is gated and unit-tested, but not yet proven on real hardware."
+      },
+      "disabled": {
+        "label": "Writes: Off by design",
+        "note": "Writes are intentionally disabled; this integration runs read-only."
+      },
+      "not_implemented": {
+        "label": "Writes: Not implemented",
+        "note": "Write transport is not built yet."
+      },
+      "experimental": {
+        "label": "Writes: Experimental",
+        "note": "Experimental adapter: writes are not verified."
+      }
     }
   },
   "Sheet": {
@@ -997,6 +1072,21 @@
   },
   "MainLayout": {
     "skipToMainContent": "Skip to main content"
+  },
+  "SiteRequiredGate": {
+    "title": "Choose a site",
+    "description": "This page works on one site at a time. Pick the site you want to see; you can switch back to All Sites from the site menu at any time.",
+    "noSites": "There are no sites yet.",
+    "manageSites": "Create a site",
+    "listLabel": "Sites"
+  },
+  "FormatValue": {
+    "yes": "Yes",
+    "no": "No",
+    "entries_one": "{{count}} entry",
+    "entries_other": "{{count}} entries",
+    "fields_one": "{{count}} field",
+    "fields_other": "{{count}} fields"
   },
   "PendingChangesDrawer": {
     "title": "Pending Changes",
@@ -1121,11 +1211,11 @@
       "checked": "Last checked: {{when}}",
       "verify": "Review the task on Proxmox before continuing. A failed or unobserved task may have made partial changes; do not blindly repeat it.",
       "status": {
-        "pending": "Accepted — awaiting observation",
+        "pending": "Accepted, awaiting observation",
         "running": "Running on Proxmox",
         "succeeded": "Provider task completed",
         "warnings": "Completed with warnings",
-        "failed": "Provider task failed — verify changes",
+        "failed": "Provider task failed. Verify the changes.",
         "unknown": "Outcome unverified"
       },
       "pendingRestart": "The configuration is saved, but the current guest settings still differ. Arrange a restart; FreeSDN will check again without repeating the write.",
@@ -1205,7 +1295,8 @@
       "updateFailed": "Failed to update grant",
       "granted": "Access granted",
       "grantFailed": "Failed to grant access (may already exist)"
-    }
+    },
+    "confirmRevokeBody": "Their access to this camera falls back to what their role or a camera group grant allows."
   },
   "AgentDiscoveriesTab": {
     "title": "Agent Discoveries",
@@ -1479,7 +1570,10 @@
     "toasts": {
       "created": "Schedule created",
       "createFailed": "Create failed",
-      "deleted": "Schedule deleted"
+      "deleted": "Schedule deleted",
+      "deleteFailed": "Could not delete the schedule",
+      "enableFailed": "Could not enable {{name}}",
+      "disableFailed": "Could not disable {{name}}"
     },
     "actions": {
       "newSchedule": "New schedule",
@@ -1487,7 +1581,8 @@
       "create": "Create",
       "viewHistory": "View run history",
       "disable": "Disable",
-      "enable": "Enable"
+      "enable": "Enable",
+      "delete": "Delete schedule"
     },
     "dialog": {
       "title": "New scan schedule"
@@ -1524,7 +1619,8 @@
         "devices": "Devices",
         "error": "Error"
       }
-    }
+    },
+    "confirmDeleteDescription": "The site's agents are told to stop running this scan. Devices it already found stay in the inventory."
   },
   "CameraLiveViewModal": {
     "rec": "REC",
@@ -1535,17 +1631,18 @@
       "panDown": "Pan down",
       "panLeft": "Pan left",
       "panRight": "Pan right",
-      "home": "Return to home position",
       "zoom": "Zoom",
       "zoomIn": "Zoom in",
-      "zoomOut": "Zoom out"
+      "zoomOut": "Zoom out",
+      "gotoPreset1": "Go to preset 1",
+      "gotoPreset1Named": "Go to preset 1 ({{name}})",
+      "noPreset1": "This camera has no preset 1, so there is nothing to go to.",
+      "failed": "The camera did not move: {{reason}}"
     },
     "presets": {
       "title": "Presets",
-      "entrance": "Entrance",
-      "parking": "Parking",
-      "wideView": "Wide View",
-      "zoom": "Zoom"
+      "none": "No presets saved on this camera.",
+      "presetName": "Preset {{id}}"
     },
     "stream": {
       "connecting": "Connecting to stream...",
@@ -2075,8 +2172,11 @@
     "actions": {
       "start": "Start",
       "stop": "Stop",
-      "saveTour": "Save Tour"
-    }
+      "saveTour": "Save Tour",
+      "edit": "Edit tour",
+      "delete": "Delete tour"
+    },
+    "confirmDeleteDescription": "\"{{name}}\" is removed from the camera, for everyone who uses it."
   },
   "ErrorBoundary": {
     "root": {
@@ -2275,7 +2375,8 @@
       "active": "Active",
       "created": "Created",
       "updated": "Updated"
-    }
+    },
+    "copyValue": "Copy {{label}}"
   },
   "RegisterPage": {
     "tagline": "Vendor-Agnostic Network Management",
@@ -2620,5 +2721,26 @@
     "minutesAgo": "{{n}}m ago",
     "hoursAgo": "{{n}}h ago",
     "daysAgo": "{{n}}d ago"
+  },
+  "CameraPermissions": {
+    "needsPtz": "Moving this camera and going to a preset need the cameras.ptz permission, which operators and above have.",
+    "needsPtzTour": "Running and stopping patrol tours needs the cameras.ptz permission, which operators and above have.",
+    "needsManagePtzTour": "Editing and deleting patrol tours needs the cameras.manage_ptz permission, which site admins and above have."
+  },
+  "LiveRead": {
+    "asOf": "As of {{time}}",
+    "asOfBusy": "As of {{time}}, device busy",
+    "asOfTitle": "Last answer read from the device, at {{when}}.",
+    "asOfBusyTitle": "Last answer read from the device, at {{when}}. The device was busy, so nothing new was asked of it. This refreshes on its own.",
+    "busyRetrying": "Device busy, retrying",
+    "stillBusy": "Device still busy",
+    "retry": "Try again"
+  },
+  "BulkDelete": {
+    "allDeleted_one": "{{count}} deleted.",
+    "allDeleted_other": "{{count}} deleted.",
+    "noneDeleted_one": "Nothing was deleted: {{reason}}",
+    "noneDeleted_other": "Nothing was deleted ({{count}} failed): {{reason}}",
+    "someFailed": "{{deleted}} deleted, {{failed}} not deleted: {{reason}}"
   }
 }

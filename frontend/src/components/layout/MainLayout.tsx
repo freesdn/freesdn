@@ -10,8 +10,11 @@ import { ErrorBoundary } from '../ErrorBoundary';
 import { useUIStore, useWebSocketStore } from '../../stores';
 import { useSidebarStore } from '../../stores/sidebarStore';
 import { EventToastContainer } from '../cameras/CameraEventAlerts';
-import { useSiteContextRedirect } from '../../hooks/useSiteContextRedirect';
+import { useSiteStore, SITE_ONLY_PATHS } from '../../stores/siteStore';
+import { SiteRequiredGate } from './SiteRequiredGate';
+import { PageSkeleton } from '../ui/page-skeleton';
 import { buildSections, flattenItems } from '../../lib/nav-data';
+import { routeTransitionKey } from '../../lib/route-transition-key';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -65,8 +68,13 @@ export function MainLayout({ children }: MainLayoutProps) {
     return () => mq.removeEventListener('change', handler);
   }, [setSidebarMobileOpen]);
 
-  // Redirect away from site-only pages when switching to global view
-  useSiteContextRedirect();
+  // Site-only pages (Discovery, Topology) need one site. In the "All Sites"
+  // view they used to redirect to the dashboard without explanation; now the
+  // page area asks for a site instead and renders the page once one is chosen.
+  const selectedSiteId = useSiteStore((s) => s.selectedSiteId);
+  const needsSite =
+    selectedSiteId === null && SITE_ONLY_PATHS.some((p) => location.pathname.startsWith(p));
+  const content = needsSite ? <SiteRequiredGate /> : children;
 
   // ── Auto-track route visits (top-level nav items only) ──
   useEffect(() => {
@@ -144,27 +152,24 @@ export function MainLayout({ children }: MainLayoutProps) {
                 briefly collapsed the fixed sidebar to rect-width 0 on every
                 navigation (the "icons appear, then labels load seconds later"
                 flash users reported). Keep this boundary here. */}
-            <Suspense
-              fallback={
-                <div className="flex items-center justify-center min-h-[calc(100vh-128px)]">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                </div>
-              }
-            >
+            <Suspense fallback={<PageSkeleton variant="list" />}>
               {animationsEnabled ? (
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={location.pathname}
+                    // Keyed on the page, not the raw pathname: a URL-driven
+                    // tab (/sites/:id/network, /switches/:id/ports) must not
+                    // remount the page and throw away its filters and scroll.
+                    key={routeTransitionKey(location.pathname)}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.2, ease: 'easeOut' }}
                   >
-                    {children}
+                    {content}
                   </motion.div>
                 </AnimatePresence>
               ) : (
-                children
+                content
               )}
             </Suspense>
           </ErrorBoundary>

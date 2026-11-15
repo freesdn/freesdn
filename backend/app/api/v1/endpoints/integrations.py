@@ -170,6 +170,12 @@ EVENT_CATEGORIES = {
         "controller.sync.started",
         "controller.sync.completed",
         "controller.sync.failed",
+        "controller.unreachable",
+        "controller.recovered",
+    ],
+    "Gateway Events": [
+        "gateway.sync.completed",
+        "gateway.sync.failed",
     ],
     "Discovery Events": [
         "discovery.started",
@@ -784,8 +790,12 @@ async def test_integration(
         raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="Integration not found")
 
     # Use the existing webhook test mechanism
+    from uuid import uuid4
+
+    event_id = str(uuid4())
     test_payload = {
         **body.payload,
+        "id": event_id,
         "event_type": body.event_type,
         "integration_id": str(integration_id),
         "integration_name": row.name,
@@ -793,7 +803,11 @@ async def test_integration(
     }
     try:
         result = await PersistentWebhookService.dispatch_webhook(
-            session, row.webhook_id, event_type=body.event_type, payload=test_payload
+            session,
+            row.webhook_id,
+            event_type=body.event_type,
+            payload=test_payload,
+            event_id=event_id,
         )
     except Exception as exc:
         # dispatch_webhook can raise before/around HTTP delivery (DB flush,

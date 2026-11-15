@@ -1399,21 +1399,30 @@ async def get_device_traffic(
     start_time = end_time - delta
     filters = {"device_id": str(device_id)}
 
-    # Query all four traffic metrics in parallel-ish fashion
-    metric_names = ["device.rx_bytes", "device.tx_bytes", "device.rx_packets", "device.tx_packets"]
+    # metric_data lives in the LogDB; this passed the primary session, so the
+    # query failed on every split deployment and the debug log below swallowed
+    # it. Names come from the registry (see DEVICE_TRAFFIC_METRICS: not yet
+    # collected, so this returns [] honestly rather than by accident).
+    from app.db import session as db_session
+    from app.services.analytics import DEVICE_TRAFFIC_METRICS
+
+    factory = getattr(db_session, "logdb_session_factory", None)
+    if factory is None:
+        return []
     results_by_metric: dict[str, dict[str, float]] = {}
 
-    for metric_name in metric_names:
+    for metric_name in DEVICE_TRAFFIC_METRICS:
         try:
-            rows = await MetricDataStore.query_metrics(
-                session=db,
-                metric_name=metric_name,
-                start_time=start_time,
-                end_time=end_time,
-                granularity=granularity,
-                aggregation="sum",
-                filters=filters,
-            )
+            async with factory() as logdb:
+                rows = await MetricDataStore.query_metrics(
+                    session=logdb,
+                    metric_name=metric_name,
+                    start_time=start_time,
+                    end_time=end_time,
+                    granularity=granularity,
+                    aggregation="sum",
+                    filters=filters,
+                )
             short_name = metric_name.split(".")[-1]  # e.g. "rx_bytes"
             for row in rows:
                 ts = row["timestamp"]

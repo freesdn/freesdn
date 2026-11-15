@@ -59,6 +59,7 @@ from app.schemas.backup import (
     BackupScheduleResponse,
     BackupScheduleUpdate,
     BackupStats,
+    DatabaseBackupStatusResponse,
     ImportResult,
     RestoreJobResponse,
     RestoreRequest,
@@ -76,6 +77,7 @@ from app.services.backup import (
     backup_failure_detail,
 )
 from app.services.backup_download_authority import BackupDownloadAuthority
+from app.services.database_backup_status import read_database_backup_status
 from app.services.storage_probe_authority import StorageProbeAuthority
 from app.services.vault_export_creation import create_confirmed_vault
 from app.services.vault_export_public_download import confirmed_vault_download
@@ -337,6 +339,23 @@ async def get_backup_stats(
         site_id=site_id,
         organization_id=org_id,
     )
+
+
+@router.get("/database-status", response_model=DatabaseBackupStatusResponse)
+async def get_database_backup_status(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> Any:
+    """State of the encrypted PostgreSQL/LogDB dumps made by the pg-backup service.
+
+    This is the instance's disaster-recovery backup (every organization's data), so
+    only an unscoped administrator may read it. On a fresh install it reports
+    ``disabled`` / ``no_key`` until a public key is installed with
+    ``scripts/backup-keygen.sh``; the API cannot install a key itself, by design,
+    so a compromised web session can never redirect where backups are encrypted to.
+    """
+    if not (is_unscoped_superuser(current_user) or is_unscoped_org_admin(current_user)):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator access required")
+    return read_database_backup_status().as_dict()
 
 
 # ── Export / Import ────────────────────────────────────────────────────────

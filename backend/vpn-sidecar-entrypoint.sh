@@ -44,8 +44,17 @@ APP_UID="${FREESDN_APP_UID:-1001}"
 APP_GID="${FREESDN_APP_GID:-1001}"
 chown -R "$APP_UID:$APP_GID" "$OVPN_CFG_DIR" "$OVPN_RUN_DIR" "$WG_CFG_DIR" "$WG_RUN_DIR" 2>/dev/null || true
 
+# TAILSCALE_NO_LOGS_NO_SUPPORT=true (x-backend-env, default true) stops
+# tailscaled uploading its logs to Tailscale Inc., the same as in the capless
+# tailscale runtime container. Unquoted on purpose: empty adds no argument.
+TS_EXTRA=""
+case "$(printf '%s' "${TAILSCALE_NO_LOGS_NO_SUPPORT:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) TS_EXTRA="--no-logs-no-support" ;;
+esac
+
 echo "[vpn] starting tailscaled (kernel TUN)…"
-tailscaled --state="$TS_STATE" --socket="$TS_SOCK" \
+# shellcheck disable=SC2086
+tailscaled --state="$TS_STATE" --socket="$TS_SOCK" $TS_EXTRA \
     >/var/lib/tailscale/tailscaled.log 2>&1 &
 TS_PID=$!
 
@@ -113,26 +122,101 @@ _wg_state() {
 
 # ── Defense-in-depth config validation (exec chokepoint) ─────────────────────
 # This sidecar runs openvpn/wg-quick as ROOT off configs on volumes the (non-root)
-# api can write. The app-layer schema + materialize validators already reject
-# command/file-write directives, but a COMPROMISED api could write a config file
-# directly, bypassing the API. So re-check here, immediately before exec, and
-# REFUSE anything carrying a dangerous directive. Mirrors _assert_*_config_safe.
+# api can write. The app-layer schema + materialize validators already refuse
+# anything outside the OpenVPN client allowlist, but a COMPROMISED api could write
+# a config file directly, bypassing the API. So re-check here, immediately before
+# exec, with the SAME allowlist (since 26.12.0; it was a blocklist, which could be
+# routed around via `setenv opt <directive>`, a quoted directive name, or lines
+# inside a <connection> block). Mirrors _assert_openvpn_config_safe in
+# app/schemas/vpn.py; tests/services/test_vpn_sidecar_scanner.py runs this exact
+# program against the same cases and fails if the ALLOWED / FILEREF / MATERIAL
+# lists below differ from the Python ones.
 _ovpn_cfg_safe() {
     awk '
-        /^[[:space:]]*</ { inblock = ($0 !~ /^[[:space:]]*<\//); next }
-        inblock { next }
-        /^[[:space:]]*#/ || /^[[:space:]]*;/ || /^[[:space:]]*$/ { next }
-        { d = tolower($1); sub(/^--/, "", d);
-          # `config` is the INCLUDE directive: it inlines another file whose
-          # directives this scanner never sees (a clean-looking top-level config can
-          # `config pwn.inc` and run `up /bin/sh …` as root). Block it so the scanned
-          # file is always the COMPLETE config — mirrors _DANGEROUS_OPENVPN_DIRECTIVES.
-          if (d ~ /^(config|up|down|ipchange|route-up|route-pre-down|client-connect|client-disconnect|learn-address|tls-verify|tls-crypt-v2-verify|auth-user-pass-verify|script-security|plugin|management|iproute|tls-export-cert|tmp-dir|cd|chroot|daemon|log|log-append|status|writepid|http-proxy-user-pass|ifconfig-pool-persist)$/) bad=1;
-          else if (d ~ /^(auth-user-pass|ca|capath|cert|key|dh|secret|tls-auth|tls-crypt|tls-crypt-v2|pkcs12|crl-verify|askpass|extra-certs|pkcs11-id|pkcs11-providers)$/) {
-              a = tolower($2);
-              if (NF > 1 && a != "none" && a != "[inline]") bad=1
-          } }
-        END { exit bad?1:0 }
+        function check(k,   d, a) {
+            d = $k
+            if (d !~ /^(--)?[a-z0-9][a-z0-9-]*$/) { bad = 1; return }
+            sub(/^--/, "", d)
+            if (!(d in allowed)) { bad = 1; return }
+            if (d == "setenv") {
+                if (NF < k + 1 || $(k + 1) !~ /^[A-Za-z0-9_]+$/) { bad = 1; return }
+                if (tolower($(k + 1)) == "opt") {
+                    if (NF < k + 2 || depth >= 2) { bad = 1; return }
+                    depth++
+                    check(k + 2)
+                    depth--
+                }
+                return
+            }
+            if ((d in fileref) && NF > k) {
+                a = $(k + 1)
+                if (index(a, SQ)) { bad = 1; return }
+                gsub(/"/, "", a)
+                a = tolower(a)
+                if (a != "none" && a != "[inline]") bad = 1
+            }
+            if ((d == "http-proxy" || d == "socks-proxy") && NF > k + 2) {
+                a = $(k + 3)
+                if (index(a, SQ)) { bad = 1; return }
+                gsub(/"/, "", a)
+                a = tolower(a)
+                if (d == "socks-proxy" || (a != "auto" && a != "auto-nct")) bad = 1
+            }
+        }
+        BEGIN {
+            SQ = sprintf("%c", 39)
+            ALLOWED = "client tls-client pull dev dev-type topology proto proto-force remote"
+            ALLOWED = ALLOWED " remote-random remote-random-hostname resolv-retry port lport rport"
+            ALLOWED = ALLOWED " local bind nobind float connect-retry connect-retry-max connect-timeout"
+            ALLOWED = ALLOWED " server-poll-timeout explicit-exit-notify persist-key persist-tun"
+            ALLOWED = ALLOWED " persist-local-ip persist-remote-ip inactive session-timeout ping"
+            ALLOWED = ALLOWED " ping-exit ping-restart ping-timer-rem keepalive hand-window tran-window"
+            ALLOWED = ALLOWED " single-session tls-exit tun-mtu tun-mtu-extra tun-mtu-max link-mtu"
+            ALLOWED = ALLOWED " mtu-disc mssfix fragment sndbuf rcvbuf txqueuelen fast-io socket-flags"
+            ALLOWED = ALLOWED " tcp-nodelay passtos disable-dco route route-ipv6 route-gateway"
+            ALLOWED = ALLOWED " route-metric route-delay route-nopull route-noexec ifconfig"
+            ALLOWED = ALLOWED " ifconfig-ipv6 ifconfig-noexec redirect-gateway redirect-private"
+            ALLOWED = ALLOWED " block-outside-dns block-ipv6 dhcp-option tun-ipv6 pull-filter"
+            ALLOWED = ALLOWED " allow-pull-fqdn max-routes cipher data-ciphers data-ciphers-fallback"
+            ALLOWED = ALLOWED " ncp-ciphers ncp-disable auth tls-version-min tls-version-max tls-cipher"
+            ALLOWED = ALLOWED " tls-ciphersuites tls-groups tls-cert-profile ecdh-curve key-direction"
+            ALLOWED = ALLOWED " key-method tls-timeout reneg-sec reneg-bytes reneg-pkts replay-window"
+            ALLOWED = ALLOWED " mute-replay-warnings no-replay remote-cert-tls remote-cert-ku"
+            ALLOWED = ALLOWED " remote-cert-eku ns-cert-type verify-x509-name verify-hash"
+            ALLOWED = ALLOWED " peer-fingerprint opt-verify ca cert key dh secret tls-auth tls-crypt"
+            ALLOWED = ALLOWED " tls-crypt-v2 pkcs12 extra-certs crl-verify auth-user-pass auth-nocache"
+            ALLOWED = ALLOWED " auth-retry static-challenge push-peer-info comp-lzo compress"
+            ALLOWED = ALLOWED " allow-compression comp-noadapt http-proxy http-proxy-option"
+            ALLOWED = ALLOWED " http-proxy-retry socks-proxy socks-proxy-retry verb mute"
+            ALLOWED = ALLOWED " suppress-timestamps mlock nice user group remap-usr1"
+            ALLOWED = ALLOWED " ignore-unknown-option setenv"
+            FILEREF = "auth-user-pass ca capath cert key dh secret tls-auth tls-crypt tls-crypt-v2"
+            FILEREF = FILEREF " pkcs12 crl-verify askpass extra-certs pkcs11-id pkcs11-providers"
+            MATERIAL = "ca cert key dh secret tls-auth tls-crypt tls-crypt-v2 pkcs12 extra-certs"
+            MATERIAL = MATERIAL " crl-verify auth-user-pass http-proxy-user-pass peer-fingerprint"
+            n = split(ALLOWED, w, " "); for (i = 1; i <= n; i++) allowed[w[i]] = 1
+            n = split(FILEREF, w, " "); for (i = 1; i <= n; i++) fileref[w[i]] = 1
+            n = split(MATERIAL, w, " "); for (i = 1; i <= n; i++) material[w[i]] = 1
+        }
+        { sub(/\r$/, ""); line = $0; gsub(/^[[:space:]]+|[[:space:]]+$/, "", line) }
+        block != "" { if (line == "</" block ">") block = ""; next }
+        line == "" || line ~ /^[#;]/ { next }
+        { t = line; gsub(/\t/, "", t); if (t ~ /[[:cntrl:]]/) { bad = 1; next } }
+        line ~ /^</ {
+            if (line !~ /^<\/?[a-z0-9-]+>$/) { bad = 1; next }
+            closing = (line ~ /^<\//)
+            name = line; gsub(/[<>\/]/, "", name)
+            if (name == "connection") {
+                if (closing == inconn) inconn = !closing
+                else bad = 1
+                next
+            }
+            if (closing || inconn || !(name in material)) { bad = 1; next }
+            block = name
+            next
+        }
+        { check(1) }
+        END { if (block != "" || inconn) bad = 1; exit bad ? 1 : 0 }
     ' "$1"
 }
 _wg_cfg_safe() { ! grep -iqE '^[[:space:]]*(PostUp|PostDown|PreUp|PreDown)[[:space:]]*=' "$1"; }
@@ -148,7 +232,8 @@ while true; do
     # the overlay is silently dead. Restart a dead daemon within one cycle.
     if ! kill -0 "$TS_PID" 2>/dev/null; then
         echo "[vpn] tailscaled exited — restarting" >&2
-        tailscaled --state="$TS_STATE" --socket="$TS_SOCK" \
+        # shellcheck disable=SC2086
+        tailscaled --state="$TS_STATE" --socket="$TS_SOCK" $TS_EXTRA \
             >>/var/lib/tailscale/tailscaled.log 2>&1 &
         TS_PID=$!
     fi

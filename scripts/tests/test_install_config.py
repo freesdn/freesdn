@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
@@ -184,6 +185,82 @@ def test_two_fresh_installs_get_distinct_credentials(installation, tmp_path):
         assert previous[key] != current[key]
 
 
+@pytest.mark.parametrize("tier", ["lite", "pro", "max"])
+def test_every_tier_gets_a_metrics_scrape_token(installation, tier):
+    """The bundled Prometheus scrapes /metrics with this token.
+
+    It used to be commented out in every tier example, so no install had one:
+    in production /metrics is not served without it, FreeSDN's own Prometheus
+    target was DOWN (404) and none of the API alert rules could ever fire.
+    """
+    result = run(installation, "--tier", tier)
+    assert result.returncode == 0, result.stderr
+    env = values(installation / (".env." + tier))
+    token = env.get("METRICS_AUTH_TOKEN", "")
+    assert "__CHANGE_ME__" not in token
+    assert len(token) >= 32
+    assert token not in result.stdout + result.stderr
+    assert token not in {env[k] for k in ("SECRET_KEY", "REDIS_PASSWORD")}
+
+
+@pytest.mark.parametrize("how", ["absent", "commented", "placeholder"])
+def test_rerun_adds_a_missing_metrics_token_without_touching_other_secrets(
+    installation, how
+):
+    assert run(installation, "--tier", "max").returncode == 0
+    path = installation / ".env.max"
+    lines = [
+        line
+        for line in path.read_text().splitlines()
+        if not line.startswith("METRICS_AUTH_TOKEN=")
+    ]
+    if how == "commented":
+        lines.append("# METRICS_AUTH_TOKEN=__CHANGE_ME__   # openssl rand -hex 32")
+    elif how == "placeholder":
+        lines.append("METRICS_AUTH_TOKEN=__CHANGE_ME__")
+    path.write_text("\n".join(lines) + "\n")
+    path.chmod(0o600)
+    before = values(path)
+
+    result = run(installation, "--tier", "max")
+    assert result.returncode == 0, result.stderr
+    after = values(path)
+    token = after["METRICS_AUTH_TOKEN"]
+    assert len(token) >= 32 and "__CHANGE_ME__" not in token
+    # Named, never printed.
+    assert "METRICS_AUTH_TOKEN" in result.stdout
+    assert token not in result.stdout + result.stderr
+    for key, value in before.items():
+        if key != "METRICS_AUTH_TOKEN":
+            assert after[key] == value, key
+
+    # A later run neither rotates nor duplicates it.
+    assert run(installation, "--tier", "max").returncode == 0
+    assigned = [
+        line
+        for line in path.read_text().splitlines()
+        if line.startswith("METRICS_AUTH_TOKEN=")
+    ]
+    assert assigned == ["METRICS_AUTH_TOKEN=" + token]
+
+
+def test_an_operator_chosen_metrics_token_is_kept(installation):
+    assert run(installation, "--tier", "pro").returncode == 0
+    path = installation / ".env.pro"
+    text = "\n".join(
+        "METRICS_AUTH_TOKEN=operator-chosen-scrape-token-0123456789"
+        if line.startswith("METRICS_AUTH_TOKEN=")
+        else line
+        for line in path.read_text().splitlines()
+    )
+    path.write_text(text + "\n")
+    path.chmod(0o600)
+    assert run(installation, "--tier", "pro").returncode == 0
+    assert (
+        values(path)["METRICS_AUTH_TOKEN"] == "operator-chosen-scrape-token-0123456789"
+    )
+
+
 def config_module():
     spec = importlib.util.spec_from_file_location(
         "install_config_under_test", ROOT / "scripts/install_config.py"
@@ -229,3 +306,59 @@ def test_concurrent_change_is_preserved_instead_of_overwritten(tmp_path):
         module.write_private(path, "stale configuration\n", previous)
     assert path.read_text() == "concurrent credential change\n"
     assert not list(tmp_path.glob(".env.lite.*"))
+
+
+@pytest.mark.parametrize("tier", ["lite", "pro", "max"])
+def test_backup_key_path_is_precreated_as_an_empty_file(installation, tier):
+    """Compose turns a missing bind source into a root-owned DIRECTORY (verified on
+    Docker 29 / Compose 5.5.1), after which `gpg --export > secrets/backup-public.asc`
+    fails. The installer pre-creates the file instead."""
+    (installation / "secrets").mkdir()
+    result = run(installation, "--tier", tier)
+    assert result.returncode == 0, result.stderr
+    key = installation / "secrets/backup-public.asc"
+    info = os.lstat(key)
+    assert stat.S_ISREG(info.st_mode)
+    assert info.st_size == 0
+    assert info.st_mode & 0o777 == 0o644
+    assert "Database backups are OFF" in result.stdout
+    assert "backup-keygen.sh" in result.stdout
+    assert values(installation / (".env." + tier))["BACKUP_GPG_RECIPIENT"] == ""
+
+
+def test_backup_key_placeholder_never_replaces_an_installed_key(installation):
+    (installation / "secrets").mkdir()
+    key = installation / "secrets/backup-public.asc"
+    key.write_text("-----BEGIN PGP PUBLIC KEY BLOCK-----\n")
+    inode = key.stat().st_ino
+    result = run(installation, "--tier", "max")
+    assert result.returncode == 0, result.stderr
+    assert key.read_text() == "-----BEGIN PGP PUBLIC KEY BLOCK-----\n"
+    assert key.stat().st_ino == inode
+    assert "Database backups are OFF" not in result.stdout
+
+
+@pytest.mark.parametrize("kind", ["directory", "symlink"])
+def test_backup_key_placeholder_reports_but_never_follows_odd_paths(installation, kind):
+    (installation / "secrets").mkdir()
+    key = installation / "secrets/backup-public.asc"
+    elsewhere = installation / "elsewhere"
+    if kind == "directory":
+        key.mkdir()
+    else:
+        key.symlink_to(elsewhere)
+    result = run(installation, "--tier", "pro")
+    assert result.returncode == 0, result.stderr
+    assert not elsewhere.exists()
+    if kind == "directory":
+        assert key.is_dir()
+        assert "is a directory" in result.stdout
+        assert "sudo rmdir" in result.stdout
+    else:
+        assert key.is_symlink()
+
+
+def test_dev_installation_creates_no_backup_key_placeholder(installation):
+    (installation / "secrets").mkdir()
+    assert run(installation, "--dev").returncode == 0
+    assert not (installation / "secrets/backup-public.asc").exists()

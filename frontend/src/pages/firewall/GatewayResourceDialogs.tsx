@@ -59,6 +59,7 @@ import {
   type StaticRouteRequest,
   type ShaperPipeRequest,
 } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Shared helpers
@@ -96,7 +97,7 @@ function useWriteMutation(
     onError: (err: any) => {
       toast({
         title: t('GatewayResourceDialogs.toast.errorTitle'),
-        description: err?.response?.data?.detail || err.message || t('GatewayResourceDialogs.toast.operationFailed'),
+        description: getApiErrorMessage(err, t('GatewayResourceDialogs.toast.operationFailed')),
         variant: 'destructive',
       });
     },

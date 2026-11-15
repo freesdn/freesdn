@@ -42,6 +42,8 @@ import {
 } from '@/components/ui/table';
 import { agentSchedulesApi, type AgentSchedule, type AgentScheduleRun } from '@/lib/api/agents';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks';
+import { getApiErrorMessage } from '@/lib/api/errors';
 
 interface Props {
   siteId?: string;
@@ -196,6 +198,7 @@ const EMPTY_FORM: FormState = {
 export function AgentSchedulesPanel({ siteId }: Props) {
   const { t } = useTranslation('common');
   const { toast } = useToast();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const scanTypes = buildScanTypes(t);
   const cronPresets = buildCronPresets(t);
@@ -247,7 +250,7 @@ export function AgentSchedulesPanel({ siteId }: Props) {
     onError: (err: any) => {
       toast({
         title: t('AgentSchedulesPanel.toasts.createFailed'),
-        description: err?.response?.data?.detail || String(err),
+        description: getApiErrorMessage(err),
         variant: 'destructive',
       });
     },
@@ -267,6 +270,15 @@ export function AgentSchedulesPanel({ siteId }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agent-schedules'] });
     },
+    onError: (err: unknown, s) => {
+      toast({
+        title: s.enabled
+          ? t('AgentSchedulesPanel.toasts.disableFailed', { name: s.name })
+          : t('AgentSchedulesPanel.toasts.enableFailed', { name: s.name }),
+        description: getApiErrorMessage(err),
+        variant: 'destructive',
+      });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -274,6 +286,13 @@ export function AgentSchedulesPanel({ siteId }: Props) {
     onSuccess: () => {
       toast({ title: t('AgentSchedulesPanel.toasts.deleted') });
       queryClient.invalidateQueries({ queryKey: ['agent-schedules'] });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: t('AgentSchedulesPanel.toasts.deleteFailed'),
+        description: getApiErrorMessage(err),
+        variant: 'destructive',
+      });
     },
   });
 
@@ -514,10 +533,17 @@ export function AgentSchedulesPanel({ siteId }: Props) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => {
-                        if (confirm(t('AgentSchedulesPanel.confirmDelete', { name: s.name }))) {
-                          deleteMutation.mutate(s.id);
-                        }
+                      title={t('AgentSchedulesPanel.actions.delete')}
+                      aria-label={t('AgentSchedulesPanel.actions.delete')}
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: t('AgentSchedulesPanel.confirmDelete', { name: s.name }),
+                          description: t('AgentSchedulesPanel.confirmDeleteDescription'),
+                          items: [s.name],
+                          confirmLabel: t('AgentSchedulesPanel.actions.delete'),
+                          destructive: true,
+                        });
+                        if (ok) deleteMutation.mutate(s.id);
                       }}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />

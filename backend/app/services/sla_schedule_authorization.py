@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import CurrentUser, _load_user_permissions
+from app.core.organization_access import organization_admits
 from app.core.tenancy import tenant_filter
 from app.models.core import User
 from app.models.sla import SLAPolicy, SLAReportSchedule
@@ -89,7 +90,8 @@ async def authorize_schedule(db: AsyncSession, schedule: SLAReportSchedule) -> C
             .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
-    if user is None:
+    if user is None or not await organization_admits(db, user):
+        # A member of a deleted or deactivated organization no longer acts.
         raise ScheduleAuthorizationError("actor_unavailable")
     grants = {grant.site_id for grant in user.site_access}
     live = CurrentUser(user, await _load_user_permissions(user), accessible_site_ids=grants)
