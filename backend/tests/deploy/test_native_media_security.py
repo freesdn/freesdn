@@ -58,7 +58,7 @@ def test_regular_file_can_be_read_without_filesystem_extraction(native, tmp_path
 
 
 def manifest():
-    paths = ["usr/local/bin/" + x for x in ["ffmpeg", "ffprobe", "ffplay", "qt-faststart"]]
+    paths = ["usr/local/bin/" + x for x in ["ffmpeg", "ffprobe", "qt-faststart"]]
     paths += [
         "usr/local/lib/" + x + ".so.1.2.3"
         for x in [
@@ -91,7 +91,7 @@ def test_incomplete_or_unsafe_runtime_inventory_blocks(native, mutation):
 
 
 def test_complete_runtime_inventory_includes_every_binary_and_library(native):
-    assert len(native.runtime_files(manifest())) == 11
+    assert len(native.runtime_files(manifest())) == 10
 
 
 def valid_scan():
@@ -413,7 +413,7 @@ def test_identity_covers_source_pin_all_runtime_files_and_checked_out_recipe(
 ):
     recipe, _, _ = payload_fixture
     identity = native.inspect_payload("owned", recipe)
-    assert identity["version"] == "9.0.2" and len(identity["runtime_files"]) == 11
+    assert identity["version"] == "9.0.2" and len(identity["runtime_files"]) == 10
     assert set(identity["recipe_hashes"]) == {*native.RECIPE_FILES, "ffmpeg-9.0.2.tar.xz.asc"}
 
 

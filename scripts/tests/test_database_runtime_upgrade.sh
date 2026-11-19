@@ -221,12 +221,15 @@ fi
 MARK=$(docker exec ru-new sh -c 'cat "$PGDATA/FREESDN_RUNTIME"' 2>/dev/null | tr -d '\r')
 [ "$MARK" = "$EXPECT_MARK" ] && ok "marker recorded: $MARK" || bad "marker is '$MARK', expected '$EXPECT_MARK'"
 
-# Scope the logs to the restart. See trap 2 in the header.
-STAMP=$(date -u +%Y-%m-%dT%H:%M:%S)
+# Scope the logs to the restart. See trap 2 in the header. The stamp needs
+# sub-second precision: truncated to the second it let in the first start's
+# adoption line whenever that came less than a second earlier (a fast CI runner
+# finishes the checks above in under a second), and the check failed falsely.
+STAMP=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
 sleep 1
 docker restart ru-new >/dev/null 2>&1 || die "restart failed"
 if wait_ready ru-new; then
-    SINCE=$(docker logs --since "$STAMP" ru-new 2>&1)
+    SINCE=$(docker logs --since "$STAMP" ru-new 2>&1) || die "docker logs --since failed"
     echo "$SINCE" | grep -q "adopting an unmarked" \
         && bad "re-adopted an already-marked cluster" \
         || ok "second start is idempotent (no re-adoption)"

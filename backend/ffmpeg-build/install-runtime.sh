@@ -18,8 +18,7 @@ cd /
 sha256sum -c "$metadata/runtime-files.sha256"
 ffmpeg -version > /tmp/ffmpeg-version.txt
 ffprobe -version > /tmp/ffprobe-version.txt
-ffplay -version > /tmp/ffplay-version.txt
-for binary in ffmpeg ffprobe ffplay; do
+for binary in ffmpeg ffprobe; do
   head -n 1 "/tmp/$binary-version.txt" | grep -q "^$binary version 9\.0\.2 "
 done
 if apk info | grep -Eq '^(ffmpeg($|-)|ffplay$)'; then

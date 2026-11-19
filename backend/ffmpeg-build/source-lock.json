@@ -83,6 +83,62 @@
       "upstream_commit": "7c73707355708c846f718cca90096bc1a33c8989",
       "fixes": "CVE-2026-120247",
       "summary": "zero the rest of a Huffyuv row when the input ends"
+    },
+    {
+      "file": "cve-2026-125064-g726.patch",
+      "sha256": "a5784d101545a7232462a2c758b8946e91f6a38bd59d9d3ea96ce96dc4baacfb",
+      "upstream_commit": "ec887b13a88afbaf44fb28c3045bda5d434da8dc",
+      "fixes": "CVE-2026-125064",
+      "summary": "check the bit reader setup in the G.726 decoder"
+    },
+    {
+      "file": "cve-2026-125180-exif-1.patch",
+      "sha256": "c87fcbf81b4b0d7979363899292967ad91b2dfafd18eb6a7c49c97ee072e0d2d",
+      "upstream_commit": "c69aff745431c73e546bdad988ec23f74c79979c",
+      "fixes": "CVE-2026-125180",
+      "summary": "stop following an EXIF IFD chain that loops (prerequisite)"
+    },
+    {
+      "file": "cve-2026-125180-exif-2.patch",
+      "sha256": "f07e85f51cc71c678303c20c0d14cb1d0e444d88de1de7aa909de1990edacf82",
+      "upstream_commit": "26bf8651a8d88f722598c90f6afe7067e9a296dd",
+      "fixes": "CVE-2026-125180",
+      "summary": "bound the parsed EXIF IFD entries by the buffer size (prerequisite)"
+    },
+    {
+      "file": "cve-2026-125180-exif-3.patch",
+      "sha256": "a155094ac0a7948212c458ced80deb49f46ffa9a7ae1a62c2f105b64638a06a1",
+      "upstream_commit": "30fff47764e59f02ac7868bb832ed51a88f949fd",
+      "fixes": "CVE-2026-125180",
+      "summary": "bound the EXIF IFD value bytes by the buffer size"
+    },
+    {
+      "file": "cve-2026-125183-hevc-pps.patch",
+      "sha256": "222f7d990c45309b67fb793d89d232722b62ba66571cdd9f0285825e5c495cc9",
+      "upstream_commit": "f9f732b444a2fc27dcc4fe52084d3d435f827864",
+      "fixes": "CVE-2026-125183",
+      "summary": "skip the HEVC PPS depth lookup table bits in one step"
+    },
+    {
+      "file": "cve-2026-125185-film-grain.patch",
+      "sha256": "b51c3a3107d829d87905a3ba5a4c39fe9abb58c1478056898f9039a5403063a1",
+      "upstream_commit": "b8daf520dd03f6139aa053acb768f3c4594599d9",
+      "fixes": "CVE-2026-125185",
+      "summary": "reject AFGS1 film grain scaling points with a repeated x value"
+    },
+    {
+      "file": "cve-2026-125225-aac-adtstoasc.patch",
+      "sha256": "0c7a169872a495020d4e0d165f6a80e7ae7110d29c4693d800adcb95a273915a",
+      "upstream_commit": "3b1cbb5e0f66b85d15f1d3527436520b3f4711ec",
+      "fixes": "CVE-2026-125225",
+      "summary": "check the bit reader setup in aac_adtstoasc before the PCE"
+    },
+    {
+      "file": "mpegts-thread-stack.patch",
+      "sha256": "c32de1b6b98a6ecaea90ea897e8137e4194f8408555317762fbb435dca723d42",
+      "upstream_commit": "6edbe0d5af28c31f97a7a9ae4aee94a8b9d102ce",
+      "fixes": "no advisory: SIGSEGV on MPEG-TS input in a thread with a stack below ~140 KiB (musl)",
+      "summary": "avoid ~131 KiB stack frames in the MPEG-TS PAT/PMT callbacks"
     }
   ]
 }

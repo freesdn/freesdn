@@ -37,6 +37,70 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Status transitions
+# =============================================================================
+
+
+def camera_status_event(camera: Any, previous_status: str | None) -> Event | None:
+    """The event a change from ``previous_status`` to ``camera.status`` publishes.
+
+    Going offline (or to error) publishes ``camera.status.offline``; coming back
+    from offline or error to online or recording publishes
+    ``camera.status.online``. Other changes (unknown to online, for one) publish
+    nothing. Shared by the status endpoint and the NVR health poll so webhooks
+    and alert rules see one event shape.
+    """
+    status = camera.status
+    if previous_status == status:
+        return None
+    org = str(camera.organization_id) if camera.organization_id else None
+    payload = {
+        "camera_id": str(camera.id),
+        "camera_name": camera.name,
+        "site_id": str(camera.site_id) if camera.site_id else None,
+        "organization_id": org,
+        "previous_status": previous_status,
+        "new_status": status,
+        "location": getattr(camera, "location", None),
+    }
+    if status in ("offline", "error"):
+        return Event(
+            event_type="camera.status.offline",
+            category=EventCategory.DEVICE,
+            priority=EventPriority.HIGH,
+            payload=payload,
+            organization_id=org,
+        )
+    if previous_status in ("offline", "error") and status in ("online", "recording"):
+        return Event(
+            event_type="camera.status.online",
+            category=EventCategory.DEVICE,
+            priority=EventPriority.NORMAL,
+            payload=payload,
+            organization_id=org,
+        )
+    return None
+
+
+async def publish_camera_status_change(camera: Any, previous_status: str | None) -> None:
+    """Publish the event for a committed camera status change, if it has one."""
+    event = camera_status_event(camera, previous_status)
+    if event is None:
+        return
+    try:
+        await get_event_bus().publish(event)
+        logger.info(
+            "Camera %s (%s) went from %s to %s",
+            camera.name,
+            camera.id,
+            previous_status,
+            camera.status,
+        )
+    except Exception:
+        logger.exception("Failed to publish camera status event for %s", camera.id)
+
+
+# =============================================================================
 # Exceptions
 # =============================================================================
 
@@ -401,49 +465,7 @@ class CameraService:
         await self.db.commit()
 
         # Publish event on status transitions
-        if previous_status != status:
-            try:
-                event_bus = get_event_bus()
-                payload = {
-                    "camera_id": str(camera.id),
-                    "camera_name": camera.name,
-                    "site_id": str(camera.site_id) if camera.site_id else None,
-                    "organization_id": str(camera.organization_id)
-                    if camera.organization_id
-                    else None,
-                    "previous_status": previous_status,
-                    "new_status": status,
-                    "location": getattr(camera, "location", None),
-                }
-
-                if status in ("offline", "error"):
-                    await event_bus.publish(
-                        Event(
-                            event_type="camera.status.offline",
-                            category=EventCategory.DEVICE,
-                            priority=EventPriority.HIGH,
-                            payload=payload,
-                            organization_id=str(camera.organization_id)
-                            if camera.organization_id
-                            else None,
-                        )
-                    )
-                    logger.info("Camera %s (%s) went %s", camera.name, camera_id, status)
-                elif previous_status in ("offline", "error") and status in ("online", "recording"):
-                    await event_bus.publish(
-                        Event(
-                            event_type="camera.status.online",
-                            category=EventCategory.DEVICE,
-                            priority=EventPriority.NORMAL,
-                            payload=payload,
-                            organization_id=str(camera.organization_id)
-                            if camera.organization_id
-                            else None,
-                        )
-                    )
-                    logger.info("Camera %s (%s) came back online", camera.name, camera_id)
-            except Exception:
-                logger.exception("Failed to publish camera status event for %s", camera_id)
+        await publish_camera_status_change(camera, previous_status)
 
     async def get_camera_stats(
         self,

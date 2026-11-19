@@ -4,7 +4,7 @@ set -eu
 export LC_ALL=C
 mkdir -p /out/usr/local/bin /out/usr/local/lib /out/usr/local/share/ffmpeg \
   /out/usr/share/licenses/ffmpeg /out/usr/share/freesdn-sources/ffmpeg
-for binary in ffmpeg ffprobe ffplay qt-faststart; do
+for binary in ffmpeg ffprobe qt-faststart; do
   cp "/staging/usr/local/bin/$binary" "/out/usr/local/bin/$binary"
 done
 for library in /staging/usr/local/lib/libav*.so* /staging/usr/local/lib/libsw*.so*; do
@@ -15,6 +15,7 @@ source_dir=/out/usr/share/freesdn-sources/ffmpeg
 cp /build/ffmpeg-9.0.2.tar.xz /build/ffmpeg-9.0.2.tar.xz.asc /build/ffmpeg-devel.asc \
   /build/posix-ioctl.patch /build/cve-2026-107675-libssh-hostkey.patch /build/cve-2026-107676-hdr10plus.patch /build/cve-2026-107677-dash.patch /build/cve-2026-107678-encryption-info.patch /build/cve-2026-107696-rtsp-redirects.patch \
   /build/cve-2026-120243-g2m.patch /build/cve-2026-120244-pcx.patch /build/cve-2026-120245-sunrast-1.patch /build/cve-2026-120245-sunrast-2.patch /build/cve-2026-120246-cdxl.patch /build/cve-2026-120247-huffyuv.patch \
+  /build/cve-2026-125064-g726.patch /build/cve-2026-125180-exif-1.patch /build/cve-2026-125180-exif-2.patch /build/cve-2026-125180-exif-3.patch /build/cve-2026-125183-hevc-pps.patch /build/cve-2026-125185-film-grain.patch /build/cve-2026-125225-aac-adtstoasc.patch /build/mpegts-thread-stack.patch \
   /build/source-lock.json /build/verified-inputs.sha256 \
   /build/build.sh /build/package.sh /build/install-runtime.sh /build/NOTICE \
   /build/build-packages.txt /build/signature-status.txt "$source_dir/"

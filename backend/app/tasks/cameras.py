@@ -91,13 +91,16 @@ async def _pinned_nvr_host(nvr: Any) -> tuple[str | None, str | None]:
 
 async def _poll_single_nvr_health(nvr_id: UUID) -> dict[str, Any]:
     """
-    Poll all cameras attached to a single NVR and store health snapshots.
+    Poll the cameras behind one NVR: health snapshots, and current status.
 
-    For each camera:
-      1) Connect to its NVR adapter
-      2) Call ``get_channel_track_info(channel)``
-      3) Call ``get_channel_status_list()`` for online/offline
-      4) Insert a ``CameraHealthSnapshot`` row
+    1) ``get_channel_status_list()``: the recorder's online/offline answer for
+       every channel. This is the health signal.
+    2) ``get_channel_track_info(channel)`` per camera: bitrate, frame rate and
+       codec when the recorder allows it (some answer HTTP 403; the camera's
+       online/offline reading is kept, and the refusal is logged once).
+    3) One write: a ``CameraHealthSnapshot`` per camera the recorder reported,
+       each camera's status and last seen, and the recorder's; status events
+       (``camera.status.offline`` / ``online``) after the commit.
 
     The database is read first and written afterwards in a short transaction;
     no transaction is open while the recorder answers.
@@ -108,7 +111,7 @@ async def _poll_single_nvr_health(nvr_id: UUID) -> dict[str, Any]:
     from app.core.device_poll import device_poll
     from app.core.device_slot import nvr_slot_key
     from app.modules.cameras.models import NVR as NVRModel
-    from app.modules.cameras.models import Camera, CameraHealthSnapshot
+    from app.modules.cameras.models import Camera
 
     saved = 0
     errors = 0
@@ -159,38 +162,35 @@ async def _poll_single_nvr_health(nvr_id: UUID) -> dict[str, Any]:
                     )
                 ).all()
             ]
+        details_refused: list[str] = []
+        status_by_camera: dict[Any, bool] = {}
         try:
             await adapter.connect()
 
-            # Get channel online/offline map
+            # The recorder's own online/offline answer for every channel. This
+            # is the health signal; the stream details below are extra.
             channel_status_list = await adapter.get_channel_status_list()
             online_map: dict[int, bool] = {}
             for ch in channel_status_list:
                 ch_id = ch.get("id")
                 if ch_id is not None:
-                    online_map[ch_id] = ch.get("online", False)
+                    online_map[ch_id] = bool(ch.get("online", False))
 
             for cam_id, channel in cameras:
+                main_track: dict[str, Any] = {}
+                got_details = False
                 try:
                     track_info = await adapter.get_channel_track_info(channel=channel)
                     if "error" in track_info:
+                        # A recorder can refuse stream details (HTTP 403 when
+                        # its account lacks the right) while still reporting the
+                        # channel online: keep the online/offline reading.
+                        details_refused.append(str(track_info["error"]))
                         errors += 1
-                        continue
-
-                    tracks = track_info.get("tracks", [])
-                    main_track = tracks[0] if tracks else {}
-                    readings.append(
-                        {
-                            "camera_id": cam_id,
-                            "captured_at": datetime.now(UTC),
-                            "bitrate_kbps": main_track.get("bitrate_kbps"),
-                            "frame_rate": main_track.get("frame_rate"),
-                            "codec": main_track.get("codec"),
-                            "resolution_width": main_track.get("resolution_width"),
-                            "resolution_height": main_track.get("resolution_height"),
-                            "is_online": online_map.get(channel, True),
-                        }
-                    )
+                    else:
+                        tracks = track_info.get("tracks", [])
+                        main_track = tracks[0] if tracks else {}
+                        got_details = True
                 except Exception as exc:
                     logger.warning(
                         "Health poll failed for camera %s (ch %s): %s",
@@ -199,9 +199,31 @@ async def _poll_single_nvr_health(nvr_id: UUID) -> dict[str, Any]:
                         exc,
                     )
                     errors += 1
+                reported = channel in online_map
+                if reported:
+                    status_by_camera[cam_id] = online_map[channel]
+                elif not got_details:
+                    continue
+                # A channel the status list did not report (the list was refused,
+                # timed out or omitted it) keeps its stream details as before,
+                # recorded as online, but its status is left unchanged.
+                readings.append(
+                    {
+                        "camera_id": cam_id,
+                        "captured_at": datetime.now(UTC),
+                        "bitrate_kbps": main_track.get("bitrate_kbps"),
+                        "frame_rate": main_track.get("frame_rate"),
+                        "codec": main_track.get("codec"),
+                        "resolution_width": main_track.get("resolution_width"),
+                        "resolution_height": main_track.get("resolution_height"),
+                        "is_online": online_map[channel] if reported else True,
+                    }
+                )
 
         except Exception as exc:
             turn.failed(exc)
+            # The recorder's status is left as it was: a refused login or a
+            # wrong port does not show that the recorder is down.
             logger.error("Failed to poll NVR %s: %s", nvr_id, exc)
             return {
                 "nvr_id": str(nvr_id),
@@ -212,15 +234,110 @@ async def _poll_single_nvr_health(nvr_id: UUID) -> dict[str, Any]:
         finally:
             await adapter.disconnect()
 
-    # 3) Write: one short transaction for the snapshots.
-    if readings:
-        async with AsyncSessionLocal() as session:
-            for reading in readings:
-                session.add(CameraHealthSnapshot(organization_id=nvr.organization_id, **reading))
-            await session.commit()
-        saved = len(readings)
+    if details_refused:
+        _log_refused_details_once(nvr_id, details_refused, len(cameras))
 
-    return {"nvr_id": str(nvr_id), "saved": saved, "errors": errors}
+    # 3) Write: one short transaction for the snapshots, the cameras' status and
+    # last seen, and the recorder's own; status events after it commits.
+    changed = await _record_camera_health(nvr_id, nvr.organization_id, readings, status_by_camera)
+    saved = len(readings)
+    online = sum(1 for value in status_by_camera.values() if value)
+    return {
+        "nvr_id": str(nvr_id),
+        "saved": saved,
+        "errors": errors,
+        "online": online,
+        "offline": len(status_by_camera) - online,
+        "status_changes": changed,
+    }
+
+
+#: (NVR, error) pairs already logged by this process: a recorder that refuses
+#: stream details does so on every poll, so it is logged once, not every cycle.
+_REFUSED_LOGGED: set[tuple[str, str]] = set()
+
+
+def _log_refused_details_once(nvr_id: UUID, refused: list[str], total: int) -> None:
+    first = refused[0]
+    key = (str(nvr_id), first)
+    level = logging.DEBUG if key in _REFUSED_LOGGED else logging.WARNING
+    _REFUSED_LOGGED.add(key)
+    logger.log(
+        level,
+        "NVR %s refused stream details for %d of %d cameras (%s); their online and "
+        "offline state is still recorded. Give the NVR account the right to read "
+        "stream parameters to get bitrate, frame rate and codec too.",
+        nvr_id,
+        len(refused),
+        total,
+        first,
+    )
+
+
+async def _record_camera_health(
+    nvr_id: UUID,
+    organization_id: Any,
+    readings: list[dict[str, Any]],
+    online_by_camera: dict[Any, bool],
+) -> int:
+    """Store the snapshots and bring each camera's status and last seen, and the
+    recorder's, in line with this poll. Returns the number of status changes.
+
+    A camera the recorder reports online gets ``last_seen`` now, and goes back
+    to "online" from offline, error or unknown; one it reports offline goes
+    "offline". "maintenance" is the operator's and is never changed here, and
+    "recording" stays while the camera is online. Status events are published
+    after the commit, through the same helper the status endpoint uses.
+    """
+    from app.modules.cameras.models import NVR as NVRModel
+    from app.modules.cameras.models import Camera, CameraHealthSnapshot
+    from app.modules.cameras.service import publish_camera_status_change
+
+    now = datetime.now(UTC)
+    transitions: list[tuple[Any, str | None]] = []
+    async with AsyncSessionLocal() as session:
+        for reading in readings:
+            session.add(CameraHealthSnapshot(organization_id=organization_id, **reading))
+        if online_by_camera:
+            cameras = (
+                (
+                    await session.execute(
+                        # Locked for this short write, so an operator's change made
+                        # meanwhile (maintenance, for one) is read, not overwritten.
+                        select(Camera)
+                        .where(
+                            Camera.id.in_(list(online_by_camera)),
+                            Camera.deleted_at.is_(None),
+                        )
+                        .with_for_update()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for camera in cameras:
+                previous = camera.status
+                if previous == "maintenance":
+                    if online_by_camera[camera.id]:
+                        camera.last_seen = now
+                    continue
+                if online_by_camera[camera.id]:
+                    camera.last_seen = now
+                    if previous in (None, "offline", "error", "unknown"):
+                        camera.status = "online"
+                elif previous != "offline":
+                    camera.status = "offline"
+                if camera.status != previous:
+                    transitions.append((camera, previous))
+        nvr = await session.get(NVRModel, nvr_id, with_for_update=True)
+        if nvr is not None:
+            nvr.last_seen = now
+            if nvr.status != "maintenance":
+                nvr.status = "online"
+        await session.commit()
+    for changed_camera, status_before in transitions:
+        await publish_camera_status_change(changed_camera, status_before)
+    return len(transitions)
 
 
 async def _poll_all_camera_health() -> dict[str, Any]:

@@ -47,6 +47,14 @@ RECIPE_FILES = (
     "cve-2026-120245-sunrast-2.patch",
     "cve-2026-120246-cdxl.patch",
     "cve-2026-120247-huffyuv.patch",
+    "cve-2026-125064-g726.patch",
+    "cve-2026-125180-exif-1.patch",
+    "cve-2026-125180-exif-2.patch",
+    "cve-2026-125180-exif-3.patch",
+    "cve-2026-125183-hevc-pps.patch",
+    "cve-2026-125185-film-grain.patch",
+    "cve-2026-125225-aac-adtstoasc.patch",
+    "mpegts-thread-stack.patch",
     "ffmpeg-devel.asc",
     "NOTICE",
 )
@@ -137,8 +145,8 @@ def runtime_files(data: bytes) -> dict[str, str]:
         if not match or match[2] in entries:
             raise QualificationError("Runtime hash inventory contains an invalid or duplicate path")
         entries[match[2]] = match[1]
-    binaries = {"usr/local/bin/" + n for n in ["ffmpeg", "ffprobe", "ffplay", "qt-faststart"]}
-    if not binaries <= entries.keys() or len(entries) != 11:
+    binaries = {"usr/local/bin/" + n for n in ["ffmpeg", "ffprobe", "qt-faststart"]}
+    if not binaries <= entries.keys() or len(entries) != 10:
         raise QualificationError("Runtime hash inventory is incomplete")
     if any(p.startswith("usr/local/bin/") and p not in binaries for p in entries):
         raise QualificationError("Runtime hash inventory contains an unexpected executable")

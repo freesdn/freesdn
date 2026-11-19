@@ -256,7 +256,16 @@ async def test_the_camera_health_poll_reads_the_recorder_with_no_transaction_ope
     from app.tasks import cameras
 
     out = await cameras._poll_single_nvr_health(recorder.nvr)
-    assert out == {"nvr_id": str(recorder.nvr), "saved": 1, "errors": 0}
+    # The camera starts "unknown" and the recorder reports it online: one
+    # status change (unknown to online, which publishes no event).
+    assert out == {
+        "nvr_id": str(recorder.nvr),
+        "saved": 1,
+        "errors": 0,
+        "online": 1,
+        "offline": 0,
+        "status_changes": 1,
+    }
     assert recorder.seen and not any(recorder.seen)
     async with CelerySessionLocal() as db:
         rows = (

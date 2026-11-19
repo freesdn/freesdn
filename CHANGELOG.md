@@ -9,6 +9,141 @@ FreeSDN is a Community Edition project maintained by its sole owner and
 developer. Releases may contain breaking changes between versions -
 **back up your data before upgrading.**
 
+## [26.11.2] - 2026-11-18 - nginx and FFmpeg security hotfix
+
+A security hotfix for two components. nginx published fixes on 2026-11-18 for
+flaws including "NGINX2Root", an unauthenticated HTTP/2 remote code execution,
+which affect the optional nginx web server when it terminates TLS. The
+high-availability load balancer is updated too.
+The default web edge is Caddy and is not affected. Separately, 114 advisories
+were published on 2026-11-09 against FFmpeg 9.0.2, with no FFmpeg release
+fixing them. FFmpeg, which every installation uses for cameras, is now built
+with only what FreeSDN needs. Every installation should upgrade.
+
+### Security
+
+- **nginx 1.30.7 for the optional nginx web server and the HA load balancer.**
+  nginx 1.30.6 is affected by the flaws fixed in 1.30.7, among them
+  CVE-2026-123007 and CVE-2026-123633 (HTTP/2, remote code execution) and
+  CVE-2026-123634 (resolver). The optional `edge-nginx` service (profile
+  `nginx`) enables HTTP/2 when it terminates TLS (`SSL_MODE` `self-signed` or
+  `letsencrypt`), and was then exposed to the HTTP/2 flaws; with
+  `SSL_MODE=off` behind your own TLS proxy it is not. The resolver flaw also
+  needs SSI or mirror subrequests, which no shipped configuration uses.
+  The HA load balancer (`ha-lb`) serves plain HTTP/1.1 on a loopback port
+  without a resolver; it is updated for the version alone. No configuration
+  enables HTTP/3 or the mail proxy. The dependency audit (pip-audit and npm
+  audit) found no other open advisories.
+- **FFmpeg is built with only what FreeSDN uses.** 114 advisories were
+  published on 2026-11-09 against FFmpeg 9.0.2, still the newest release, and
+  no release fixes them yet. A camera's RTSP stream picks its codecs, so with
+  the full build a hostile or compromised camera could reach almost any FFmpeg
+  decoder, including five of these memory-corruption flaws. The backend and
+  go2rtc images now compile only the camera codecs (H.264, H.265, MJPEG,
+  MPEG-4, H.263, MPEG-1/2 and AV1 video; G.711, G.722, G.723.1, G.726, G.729, AMR,
+  L16, L24, AAC, AC-3, MPEG audio and Opus), FreeSDN's outputs (snapshots,
+  HLS, clip export, probing) and go2rtc's common transcodes. The build fails if
+  configure enables anything else. Of the 114, 105 are not in the
+  build and 4 are in it but cannot be reached. The other 5 are fixed by
+  unmodified backports of upstream commits (G.726, EXIF, HEVC parameter sets,
+  film grain, AAC remuxing). One more upstream fix stops FFmpeg crashing on
+  MPEG-TS in its demuxer thread. ffplay, hardware acceleration and capture
+  devices are no longer built, so the images are smaller.
+
+### Upgrading
+
+No migrations. Every image must be rebuilt: the new FFmpeg is in the backend
+and go2rtc images, so rebuilding only the web server is not enough.
+
+1. **Before building.** With the HA overlay, if your env file or shell sets
+   `HA_NGINX_VERSION`, change it to `1.30.7-alpine` or remove it; otherwise the
+   old load balancer image is used.
+2. **Rebuild and recreate, exactly the way you normally run FreeSDN.**
+   - If you run FreeSDN with `install.sh` alone, re-run it from the
+     `v26.11.2` checkout with your tier and your setup's current topology
+     flags (`--ha` for an HA install, `--dev` for a development one), for
+     example `./install.sh --tier max --ha`. Leave out `--domain`, `--email`
+     and `--no-start`: without them the installer keeps the settings saved in
+     your env file.
+   - If you add anything on the command line (overlay files such as
+     `docker-compose.ha.yml` or `docker-compose.vpn.yml`, or `--profile`
+     flags), `install.sh` does not know about it. Run `docker compose build`
+     and then `docker compose up -d` yourself, both with your usual
+     `--env-file`, every `-f` file and every profile you run. A `--profile`
+     flag replaces `COMPOSE_PROFILES` from the env file, so list them all
+     (for example `--profile nginx --profile cameras`).
+   - With the optional nginx web server (profile `nginx`), whose configuration
+     is built into its image, add `--scale edge=0` to `up -d` to keep Caddy
+     stopped, and do not re-run `install.sh`: it starts the default Caddy
+     edge too, on the same ports.
+3. **Check every container of your deployment.** This names any running
+   container that still has the old FFmpeg, and any it could not check (for
+   example one that is restarting); it prints nothing when all are updated:
+
+   ```sh
+   p=freesdn-max   # your COMPOSE_PROJECT_NAME (freesdn-lite, freesdn-pro, ...)
+   for c in $(docker ps --filter "label=com.docker.compose.project=$p" --format '{{.Names}}'); do
+     if ! b=$(docker exec "$c" ffmpeg -hide_banner -buildconf 2>&1); then
+       case "$b" in *"executable file not found"*) continue ;; esac
+       echo "not checked: $c"; continue
+     fi
+     case "$b" in *--disable-everything*) ;; *) echo "old FFmpeg: $c" ;; esac
+   done
+   ```
+
+   For a container it names, rebuild and recreate it with the files and
+   profiles you missed.
+
+### Fixed
+
+- **Cameras behind a Hikvision NVR now show whether they are online.** The health
+  poll asked each recorder for every camera's stream details, and a recorder
+  that refuses them (HTTP 403, common when its account may not read stream
+  parameters) made the poll drop the camera, online or not. It also never
+  updated a camera's status or last seen, nor the recorder's, so every camera
+  kept the status it had when it was added and a camera going dark went
+  unnoticed. The poll now takes online and offline from the recorder's channel
+  list on every run, keeps each camera's and recorder's status and last seen
+  current, and publishes `camera.status.offline` when a camera goes dark and
+  `camera.status.online` when it comes back from offline or error. When the
+  channel list is unavailable, the stream
+  details are kept as before and the status is left unchanged. Cameras and
+  recorders in maintenance keep that status, and a failed poll leaves the
+  recorder's status as it was. A refused stream-details request is logged as a
+  warning once per recorder and error in each worker process, then at debug
+  level.
+
+### Known issues
+
+- Cameras with Hikvision stream encryption turned on (the Hik-Connect "video
+  encryption" option) send video that only software holding the camera's
+  encryption key can decode, so
+  FreeSDN's transcoded HLS and recorded-frame snapshots fail for them. Live
+  snapshots still work, and original clips still download, though playing one
+  may need the key. Turn the option off
+  to use these features with FreeSDN.
+- Watermarked clip export does not work, as in earlier releases: it returns
+  nothing, and a legal hold that asks for a watermark fails. Use the original
+  export. A fix that also checks that the clip covers the requested window is
+  planned for 26.11.3.
+- Until the first administrator is created, the first client to complete the
+  setup form becomes that administrator. Finish setup right after installing,
+  and do not expose a fresh installation to an untrusted network. A one-time
+  setup code is planned for 26.11.3.
+- Lite serves the web interface over plain HTTP by default, so a login
+  password can be read on the local network. Put Lite behind HTTPS (a reverse
+  proxy) until 26.11.3 turns HTTPS on by default.
+- When VoIP provisioning trusts a site subnet, any device on that subnet that
+  knows a phone's MAC address can fetch that phone's configuration, including
+  its SIP password. Limit the trusted subnet to the phone VLAN until 26.11.3.
+- go2rtc streams you added to its configuration yourself with an `ffmpeg:`
+  source were checked for an RTSP camera in a codec this build decodes, with
+  H.264, MJPEG, AAC, Opus or G.711 output, and go2rtc's JPEG snapshot. Options
+  that need other FFmpeg components (for example H.265 output, the `fps`
+  filter, HLS input, device inputs, hardware encoding) fail. FreeSDN's own camera
+  streams do not use go2rtc's FFmpeg.
+- The 26.11.1 known issues still apply.
+
 ## [26.11.1] - 2026-11-15 - Safety and reliability
 
 A release of fixes found by running FreeSDN against a real multi-site fleet
