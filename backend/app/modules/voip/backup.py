@@ -94,7 +94,7 @@ _SECRET_SETTINGS_KEYS = frozenset(
 )
 
 
-def _redact(blob: Any) -> Any:
+def _redact(blob: Any, *, pvalues: bool = False) -> Any:
     """Recursively drop secret-shaped keys from a JSONB value.
 
     Lists are walked element-wise (PBX/template settings nest dicts in
@@ -104,9 +104,35 @@ def _redact(blob: Any) -> Any:
     archive carries no trace of the secret's length or presence.
     """
     if isinstance(blob, dict):
-        return {k: _redact(v) for k, v in blob.items() if k.lower() not in _SECRET_SETTINGS_KEYS}
+        # ``pvalues`` also drops the Grandstream password P-values (P2, P34,
+        # ...) a template carries in raw_overrides, which no name in
+        # _SECRET_SETTINGS_KEYS matches (found in review of 26.11.3). A vault
+        # (include_secrets) keeps them, or its restore would lose them.
+        from app.core.url_secrets import may_hold_credential
+        from app.modules.voip.setting_secrets import is_secret_setting
+
+        return {
+            k: _redact(v, pvalues=pvalues)
+            for k, v in blob.items()
+            if k.lower() not in _SECRET_SETTINGS_KEYS
+            and not (
+                pvalues
+                and (
+                    is_secret_setting(k)  # P-value passwords, sippasswd, ...
+                    # a server URL with a login in it (server_url, P237)
+                    or (isinstance(v, str) and may_hold_credential(v, is_secret_setting))
+                )
+            )
+        }
     if isinstance(blob, list):
-        return [_redact(v) for v in blob]
+        from app.core.url_secrets import may_hold_credential
+        from app.modules.voip.setting_secrets import is_secret_setting
+
+        return [
+            _redact(v, pvalues=pvalues)
+            for v in blob
+            if not (pvalues and isinstance(v, str) and may_hold_credential(v, is_secret_setting))
+        ]
     return blob
 
 
@@ -132,9 +158,14 @@ def _vault_dec(value: Any) -> Any:
     return decrypt_credential(value) if (isinstance(value, str) and is_encrypted(value)) else value
 
 
+def _template_field(blob: Any, include_secrets: bool) -> Any:
+    """Vault keeps a template field intact; a config snapshot drops credentials."""
+    return blob if include_secrets else _redact(blob, pvalues=True)
+
+
 def _settings_for(blob: Any, include_secrets: bool) -> Any:
     """Vault keeps settings intact (sealed); config snapshot redacts secret keys."""
-    return (blob or {}) if include_secrets else _redact(blob or {})
+    return (blob or {}) if include_secrets else _redact(blob or {}, pvalues=True)
 
 
 class VoipBackupContributor:
@@ -270,7 +301,7 @@ class VoipBackupContributor:
                     "ring_time": r.ring_time,
                     "members": r.members or [],
                     "is_active": r.is_active,
-                    "settings": _redact(r.settings or {}),
+                    "settings": _redact(r.settings or {}, pvalues=True),
                 }
                 for r in rg_rows
             ]
@@ -297,13 +328,19 @@ class VoipBackupContributor:
                 "vendor": c.vendor,
                 "model_pattern": c.model_pattern,
                 "is_default": c.is_default,
-                "sip_settings": _redact(c.sip_settings or {}),
-                "network_settings": _redact(c.network_settings or {}),
-                "provisioning_settings": _redact(c.provisioning_settings or {}),
-                # feature_settings often carries admin_password — redacted.
-                "feature_settings": _redact(c.feature_settings or {}),
-                "line_key_settings": _redact(c.line_key_settings or []),
-                "raw_overrides": _redact(c.raw_overrides or {}),
+                # A vault (include_secrets) keeps templates exactly as stored, so
+                # a restore loses nothing; a config-only snapshot drops every
+                # recognized credential and ALL raw P-value overrides, since a
+                # Grandstream password can sit under a P-value no list names
+                # (found in review of 26.11.3).
+                "sip_settings": _template_field(c.sip_settings or {}, include_secrets),
+                "network_settings": _template_field(c.network_settings or {}, include_secrets),
+                "provisioning_settings": _template_field(
+                    c.provisioning_settings or {}, include_secrets
+                ),
+                "feature_settings": _template_field(c.feature_settings or {}, include_secrets),
+                "line_key_settings": _template_field(c.line_key_settings or [], include_secrets),
+                "raw_overrides": (c.raw_overrides or {}) if include_secrets else {},
                 "firmware_version": c.firmware_version,
             }
             for c in ct_rows

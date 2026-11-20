@@ -63,7 +63,8 @@ async def make_outcome_fixture(db, case):
 
 def outgoing_client(f):
     class ControlledClient:
-        def __init__(self, *, verify, timeout, trust_env):
+        def __init__(self, *, verify, timeout, trust_env, transport=None):
+            # ``transport``: FreeSDN's connect-time address check (26.11.3).
             assert isinstance(verify, ssl.SSLContext)
             assert verify.verify_mode == ssl.CERT_REQUIRED and verify.check_hostname
             assert trust_env is False

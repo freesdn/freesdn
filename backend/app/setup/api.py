@@ -46,6 +46,12 @@ from app.setup.schemas import (
     WelcomeResponse,
 )
 from app.setup.service import SetupService
+from app.setup.setup_code import (
+    announce_setup_code,
+    clear_setup_code,
+    supplied_setup_code,
+    verify_setup_code,
+)
 
 router = APIRouter(prefix="/setup", tags=["setup"])
 
@@ -59,10 +65,29 @@ async def get_setup_service(db: AsyncSession = Depends(get_session)) -> SetupSer
     return SetupService(db)
 
 
+# The read-only checks (GET /welcome, GET /database) were open before the setup
+# code existed and change nothing; the wizard calls GET /welcome before it can
+# show the code field, so requiring the code there locked every fresh install
+# out of its own wizard (found in review of the 26.11.3 candidate).
+_READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def setup_code_for_change(request: Request) -> str | None:
+    """The setup code a CHANGING request carries; None for a read-only one."""
+    if request.method in _READ_ONLY_METHODS:
+        return None
+    return supplied_setup_code(request)
+
+
 async def require_setup_incomplete(
     service: SetupService = Depends(get_setup_service),
+    setup_code: str | None = Depends(setup_code_for_change),
 ) -> SetupService:
     """Gate setup endpoints: only allow if no super_admin exists.
+
+    A request that changes something must also carry the one-time setup code
+    (``app.setup.setup_code``): without it, the first client to reach a
+    fresh install became its administrator.
 
     Setup is complete IFF at least one non-deleted ``super_admin`` user
     exists in the database. This is the correct invariant: a fresh
@@ -92,12 +117,15 @@ async def require_setup_incomplete(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Setup already complete. Login with existing credentials.",
         )
+    if setup_code is not None:
+        await verify_setup_code(setup_code)
     return service
 
 
 async def require_setup_authorized(
     service: SetupService = Depends(get_setup_service),
     current_user: CurrentUser | None = Depends(get_current_user_optional),
+    setup_code: str | None = Depends(setup_code_for_change),
 ) -> SetupService:
     """Gate the POST-admin wizard steps (enable-modules, controllers, complete).
 
@@ -122,7 +150,10 @@ async def require_setup_authorized(
         )
     ) or 0
     if count == 0:
-        return service  # fresh install — the anonymous wizard may proceed
+        # Fresh install: the anonymous wizard may proceed with the setup code.
+        if setup_code is not None:
+            await verify_setup_code(setup_code)
+        return service
     if current_user is not None and is_unscoped_superuser(current_user):
         return service  # the just-created super_admin finishing setup
     raise HTTPException(
@@ -140,7 +171,10 @@ async def require_setup_authorized(
 async def get_setup_status(
     service: SetupService = Depends(get_setup_service),
 ) -> SetupStatus:
-    return await service.get_setup_status()
+    result = await service.get_setup_status()
+    if not result.is_complete:
+        await announce_setup_code()
+    return result
 
 
 # ===========================================================================
@@ -213,6 +247,7 @@ async def restore_from_vault(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "Vault restore failed; check archive and database availability.",
         ) from None
+    await clear_setup_code()
     return {"success": True, **result}
 
 
@@ -263,6 +298,7 @@ async def create_admin(
     resp = await service.create_admin_user(request)
     if not resp.success:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=resp.error)
+    await clear_setup_code()
     return resp
 
 

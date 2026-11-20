@@ -107,7 +107,7 @@
       },
       "encryption": {
         "title": "Stream Encryption",
-        "description": "If stream encryption is enabled on this Hikvision camera/NVR, enter the encryption key to decrypt the RTSP stream.",
+        "description": "FreeSDN cannot play a stream that has Hikvision stream encryption turned on. To view this camera here, turn stream encryption off on the camera or NVR. A key saved below is stored but not used yet.",
         "keyLabel": "Encryption Key",
         "keyPlaceholder": "Enter encryption key (hex)",
         "saveKey": "Save Key",

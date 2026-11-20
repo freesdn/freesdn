@@ -47,6 +47,13 @@ async def consumers(maintenance_engine, monkeypatch, tmp_path):
     context = asynccontextmanager(operator_probes.operator.__wrapped__)
     async with context(maintenance_engine, monkeypatch, tmp_path) as f:
         await asyncio.to_thread(run_alembic, f.engine.url, "upgrade", "027_agent_release_references")
+        # The suite stays at revision 027 but writes and reads sites through
+        # today's model, which maps the column migration 036 adds.
+        async with f.engine.begin() as conn:
+            await conn.exec_driver_sql(
+                "ALTER TABLE core.sites ADD COLUMN IF NOT EXISTS "
+                "voip_zero_touch_provisioning boolean NOT NULL DEFAULT false"
+            )
         f.site = uuid4()
         f.binary_root = tmp_path / "owned-binaries"
         f.binary_root.mkdir(mode=0o700)

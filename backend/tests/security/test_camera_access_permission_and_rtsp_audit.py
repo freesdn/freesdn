@@ -24,6 +24,26 @@ from app.modules.cameras import api as cameras_api
 SECRET = "s3cr3t-camera-pass"
 
 
+@pytest.fixture(autouse=True)
+def _camera_grant_checked_elsewhere(monkeypatch):
+    """These tests drive get_stream_url with a stand-in service; the per-camera
+    live check it now runs (26.11.3) is tested in test_the_stream_route_checks_the_camera_grant."""
+    monkeypatch.setattr(cameras_api, "_enforce_camera_access", AsyncMock())
+
+
+async def test_the_stream_route_checks_the_camera_grant(monkeypatch) -> None:
+    """Fails on candidate 8 of 26.11.3: the stream route skipped the per-camera grant."""
+    checked = AsyncMock()
+    monkeypatch.setattr(cameras_api, "_enforce_camera_access", checked)
+    service = MagicMock()
+    service.get_stream_url = AsyncMock(return_value="/api/v1/cameras/x/stream/hls")
+    camera_id = uuid4()
+    await cameras_api.get_stream_url(
+        camera_id, await _principal("viewer"), service, stream_type="main", protocol="hls"
+    )
+    assert checked.await_args.args[2:] == (camera_id, "live")
+
+
 async def _principal(role: str) -> CurrentUser:
     user = User(
         id=uuid4(),

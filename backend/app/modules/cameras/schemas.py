@@ -198,6 +198,14 @@ def _validate_host_not_ssrf(host: str) -> str:
     return host
 
 
+def stream_param_is_secret(name: str) -> bool:
+    """A stream URL parameter that carries a credential, in any spelling
+    (password, pwd, accessToken, api_key, auth, sig...)."""
+    import re
+
+    return bool(re.search(r"(?i)(pass|pwd|token|secret|key|auth|sig|credential)", name))
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # NVR Connection & Discovery
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -553,12 +561,37 @@ class CameraResponse(BaseModel):
     @field_validator("rtsp_main_stream", "rtsp_sub_stream", mode="before")
     @classmethod
     def _mask_rtsp_credentials(cls, v: str | None) -> str | None:
-        """Strip embedded credentials from RTSP URLs before serialisation."""
-        if v and "://" in v and "@" in v:
-            # Use greedy match up to the LAST @ before the host
-            import re
+        """Strip embedded credentials from RTSP URLs before serialisation.
 
-            return re.sub(r"://[^/]*@", "://*****@", v, count=1)
+        The login part is masked; a credential anywhere else (a query such as
+        ``?password=...`` or ``?token=...``) hides the whole address, which
+        Viewers receive (found in review of 26.11.3).
+        """
+        if not v:
+            return v
+        from urllib.parse import parse_qsl, urlsplit, urlunsplit
+
+        from app.core.url_secrets import may_hold_credential
+
+        hidden = "(hidden: this stream address contains a credential)"
+        try:
+            parts = urlsplit(v)
+        except ValueError:
+            return hidden
+        # The login is masked; any other credential (a query parameter such as
+        # ?password= or ?accessToken=, or one in the path) hides the address.
+        netloc = parts.netloc
+        masked_netloc = "*****@" + netloc.rsplit("@", 1)[1] if "@" in netloc else netloc
+        query_names = [name for name, _ in parse_qsl(parts.query, keep_blank_values=True)]
+        rest = urlunsplit((parts.scheme, netloc.rsplit("@", 1)[-1], parts.path, parts.query, ""))
+        if any(stream_param_is_secret(name) for name in query_names) or may_hold_credential(
+            rest, stream_param_is_secret
+        ):
+            return hidden
+        if masked_netloc != netloc:
+            return urlunsplit(
+                (parts.scheme, masked_netloc, parts.path, parts.query, parts.fragment)
+            )
         return v
 
     # Without ``ClassVar``, pydantic v2 promotes ``_SETTINGS_SENSITIVE_KEYS``

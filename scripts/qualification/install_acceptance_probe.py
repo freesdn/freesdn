@@ -146,9 +146,15 @@ def main():
         request("GET", "/api/v1/health/ready")
         if mode == "seed":
             state["password"] = "Aa1!" + secrets.token_urlsafe(28)
+            # First-run setup needs the one-time code (app/setup/setup_code.py),
+            # which an operator reads from install.sh or the show command.
+            from app.setup.setup_code import SETUP_CODE_HEADER, ensure_setup_code
+
+            setup_code = database_runner.run(ensure_setup_code())
             response = request(
                 "POST",
                 "/api/v1/setup/admin",
+                headers={SETUP_CODE_HEADER: setup_code},
                 json={
                     "email": "qualification@example.com",
                     "username": "qualification-admin",

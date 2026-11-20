@@ -45,6 +45,30 @@ from app.schemas.sso import (
 
 logger = logging.getLogger(__name__)
 
+# RFC 6749 section 5.2 and OpenID Connect Core section 3.1.2.6 error codes.
+_OAUTH_ERROR_CODES = frozenset(
+    {
+        "invalid_request",
+        "invalid_client",
+        "invalid_grant",
+        "unauthorized_client",
+        "unsupported_grant_type",
+        "invalid_scope",
+        "access_denied",
+        "server_error",
+        "temporarily_unavailable",
+        "interaction_required",
+        "login_required",
+        "account_selection_required",
+        "consent_required",
+        "invalid_request_uri",
+        "invalid_request_object",
+        "request_not_supported",
+        "request_uri_not_supported",
+        "registration_not_supported",
+    }
+)
+
 # How long SSO sessions (state) live before expiry
 SSO_SESSION_TTL = timedelta(minutes=10)
 
@@ -404,7 +428,27 @@ class SSOService:
         except ValueError as e:
             raise SSOConfigError(f"Token endpoint blocked (SSRF): {e}")
         if token_resp.status_code != 200:
-            raise SSOAuthError(f"Token exchange failed: {token_resp.status_code} {token_resp.text}")
+            # Only the OAuth error code goes back to the browser (and the log):
+            # the provider's whole reply can repeat the client secret this
+            # request sent, or carry other detail for its operator (found in
+            # review of 26.11.3).
+            error_code = ""
+            try:
+                body = token_resp.json()
+                code_value = body.get("error") if isinstance(body, dict) else None
+                # Only a standard OAuth 2.0 / OIDC error code is shown: the
+                # field is the provider's text, which could carry anything.
+                if code_value in _OAUTH_ERROR_CODES:
+                    error_code = f" ({code_value})"
+            except ValueError:
+                pass
+            logger.warning(
+                "OIDC token exchange with provider %s failed: HTTP %s%s",
+                provider.id,
+                token_resp.status_code,
+                error_code,
+            )
+            raise SSOAuthError(f"Token exchange failed: HTTP {token_resp.status_code}{error_code}")
 
         token_data = token_resp.json()
         id_token = token_data.get("id_token")

@@ -46,7 +46,7 @@ async def test_streamed_download_enforces_limit(
     monkeypatch.setattr(
         httpx,
         "AsyncClient",
-        lambda **kwargs: real_client(**kwargs, transport=httpx.MockTransport(handler)),
+        lambda **kwargs: real_client(**{**kwargs, "transport": httpx.MockTransport(handler)}),
     )
     sink = io.BytesIO()
     if expected is None:
@@ -78,12 +78,14 @@ async def test_compressed_transfer_is_rejected_before_reading_body(monkeypatch):
         httpx,
         "AsyncClient",
         lambda **kwargs: real_client(
-            **kwargs,
-            transport=httpx.MockTransport(
-                lambda _request: httpx.Response(
-                    200, headers={"content-encoding": "gzip"}, stream=UnreadBody()
-                )
-            ),
+            **{
+                **kwargs,
+                "transport": httpx.MockTransport(
+                    lambda _request: httpx.Response(
+                        200, headers={"content-encoding": "gzip"}, stream=UnreadBody()
+                    )
+                ),
+            }
         ),
     )
     with pytest.raises(ValueError, match="Compressed HTTP"):

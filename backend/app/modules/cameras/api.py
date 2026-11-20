@@ -31,7 +31,7 @@ from app.core.dependencies import (
 )
 from app.core.device_slot import host_slot_key, normalize_host, nvr_slot_key
 from app.core.http_client import build_async_client
-from app.core.site_access import assert_can_access_site, site_scope_filter
+from app.core.site_access import assert_can_access_site, site_ids_for_request, site_scope_filter
 from app.db import get_session
 from app.modules.cameras.config_write import staged_camera_write
 from app.modules.cameras.models import NVR as NVRModel
@@ -1251,6 +1251,9 @@ async def get_stream_url(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="cameras.access permission is required for credential-bearing RTSP stream URLs",
         )
+    # The per-camera live grant, as for the proxied stream (found in review
+    # of 26.11.3: this route checked only the module permission).
+    await _enforce_camera_access(service.db, current_user, camera_id, "live")
     try:
         url = await service.get_stream_url(
             camera_id,
@@ -2610,6 +2613,10 @@ async def start_ptz_tour(
     except CameraNotFoundError:
         raise HTTPException(status_code=404, detail="Camera not found")
     assert_can_access_site(current_user, camera.site_id, detail="Camera not found")
+    if not current_user.site_level_allows("device:write", camera.site_id):
+        # Starting or stopping a patrol moves the camera: a read-only site
+        # grant may not (found in review of 26.11.3).
+        raise HTTPException(status_code=403, detail="Your access to this site is read-only.")
     adapter, channel = await _get_adapter_for_camera(camera, session)
     try:
         result = await audited_device_action(
@@ -2651,6 +2658,10 @@ async def stop_ptz_tour(
     except CameraNotFoundError:
         raise HTTPException(status_code=404, detail="Camera not found")
     assert_can_access_site(current_user, camera.site_id, detail="Camera not found")
+    if not current_user.site_level_allows("device:write", camera.site_id):
+        # Starting or stopping a patrol moves the camera: a read-only site
+        # grant may not (found in review of 26.11.3).
+        raise HTTPException(status_code=403, detail="Your access to this site is read-only.")
     adapter, channel = await _get_adapter_for_camera(camera, session)
     try:
         result = await audited_device_action(
@@ -2855,6 +2866,8 @@ async def _enforce_camera_access(
     current_user: Any,
     camera_id: UUID,
     action: str,
+    *,
+    site_write: bool = False,
 ) -> None:
     """Enforce per-camera CameraAccessGrant on top of the module-level
     ``cameras.*`` permission already checked by the endpoint dependency.
@@ -2889,6 +2902,16 @@ async def _enforce_camera_access(
         raise HTTPException(status_code=404, detail="Camera not found")
     _, cam_site_id = camera_row
     assert_can_access_site(current_user, cam_site_id, detail="Camera not found")
+    if (site_write or action in ("ptz", "configure")) and not current_user.site_level_allows(
+        "device:write", cam_site_id
+    ):
+        # A read-only site grant may watch and play back, not move a camera or
+        # put footage on hold: the role's defaults used to decide alone
+        # (found in review of 26.11.3).
+        raise HTTPException(
+            status_code=403,
+            detail="Your access to this site is read-only.",
+        )
     if org_id is None:
         # Preserve the explicitly privileged platform scope only after the
         # resource existence and site checks; module permissions still apply.
@@ -3694,8 +3717,12 @@ async def export_video_clip(
     if playback_uri:
         import re
 
-        # Only allow rtsp://0.0.0.0/Streaming/tracks/{digits} pattern
-        if not re.match(r"^rtsp://0\.0\.0\.0/Streaming/tracks/\d+$", playback_uri):
+        # Only allow rtsp://0.0.0.0/Streaming/tracks/{digits} pattern, and only
+        # THIS camera's own tracks (its channel's main or sub stream): another
+        # track on the same recorder is another camera, which the caller's
+        # per-camera export grant does not cover (found in review of 26.11.3).
+        track = re.match(r"^rtsp://0\.0\.0\.0/Streaming/tracks/(\d+)$", playback_uri)
+        if not track or track.group(1) not in {f"{channel}01", f"{channel}02"}:
             await adapter.disconnect()
             raise HTTPException(
                 status_code=400,
@@ -5425,7 +5452,7 @@ async def create_evidence_hold(
         raise HTTPException(status_code=400, detail="end_time must be after start_time")
     if (body.end_time - body.start_time).total_seconds() > 4 * 3600:
         raise HTTPException(status_code=400, detail="Evidence hold range cannot exceed 4 hours")
-    await _enforce_camera_access(session, current_user, body.camera_id, "export")
+    await _enforce_camera_access(session, current_user, body.camera_id, "export", site_write=True)
     try:
         camera = await service.get_camera(
             body.camera_id, organization_id=org_scope_or_platform(current_user)
@@ -5529,7 +5556,7 @@ async def create_evidence_batch(
     # export). Fail the whole batch on the first denial — partial exfiltration
     # of an un-granted camera would defeat the point.
     for cid in ids:
-        await _enforce_camera_access(session, current_user, cid, "export")
+        await _enforce_camera_access(session, current_user, cid, "export", site_write=True)
 
     archives = []
     for cid in ids:
@@ -5613,6 +5640,11 @@ async def download_evidence_bundle(
         .scalars()
         .all()
     )
+    # Each file is its camera's footage: the caller's site grant and per-camera
+    # export grant apply to every one, as for a single download (26.11.3).
+    for r in rows:
+        await _get_evidence_or_404(r.id, current_user, session)
+        await _enforce_evidence_export(session, current_user, r.camera_id)
     import os
 
     ready = [r for r in rows if r.file_path and os.path.exists(r.file_path)]
@@ -5704,6 +5736,25 @@ async def list_evidence(
     return EvidenceListResponse(items=[_evidence_item(a) for a in rows])
 
 
+async def _enforce_evidence_export(
+    session: AsyncSession, current_user: Any, camera_id: UUID
+) -> None:
+    """The per-camera export grant for held evidence.
+
+    Evidence outlives its camera: once the camera is deleted, its archives
+    stay downloadable by an organization administrator (who holds every grant)
+    and by no one else.
+    """
+    from app.modules.cameras.models import Camera
+
+    camera = await session.get(Camera, camera_id)
+    if camera is None or camera.deleted_at is not None:
+        if not current_user.has_min_role("org_admin"):
+            raise HTTPException(status_code=404, detail="Evidence archive not found")
+        return
+    await _enforce_camera_access(session, current_user, camera_id, "export")
+
+
 async def _get_evidence_or_404(
     archive_id: UUID, current_user: CurrentUser, session: AsyncSession
 ) -> Any:
@@ -5742,6 +5793,9 @@ async def download_evidence(
             status_code=403, detail="Downloading evidence requires the site_admin role"
         )
     arch = await _get_evidence_or_404(archive_id, current_user, session)
+    # The clip is the camera's footage: the same per-camera export grant as a
+    # live export (found in review of 26.11.3).
+    await _enforce_evidence_export(session, current_user, arch.camera_id)
     import os
 
     if arch.status != "ready" or not arch.file_path or not os.path.isfile(arch.file_path):
@@ -5774,6 +5828,21 @@ async def delete_evidence(
             status_code=403, detail="Deleting evidence requires the site_admin role"
         )
     arch = await _get_evidence_or_404(archive_id, current_user, session)
+    # Deleting held evidence needs the camera's export grant (an explicit
+    # grant that denies export used to be ignored here) and delete-level
+    # access to its site (found in review of 26.11.3).
+    await _enforce_evidence_export(session, current_user, arch.camera_id)
+    from app.modules.cameras.models import Camera as _Camera
+
+    camera = await session.get(_Camera, arch.camera_id)
+    if (
+        camera is not None
+        and camera.deleted_at is None
+        and not current_user.site_level_allows("device:delete", camera.site_id)
+    ):
+        raise HTTPException(
+            status_code=403, detail="Your access to this site does not include deleting."
+        )
     import os
 
     # Don't delete a row the archive worker is actively writing — deleting it
@@ -6507,6 +6576,8 @@ async def create_access_grant(
         )
         if not result.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Group not found")
+        if not await service.group_within_sites(body.group_id, site_ids_for_request(current_user)):
+            raise HTTPException(status_code=404, detail="Group not found")
 
     # Validate user belongs to the same org
     from app.models.core import User
@@ -6590,6 +6661,10 @@ async def update_access_grant(
     grant = await service.update_grant(
         grant_id=grant_id,
         organization_id=org_scope_or_platform(current_user),  # type: ignore[arg-type]
+        # A site-limited caller edits only grants on cameras in their sites;
+        # without this the service treated the caller as unrestricted (found
+        # in review of 26.11.3).
+        accessible_site_ids=site_ids_for_request(current_user),
         **updates,
     )
     if not grant:
@@ -6633,6 +6708,7 @@ async def delete_access_grant(
     deleted = await service.delete_grant(
         grant_id=grant_id,
         organization_id=org_scope_or_platform(current_user),  # type: ignore[arg-type]
+        accessible_site_ids=site_ids_for_request(current_user),
     )
     if not deleted:
         raise HTTPException(status_code=404, detail="Grant not found")

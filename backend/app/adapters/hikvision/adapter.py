@@ -312,6 +312,10 @@ _MAX_XML_BYTES = 8 * 1024 * 1024
 # rows. Matches the 1..256 bound _validate_channel already enforces.
 _MAX_CHANNELS = 256
 
+# Font for the burned-in export watermark (Alpine font-dejavu, installed by
+# backend/Dockerfile).
+WATERMARK_FONT = "/usr/share/fonts/dejavu/DejaVuSans.ttf"
+
 
 def _clamp_name(name: str | None, fallback: str) -> str:
     """Bound a device-reported channel name to the Camera.name column width
@@ -3697,11 +3701,12 @@ class HikvisionAdapter(BaseAdapter):
                 async for chunk in resp.aiter_bytes(chunk_size=65536):
                     _total += len(chunk)
                     if _total > _MAX_STREAM_BYTES:
-                        logger.warning(
-                            "stream_video_clip exceeded %d byte limit, aborting",
-                            _MAX_STREAM_BYTES,
+                        # Raise, never return: a silent end looked like a
+                        # complete clip, and a legal hold sealed it.
+                        raise AdapterError(
+                            f"the clip exceeded the {_MAX_STREAM_BYTES // 2**30} GiB "
+                            "export limit and is incomplete"
                         )
-                        return
                     yield chunk
         finally:
             await export_client.aclose()
@@ -3741,7 +3746,9 @@ class HikvisionAdapter(BaseAdapter):
         rtsp = await self._recorded_rtsp_for_range(channel, start_iso, end_iso)
         # Sanitise for the drawtext filter — drop chars that break its parser.
         safe = re.sub(r"[:'\\%\n\r]", " ", overlay_text)[:120]
-        font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        # Alpine's font-dejavu path (backend/Dockerfile installs it); the Debian
+        # path used before does not exist in the image.
+        font = WATERMARK_FONT
         # Downscale to 720p: re-encoding a 4K-HEVC source at full res can't keep
         # up (the encoder stalls before emitting a frame). 720p libx264 ultrafast
         # sustains real-time, so the watermarked evidence copy is shareable and
@@ -3755,21 +3762,26 @@ class HikvisionAdapter(BaseAdapter):
             "-hide_banner",
             "-loglevel",
             "error",
-            # Bound a stalled RTSP source: rw_timeout (us) makes ffmpeg exit
-            # instead of blocking the demuxer forever; stimeout covers older
-            # ffmpeg builds that read the rtsp-specific socket timeout. Without
-            # these a mid-stream camera stall leaves proc.stdout.read() (below)
-            # blocked indefinitely with the ffmpeg child + sockets alive.
+            # Bound a stalled RTSP source: the RTSP demuxer's socket timeout (us)
+            # makes ffmpeg exit instead of blocking forever, which would leave
+            # proc.stdout.read() (below) waiting with the ffmpeg child and its
+            # sockets alive. FFmpeg 5 renamed it from -stimeout to -timeout, and
+            # the RTSP demuxer has no -rw_timeout: FFmpeg 9 refuses to start
+            # with either, so every watermarked export failed.
             "-rtsp_transport",
             "tcp",
-            "-rw_timeout",
-            "15000000",
-            "-stimeout",
+            "-timeout",
             "15000000",
             "-i",
             rtsp,
             "-vf",
             vf,
+            # Keep the recorder's timestamps. For MP4 FFmpeg's default is a
+            # constant frame rate, which repeats the last frame across a gap in
+            # the recording, so a clip with a hole would look complete to the
+            # legal-hold coverage check (tasks/cameras.py).
+            "-fps_mode",
+            "vfr",
             "-c:v",
             "libx264",
             "-preset",
@@ -3796,6 +3808,12 @@ class HikvisionAdapter(BaseAdapter):
                 if not chunk:
                     break
                 yield chunk
+            # FFmpeg exits 0 when the recorder simply ends the stream early, so
+            # a clean exit does not prove the clip is complete; the legal hold
+            # also measures what it got (tasks/cameras.py). A non-zero exit is
+            # at least a definite failure.
+            if (returncode := await proc.wait()) != 0:
+                raise AdapterError(f"Watermarked export failed (ffmpeg exit status {returncode})")
         finally:
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()

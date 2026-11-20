@@ -80,10 +80,14 @@ async def owned_backend(monkeypatch, *, scheme="https", base_path="/dav"):
         return httpx.Response(207 if request.method == "PROPFIND" else 200, stream=httpx.ByteStream(data))
 
     original_client = httpx.AsyncClient
+    from app.core.http_client import _CheckedHostTransport
 
     def client(*args, **kwargs):
-        assert "transport" not in kwargs
-        result = original_client(*args, transport=httpx.MockTransport(respond), **kwargs)
+        # The backend brings no transport of its own; the only one is FreeSDN's
+        # connect-time address check, added by the shared client builder.
+        transport = kwargs.get("transport")
+        assert transport is None or isinstance(transport, _CheckedHostTransport)
+        result = original_client(*args, **{**kwargs, "transport": httpx.MockTransport(respond)})
         clients.append(result)
         return result
 

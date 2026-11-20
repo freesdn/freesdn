@@ -74,6 +74,48 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 
 
 @pytest.fixture(autouse=True)
+def _setup_code_supplied(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Treat the first-run setup code as supplied, like an operator who has it.
+
+    Setup tests exercise the wizard itself; the code check that guards it is
+    tested end to end in tests/api/test_setup_code.py, which opts out with the
+    ``real_setup_code`` marker.
+    """
+    if request.node.get_closest_marker("real_setup_code"):
+        return
+
+    async def _accepted(_supplied: object) -> None:
+        return None
+
+    monkeypatch.setattr("app.setup.api.verify_setup_code", _accepted)
+
+
+@pytest.fixture
+def loopback_devices_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let FreeSDN's outbound HTTP clients reach a test server on this machine.
+
+    Since 26.11.3 they refuse loopback at connect time (it would reach
+    FreeSDN's own services). Tests that serve a device, identity provider or
+    download on 127.0.0.1 use this; link-local and cloud-metadata addresses
+    stay refused.
+    """
+    import ipaddress
+
+    from app.core import http_client
+
+    original = http_client._refuse_target
+
+    def refuse(ip: str) -> bool:
+        address = ipaddress.ip_address(ip.strip("[]"))
+        mapped = getattr(address, "ipv4_mapped", None)
+        if (mapped or address).is_loopback:
+            return False
+        return original(ip)
+
+    monkeypatch.setattr(http_client, "_refuse_target", refuse)
+
+
+@pytest.fixture(autouse=True)
 def _backup_files_may_live_in_the_temp_dir(monkeypatch: pytest.MonkeyPatch) -> None:
     """Allow the system temp dir as a local backup root, as an operator would.
 

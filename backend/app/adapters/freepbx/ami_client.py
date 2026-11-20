@@ -31,6 +31,8 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.core.http_client import open_checked_connection
+
 from .constants import (
     AMI_ACTION_TIMEOUT,
     AMI_DEFAULT_PORT,
@@ -205,8 +207,11 @@ class AMIClient:
         self._closing = False
 
         try:
+            # The address is checked and connected to directly, so the name
+            # cannot resolve somewhere else in between (found in review of
+            # 26.11.3).
             self._reader, self._writer = await asyncio.wait_for(
-                asyncio.open_connection(self.host, self.port),
+                open_checked_connection(self.host, self.port),
                 timeout=AMI_LOGIN_TIMEOUT,
             )
         except TimeoutError as exc:

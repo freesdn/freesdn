@@ -31,8 +31,12 @@ from tests.harness_wait import HARNESS_WAIT_SECONDS
 
 
 @pytest.fixture
-def certificates(tmp_path, monkeypatch):
+def certificates(tmp_path, monkeypatch, loopback_devices_allowed):
     monkeypatch.delenv("FREESDN_DEVICE_CA_BUNDLE", raising=False)
+    # These tests reach a local TLS server by the name "localhost", which a
+    # real adapter host may not be since 26.11.3 (it would reach FreeSDN's own
+    # services): allow it here only, at setup and at connect time.
+    monkeypatch.setattr("app.adapters.base.validate_host", lambda host: host)
     now = dt.datetime.now(dt.UTC)
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "FreeSDN test CA")])

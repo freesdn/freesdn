@@ -246,6 +246,26 @@ def _wait_for_rest_ready(
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _chr_on_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CHR container is published on this machine's loopback, which
+    FreeSDN refuses for a real device since 26.11.3: every test in this file
+    (some build their own client) may reach loopback, nothing else."""
+    import ipaddress
+
+    from app.core import http_client
+
+    original_refuse = http_client._refuse_target
+
+    def _refuse(ip: str) -> bool:
+        address = ipaddress.ip_address(ip.strip("[]"))
+        if (getattr(address, "ipv4_mapped", None) or address).is_loopback:
+            return False
+        return original_refuse(ip)
+
+    monkeypatch.setattr(http_client, "_refuse_target", _refuse)
+
+
 @pytest_asyncio.fixture
 async def chr_client(
     chr_endpoint: dict[str, Any],

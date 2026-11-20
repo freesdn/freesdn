@@ -39,7 +39,7 @@ from app.adapters.base import (
 from app.adapters.capabilities import Capability
 from app.adapters.exceptions import AdapterReadOnlyError as _BaseAdapterReadOnlyError
 from app.adapters.http_utils import CircuitBreaker
-from app.core.http_client import build_aiohttp_session
+from app.core.http_client import build_aiohttp_session, checked_connector, overlay_socks_proxy
 
 from .client import GrandstreamPhoneClient
 from .constants import PHONE_DEFAULT_PORT
@@ -738,7 +738,12 @@ class GrandstreamAdapter(BaseAdapter):
 
             # Download firmware blob and verify checksum.
             timeout = aiohttp.ClientTimeout(total=120.0)
-            async with build_aiohttp_session(timeout=timeout) as session:
+            # Every connection is checked; with the userspace overlay the
+            # download keeps going through its proxy, as before 26.11.3.
+            async with build_aiohttp_session(
+                timeout=timeout,
+                **({} if overlay_socks_proxy() else {"connector": checked_connector()}),
+            ) as session:
                 async with session.get(firmware_url) as resp:
                     if resp.status != 200:
                         raise GrandstreamError(f"Firmware download returned HTTP {resp.status}")

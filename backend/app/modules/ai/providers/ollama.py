@@ -35,6 +35,7 @@ class OllamaProvider(BaseLLMProvider):
     def __init__(self, api_key: str = "", base_url: str = DEFAULT_OLLAMA_URL):
         self.base_url = base_url.rstrip("/")
         self._client = build_async_client(
+            allow_loopback=True,  # a model server may run on this host
             base_url=self.base_url,
             headers={"Content-Type": "application/json"},
             timeout=300.0,  # Local models can be slow on first load

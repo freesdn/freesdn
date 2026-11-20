@@ -581,12 +581,49 @@ class StreamService:
             except ValueError:
                 url_host = None
             own_host = url_host is not None and url_host == normalize_host(camera.ip_address)
+            if getattr(camera, "nvr_id", None) is not None:
+                # A channel imported from a recorder holds the login copied
+                # from the recorder at import, whatever the recorder's account
+                # is now, and that login opens every camera on the recorder:
+                # it is never put in a link (found in review of 26.11.3;
+                # comparing with the recorder's current login missed an
+                # account change).
+                own_host = False
+            if url_host is not None and "@" in parts.netloc:
+                # A login stored inside the URL itself (an import, or one typed
+                # in) is never handed out: for a recorder's channel it is the
+                # recorder's login (found in review of 26.11.3). The only login
+                # a returned URL carries is the camera's own, injected below.
+                bare = f"[{url_host}]" if ":" in url_host else url_host
+                netloc = f"{bare}:{url_port}" if url_port else bare
+                url = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+                parts = urlsplit(url)
+            if url_host is not None and parts.query:
+                # A credential in the query (?password=..., ?token=...) is
+                # dropped the same way; other parameters stay (found in review
+                # of 26.11.3).
+                from urllib.parse import parse_qsl, urlencode
+
+                from app.core.url_secrets import may_hold_credential
+                from app.modules.cameras.schemas import stream_param_is_secret
+
+                pairs = parse_qsl(parts.query, keep_blank_values=True)
+                kept = [
+                    (k, v)
+                    for k, v in pairs
+                    if not stream_param_is_secret(k)
+                    and not may_hold_credential(f"{k}={v}", stream_param_is_secret)
+                ]
+                if len(kept) != len(pairs):
+                    url = urlunsplit(
+                        (parts.scheme, parts.netloc, parts.path, urlencode(kept), parts.fragment)
+                    )
+                    parts = urlsplit(url)
             if (
                 own_host
                 and camera.username
                 and camera.password_encrypted
                 and parts.scheme == "rtsp"
-                and "@" not in parts.netloc
             ):
                 from urllib.parse import quote
 
@@ -2701,6 +2738,39 @@ class CameraAccessService:
         await self.db.refresh(grant)
         return grant
 
+    async def group_within_sites(
+        self, group_id: UUID | None, accessible_site_ids: set[UUID] | list[UUID] | None
+    ) -> bool:
+        """Whether every camera in a group is in the caller's sites.
+
+        A group grant reaches each camera in the group, so a site-limited
+        caller may create, change or revoke one only when the group has
+        cameras and all of them are in their sites (found in review of
+        26.11.3: group grants were allowed outright). ``None`` means a caller
+        who is not site-limited.
+        """
+        if accessible_site_ids is None:
+            return True
+        if group_id is None:
+            return False
+        from app.modules.cameras.models import Camera, CameraGroupMember
+
+        members = await self.db.scalar(
+            select(func.count())
+            .select_from(CameraGroupMember)
+            .where(CameraGroupMember.group_id == group_id)
+        )
+        outside = await self.db.scalar(
+            select(func.count())
+            .select_from(CameraGroupMember)
+            .join(Camera, Camera.id == CameraGroupMember.camera_id)
+            .where(
+                CameraGroupMember.group_id == group_id,
+                Camera.site_id.notin_(list(accessible_site_ids)),
+            )
+        )
+        return bool(members) and not outside
+
     async def _grant_in_accessible_sites(
         self, grant: Any, accessible_site_ids: set[UUID] | list[UUID] | None
     ) -> bool:
@@ -2716,8 +2786,7 @@ class CameraAccessService:
         if accessible_site_ids is None:
             return True
         if grant.camera_id is None:
-            # Group grant (no site) — matches create's unfiltered group path.
-            return True
+            return await self.group_within_sites(grant.group_id, accessible_site_ids)
         from app.modules.cameras.models import Camera
 
         result = await self.db.execute(

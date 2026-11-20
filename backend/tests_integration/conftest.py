@@ -355,6 +355,13 @@ async def integration_client(
             yield client
     finally:
         app.dependency_overrides.pop(get_session, None)
+        # App code that opens its own session (the setup code, audit writes)
+        # pools connections on the GLOBAL engine bound to this test's loop;
+        # dispose it as tests/conftest.py does, or the next test's loop
+        # trips over them ("attached to a different loop").
+        from app.db.session import engine as _global_engine
+
+        await _global_engine.dispose()
 
 
 # ---------------------------------------------------------------------------
@@ -426,9 +433,13 @@ async def super_admin(integration_client: Any) -> dict[str, Any]:
     email = "admin@integration.example.com"
     password = "IntegrationTestP@ssw0rd!"
 
-    # POST /setup/admin to create the super_admin (matches AdminCreateRequest)
+    # POST /setup/admin to create the super_admin (matches AdminCreateRequest).
+    # First-run setup needs the one-time code (app/setup/setup_code.py).
+    from app.setup.setup_code import SETUP_CODE_HEADER, ensure_setup_code
+
     resp = await integration_client.post(
         "/api/v1/setup/admin",
+        headers={SETUP_CODE_HEADER: await ensure_setup_code()},
         json={
             "email": email,
             "username": "integration_admin",

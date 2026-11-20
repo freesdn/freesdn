@@ -184,7 +184,7 @@ class WebDAVPeer:
 
 
 @pytest.fixture
-def webdav_peer(tmp_path, monkeypatch, request):
+def webdav_peer(tmp_path, monkeypatch, request, loopback_devices_allowed):
     ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     leaf_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Owned WebDAV CA")])

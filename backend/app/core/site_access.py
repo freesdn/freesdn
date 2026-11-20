@@ -103,8 +103,12 @@ def assert_site_access_for_request(
         assert_can_access_site(user, site_id, detail=detail)
 
 
-def assert_site_write_for_request(site_id: UUID | None) -> None:
+def assert_site_write_for_request(site_id: UUID | None, permission: str = "device:write") -> None:
     """Refuse a device write on a site where the request's user holds a read-only grant.
+
+    ``permission="device:delete"`` is for removing a record (a phone, a PBX):
+    a ``write`` grant reserves that for an ``admin`` grant (found in review of
+    26.11.3). Removing a configuration item on a device stays a write.
 
     ``assert_site_access_for_request`` only asks whether the user may see the
     site, so a ``UserSiteAccess.access_level="read"`` grant still let its holder
@@ -115,11 +119,13 @@ def assert_site_write_for_request(site_id: UUID | None) -> None:
     user = current_user_var.get()
     if user is None or site_id is None:
         return
-    if not user.site_level_allows("device:write", site_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your access to this site is read-only: device changes are refused.",
+    if not user.site_level_allows(permission, site_id):
+        detail = (
+            "Your access to this site does not include deleting."
+            if permission.endswith(":delete")
+            else "Your access to this site is read-only: device changes are refused."
         )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 def site_ids_for_request(current_user: CurrentUser | Any | None = None) -> Any:

@@ -221,6 +221,13 @@ class Site(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
 
     # Settings
     settings: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    # Zero-touch phone provisioning: whether a phone on one of this site's
+    # subnets may fetch its config (SIP password included) without a signed
+    # URL. Its own column, not a settings key: only the audited VoIP endpoint
+    # changes it, and a site edit cannot write a stale value back.
+    voip_zero_touch_provisioning: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

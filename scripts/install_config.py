@@ -208,7 +208,7 @@ def configure(
         }
         if email:
             overrides["CADDY_ACME_EMAIL"] = email
-    elif fresh and not dev and tier != "lite":
+    elif fresh and not dev:
         overrides = {
             "CADDY_SITE_ADDRESS": "localhost",
             "PUBLIC_BASE_URL": "https://localhost",
@@ -297,11 +297,13 @@ def main() -> None:
                 f"stay OFF until it is removed (sudo rmdir {key_path}) and "
                 "./scripts/backup-keygen.sh is run."
             )
-    if args.domain:
+    if args.domain and re.fullmatch(r"[0-9.]+", args.domain):
+        print("HTTPS for this IP address configured, with a certificate from Caddy's internal CA.")
+    elif args.domain:
         print(
             "HTTPS origin configured; DNS and inbound ports 80/443 must be provisioned separately."
         )
-    elif fresh and not args.dev and args.tier != "lite":
+    elif fresh and not args.dev:
         print(
             "Local HTTPS selected. Configure a production DNS hostname before exposing the service."
         )

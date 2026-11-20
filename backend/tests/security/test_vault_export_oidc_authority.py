@@ -206,7 +206,7 @@ async def oidc_export(owned_export, monkeypatch, owned_oidc_signing_key):
 
     def owned_http(**kwargs):
         assert kwargs["verify"] is True and kwargs["follow_redirects"] is False
-        return original(**kwargs, transport=httpx.MockTransport(transport))
+        return original(**{**kwargs, "transport": httpx.MockTransport(transport)})
 
     monkeypatch.setattr(httpx, "AsyncClient", owned_http)
     monkeypatch.setattr(security_utils, "_resolve_and_validate", lambda *_a, **_kw: "203.0.113.7")

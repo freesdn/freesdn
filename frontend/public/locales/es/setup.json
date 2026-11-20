@@ -451,6 +451,10 @@
       "frontend": "Frontend",
       "dockerServices": "Servicios de Docker",
       "unreachable": "no accesible"
+    },
+    "setupCode": {
+      "label": "Código de configuración",
+      "help": "El instalador mostró este código al terminar. Para verlo de nuevo, ejecute: docker compose --env-file .env.<tier> exec api python -m app.setup.setup_code."
     }
   }
 }

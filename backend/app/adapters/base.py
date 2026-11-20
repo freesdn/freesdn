@@ -10,6 +10,7 @@ Provides standardized interface for device management across vendors.
 
 import ipaddress
 import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -89,6 +90,11 @@ _BLOCKED_HOSTNAMES = frozenset(
     }
 )
 
+# A host name (letters, digits, dots, hyphens, underscores) or an IP address,
+# with an optional port ("[v6]:port" for IPv6); validate_host refuses any
+# other text.
+_HOST_TEXT = re.compile(r"(\[[0-9a-f:.]+\]|[a-z0-9._-]+)(:[0-9]{1,5})?|[0-9a-f:.]+")
+
 
 def validate_host(host: str) -> str:
     """Validate a host string is safe to connect to (SSRF prevention).
@@ -110,8 +116,20 @@ def validate_host(host: str) -> str:
     clean = host.strip().lower()
     if "://" in clean:
         clean = clean.split("://", 1)[1]
-    # Strip port suffix
-    if ":" in clean and not clean.startswith("["):
+    clean = clean.split("/", 1)[0]
+    # Only a host name or an IP address (and a port). Anything else
+    # ("x@127.0.0.1", "admin:pw@10.0.0.5", a query, a backslash, spaces) is
+    # read differently by the URL parser that later connects: "x@127.0.0.1"
+    # passed the name lookup below by failing it, then connected to 127.0.0.1
+    # with "x" as a login (found in review of 26.11.3).
+    if not clean or not _HOST_TEXT.fullmatch(clean):
+        raise ValueError("Blocked host: not a host name or IP address")
+    if clean.startswith("["):
+        # A bracketed IPv6 literal, with or without a port: "[::ffff:127.0.0.1]"
+        # used to skip the address check entirely (found in review of 26.11.3).
+        clean = clean[1 : clean.find("]")] if "]" in clean else clean[1:]
+    elif clean.count(":") == 1:
+        # host:port. A bare IPv6 literal has several colons and no port.
         clean = clean.rsplit(":", 1)[0]
 
     # Check blocked hostnames
@@ -133,8 +151,18 @@ def validate_host(host: str) -> str:
     except ValueError as e:
         if "Blocked host" in str(e):
             raise
-        # Not a valid IP — must be a hostname, check against blocked list
-        pass
+        # Not an IP literal: a host NAME. Resolve it and refuse it when any
+        # address it resolves to is blocked, so "localhost" or a name pointing
+        # at a metadata or loopback address is not accepted just because it is
+        # not a literal (found in review of 26.11.3).
+        from app.core.security_utils import _resolve_hostname, is_ssrf_blocked_ip
+
+        try:
+            resolved = _resolve_hostname(clean)
+        except (OSError, ValueError):
+            resolved = []
+        if clean == "localhost" or any(is_ssrf_blocked_ip(ip) for ip in resolved):
+            raise ValueError(f"Blocked host: {clean} resolves to an SSRF-unsafe address") from None
 
     return host
 

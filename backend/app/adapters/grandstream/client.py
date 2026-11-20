@@ -54,7 +54,7 @@ from urllib.parse import urlencode
 import aiohttp
 
 from app.adapters import io_policy
-from app.core.http_client import build_aiohttp_session
+from app.core.http_client import build_aiohttp_session, checked_connector
 
 from .constants import (
     PHONE_API_ACCESS,
@@ -140,7 +140,11 @@ class GrandstreamPhoneClient:
                 f"Refusing to connect to {host} over plain HTTP: "
                 "set acknowledge_plaintext=True on the phone record to opt in"
             )
-        self.host = host
+        # The same host check as every adapter (app/adapters/base.py): a phone
+        # record's address is where its admin password is sent (26.11.3).
+        from app.adapters.base import validate_host
+
+        self.host = validate_host(host)
         self.port = port
         self.username = username
         self.password = password
@@ -199,7 +203,7 @@ class GrandstreamPhoneClient:
         if self._connected:
             return
 
-        connector = aiohttp.TCPConnector(ssl=self._connector_ssl)
+        connector = checked_connector(ssl=self._connector_ssl)
         # sock_connect caps the TCP-connect phase so an unreachable phone fails
         # fast (~8s) instead of hanging up to the (long) total request timeout.
         timeout = aiohttp.ClientTimeout(total=PHONE_REQUEST_TIMEOUT, sock_connect=8.0)
@@ -214,6 +218,9 @@ class GrandstreamPhoneClient:
             connector=connector,
             timeout=timeout,
             cookie_jar=cookie_jar,
+            # Credentials ride on these requests: never follow a redirect to
+            # another host (26.11.3).
+            same_host_redirects=True,
         )
 
         try:
@@ -687,10 +694,17 @@ class GrandstreamPhoneClient:
         if isinstance(result, dict):
             ok = result.get("response") == "success"
             if not ok:
+                from app.modules.voip.setting_secrets import secret_values, shown_provider_text
+
+                # The reply can echo the values written, a SIP password among
+                # them (found in review of 26.11.3).
                 logger.warning(
                     "config_update failed for %s: %s",
                     self.host,
-                    result,
+                    shown_provider_text(
+                        result.get("body", result.get("response")),
+                        secrets=[self.password, *secret_values(body)],
+                    ),
                 )
             return ok
         # Some firmware revs return a plain "OK" string

@@ -176,16 +176,36 @@ async def test_delete_ring_group_mutation():
 # ── Write-result unwrapping ─────────────────────────────────────────────
 
 
+def _bare_client(password=None, secret=None):
+    client = FreePBXRestClient.__new__(FreePBXRestClient)
+    client.password = password
+    client.api_client_secret = secret
+    return client
+
+
 def test_gql_write_result_raises_on_status_false():
     with pytest.raises(FreePBXApiError, match="boom"):
-        FreePBXRestClient._gql_write_result({"addExtension": {"status": False, "message": "boom"}}, "addExtension")
+        _bare_client()._gql_write_result(
+            {"addExtension": {"status": False, "message": "boom"}}, "addExtension"
+        )
 
 
 def test_gql_write_result_returns_payload_on_success():
-    out = FreePBXRestClient._gql_write_result(
+    out = _bare_client()._gql_write_result(
         {"addExtension": {"status": True, "message": "created"}}, "addExtension"
     )
     assert out == {"status": True, "message": "created"}
+
+
+def test_a_provider_message_with_a_sent_credential_is_hidden():
+    """26.11.3: the PBX's error text reaches logs; one echoing a secret is hidden."""
+    client = _bare_client(password="hunter2-secret")
+    with pytest.raises(FreePBXApiError) as raised:
+        client._gql_write_result(
+            {"addExtension": {"status": False, "message": "bad login hunter2-secret"}},
+            "addExtension",
+        )
+    assert "hunter2-secret" not in str(raised.value)
 
 
 # ── OAuth2 requirement ──────────────────────────────────────────────────

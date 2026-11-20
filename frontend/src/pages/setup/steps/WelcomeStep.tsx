@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef, version as reactVersion } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { setupApi, type WelcomeResponse, type SystemRequirement } from '@/lib/setup-api';
+import { getSetupCode, setSetupCode, setupApi, type WelcomeResponse, type SystemRequirement } from '@/lib/setup-api';
 import { getApiErrorMessage } from '@/lib/api';
 import { useSetupStore } from '@/stores/setupStore';
 import { FRONTEND_VERSIONS } from '@/lib/build-info';
@@ -35,6 +35,8 @@ interface WelcomeStepProps {
 }
 
 export function WelcomeStep({ onNext }: WelcomeStepProps) {
+  const [code, setCode] = useState(() => getSetupCode());
+  const codeEntered = code.trim().length > 0;
   const { t } = useTranslation('setup');
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -289,6 +291,24 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
         </div>
       </details>
 
+      <Card>
+        <CardContent className="space-y-2 pt-4">
+          <Label htmlFor="setup-code">{t('WelcomeStep.setupCode.label')}</Label>
+          <Input
+            id="setup-code"
+            value={code}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
+            onChange={(event) => {
+              setCode(event.target.value);
+              setSetupCode(event.target.value);
+            }}
+          />
+          <p className="text-xs text-muted-foreground">{t('WelcomeStep.setupCode.help')}</p>
+        </CardContent>
+      </Card>
+
       {/* Restore-from-backup branch — migrate to this fresh box from a .fsdnvault */}
       <Card>
         <CardHeader className="py-3 px-4">
@@ -342,7 +362,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
             )}
             <Button
               onClick={handleRestore}
-              disabled={!restoreFile || restorePass.length < 12 || restoring}
+              disabled={!codeEntered || !restoreFile || restorePass.length < 12 || restoring}
               className="w-full"
             >
               {restoring ? (
@@ -362,7 +382,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
         <div className="flex justify-end">
           <Button
             onClick={onNext}
-            disabled={!data.can_proceed || restoring}
+            disabled={!data.can_proceed || !codeEntered || restoring}
             size="lg"
           >
             {t('WelcomeStep.actions.continue')}

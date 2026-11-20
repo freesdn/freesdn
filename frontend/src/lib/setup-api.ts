@@ -4,6 +4,41 @@
  * FreeSDN - Setup Wizard API
  */
 import { api } from './api';
+
+// First-run setup needs the one-time code the installer prints (see
+// backend/app/setup/setup_code.py). It is kept for this browser tab only and
+// sent with every setup request.
+const SETUP_CODE_STORAGE = 'freesdn.setupCode';
+const SETUP_CODE_HEADER = 'X-FreeSDN-Setup-Code';
+let setupCode = '';
+
+export function setSetupCode(code: string): void {
+  setupCode = code.trim();
+  try {
+    sessionStorage.setItem(SETUP_CODE_STORAGE, setupCode);
+  } catch {
+    // Storage can be unavailable (private mode); the in-memory copy still works.
+  }
+}
+
+export function getSetupCode(): string {
+  if (!setupCode) {
+    try {
+      setupCode = sessionStorage.getItem(SETUP_CODE_STORAGE) ?? '';
+    } catch {
+      setupCode = '';
+    }
+  }
+  return setupCode;
+}
+
+api.interceptors?.request?.use((config) => {
+  const code = getSetupCode();
+  if (code && typeof config.url === 'string' && config.url.startsWith('/setup/')) {
+    config.headers.set(SETUP_CODE_HEADER, code);
+  }
+  return config;
+});
 import type { RestoreReport } from './api/types';
 
 // Types

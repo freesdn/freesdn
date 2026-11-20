@@ -45,6 +45,13 @@ async def legacy_vault_database(monkeypatch, request):
                 ("legacy_binding_index_absent", binding_index is None),
                 ("legacy_database_separate_from_suite", True),
             ])
+            # The database stays at 021, but the suite reads and writes sites
+            # through today's model, which maps the column migration 036 adds.
+            with inspection.begin() as connection:
+                connection.execute(sa.text(
+                    "ALTER TABLE core.sites ADD COLUMN IF NOT EXISTS "
+                    "voip_zero_touch_provisioning boolean NOT NULL DEFAULT false",
+                ))
         finally:
             inspection.dispose()
         engine = create_async_engine(

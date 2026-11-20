@@ -122,9 +122,9 @@ The installer generates random secrets in an owner-only environment file (mode 0
 ./install.sh --tier pro --domain freesdn.example.com --email you@example.com
 ```
 
-After boot, open the URL `install.sh` prints -- `http://localhost:8080` for the default lite tier, or `https://<your-domain>` when you pass `--domain` -- and the first-run wizard walks through: admin account, organization, site, and initial controller configuration.
+After boot, open the URL `install.sh` prints -- `https://localhost` (Caddy's internal CA, so the browser warns until you trust it) for a default install, or `https://<your-domain>` when you pass `--domain` -- and the first-run wizard walks through: admin account, organization, site, and initial controller configuration.
 
-Access from another machine requires HTTPS with a certificate trusted by that client: production authentication uses Secure cookies. Do not expose the default local HTTP mode on an untrusted network. See [installation and recovery acceptance](docker/INSTALL-ACCEPTANCE) for the supported rehearsal and its limits.
+Access from another machine requires HTTPS with a certificate trusted by that client: production authentication uses Secure cookies. A default install answers only requests addressed to `localhost`, which in practice means a browser on the host itself; for other machines, install with `--domain` and the name or IP address they use (for example `./install.sh --domain 192.168.1.50`). See [installation and recovery acceptance](docker/INSTALL-ACCEPTANCE) for the supported rehearsal and its limits.
 
 
 FreeSDN **manages** your gear out of the box -- once you add a controller it can stage and apply configuration changes (behind login + RBAC; destructive actions need a confirmation), the same as the OPNsense, pfSense, Omada, or UniFi UIs once you're signed in. To kick the tires in **monitor-only** mode first, set `ADAPTER_READ_ONLY=true` in your `.env` (FreeSDN reads and shows everything and refuses every configuration change; live operator controls such as camera PTZ, call control and network diagnostics keep working, and each is audited); flip it off when you're ready to let it manage.

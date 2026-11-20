@@ -456,13 +456,19 @@
       "provisioningInfo": "Provisioning Info",
       "configPreview": "Config Preview",
       "configPreviewDesc": "Generated provisioning configuration",
-      "assignTemplateHint": "Assign a template to generate configuration"
+      "assignTemplateHint": "Assign a template to generate configuration",
+      "previewNeedsManage": "The config preview needs permission to manage phones."
     },
     "provisioning": {
       "statusTitle": "Provisioning Status",
       "statusDesc": "Current provisioning state and history",
       "provisioning": "Provisioning...",
       "provisionNow": "Provision Now",
+      "windowHint": "Writes the configuration and asks the phone to reboot. If zero-touch provisioning is on for the site, for the next 15 minutes the phone can fetch it once from its recorded address without a signed URL.",
+      "zeroTouchTitle": "Zero-touch provisioning on this site",
+      "zeroTouchHint": "When on, a phone on the site's subnets can fetch its configuration, SIP password included, without a signed URL: once, from the address FreeSDN has recorded for it, in the 15 minutes after Provision. A factory phone cannot prove who it is: turn this on only for a network where every device is trusted, such as a phone VLAN.",
+      "zeroTouchTurnOn": "Turn on",
+      "zeroTouchTurnOff": "Turn off",
       "firmware": "Firmware",
       "firmwareDesc": "Current firmware version and compliance"
     },
@@ -474,6 +480,10 @@
       "description": "Test connectivity and login to the phone's web interface · retrieves device info, SIP registration, and verifies credentials",
       "username": "Username",
       "password": "Password",
+      "address": "Address (optional)",
+      "addressHint": "Leave empty to test the recorded address ({{ip}}).",
+      "discoveredAt": "Discovery last saw this phone at {{address}}.",
+      "useDiscovered": "Test there",
       "saveCreds": "Save credentials on successful login",
       "testing": "Testing...",
       "testConnection": "Test Connection",
@@ -578,6 +588,8 @@
     },
     "toasts": {
       "previewFailed": "Preview failed",
+      "rebootRefused": "The phone did not accept the reboot. Power-cycle it within 15 minutes so it fetches the new configuration.",
+      "zeroTouchFailed": "Could not change zero-touch provisioning",
       "sipConfigPushed": "SIP config pushed",
       "pushFailed": "Push failed",
       "migrationPreviewFailed": "Migration preview failed",

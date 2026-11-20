@@ -65,6 +65,7 @@ class OpenAIProvider(BaseLLMProvider):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self._client = build_async_client(
+            allow_loopback=True,  # a model server may run on this host
             base_url=self.base_url,
             headers={
                 "Authorization": f"Bearer {self.api_key}",

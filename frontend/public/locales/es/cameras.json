@@ -107,7 +107,7 @@
       },
       "encryption": {
         "title": "Cifrado de transmisión",
-        "description": "Si el cifrado de transmisión está habilitado en esta cámara/NVR Hikvision, ingresa la clave de cifrado para descifrar la transmisión RTSP.",
+        "description": "FreeSDN no puede reproducir una transmisión con el cifrado de transmisión de Hikvision activado. Para ver esta cámara aquí, desactiva el cifrado de transmisión en la cámara o el NVR. Una clave guardada abajo se almacena, pero aún no se usa.",
         "keyLabel": "Clave de cifrado",
         "keyPlaceholder": "Ingresa la clave de cifrado (hex)",
         "saveKey": "Guardar clave",

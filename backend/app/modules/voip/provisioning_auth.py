@@ -32,6 +32,13 @@ This module fixes that by enforcing two cumulative checks:
    LAN phone (DHCP option-66 → bare ``cfg<MAC>.xml``, no signature) pull
    its config without exposing it to the public internet.
 
+   The subnet path is also bounded in TIME (26.11.3). A factory phone
+   cannot prove who it is, so any other device on the subnet that knows a
+   phone's MAC could fetch that phone's SIP password. An unsigned subnet
+   fetch is now served only while ``Phone.provisioning_open_until`` lies
+   in the future; the Provision actions open that window for
+   :data:`PROVISIONING_WINDOW`, the time a phone needs to reboot and pull.
+
 3. **HMAC fallback** — when the source IP is outside the allowlist (or
    the site has no subnets configured), the URL must carry a valid
    ``sig`` parameter computed as
@@ -58,6 +65,7 @@ import ipaddress
 import logging
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -66,6 +74,81 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+
+# How long after a Provision action an unsigned fetch from the site subnet
+# may pull the phone's config. A Grandstream phone reboots and pulls within
+# a few minutes; the rest is slack for "press Provision, then power it on".
+PROVISIONING_WINDOW = timedelta(minutes=15)
+
+
+def open_provisioning_window(phone: Any, now: datetime | None = None) -> datetime:
+    """Let an unsigned subnet fetch pull ``phone``'s config for a while.
+
+    The caller commits. Returns the moment the window closes.
+    """
+    until = (now or datetime.now(UTC)) + PROVISIONING_WINDOW
+    phone.provisioning_open_until = until
+    return until
+
+
+def zero_touch_enabled(site: Any) -> bool:
+    """Whether the site lets phones on its subnets provision without a signature.
+
+    ``Site.voip_zero_touch_provisioning``: off for new sites; migration 036
+    turned it on for sites that already provisioned phones that way.
+    """
+    return getattr(site, "voip_zero_touch_provisioning", False) is True
+
+
+def _is_the_phones_address(phone: Any, client_ip: str | None) -> bool:
+    """True only when ``client_ip`` is the phone's recorded address.
+
+    A phone with no recorded address is never served unsigned: anything on the
+    subnet that knew its MAC could take the fetch (found in review of 26.11.3).
+    Discovery records a new phone's address, or an operator's connection test.
+    """
+    known = getattr(phone, "ip_address", None)
+    if not isinstance(known, str) or not known.strip():
+        return False
+    try:
+        return client_ip is not None and ipaddress.ip_address(
+            known.strip()
+        ) == ipaddress.ip_address(client_ip)
+    except ValueError:
+        return False
+
+
+async def _claim_window(session: AsyncSession, phone: Any) -> bool:
+    """Close the phone's open window and say whether this request closed it.
+
+    One UPDATE, so of two concurrent fetches exactly one is served; the
+    caller's transaction commits it with the config pull.
+    """
+    from sqlalchemy import update
+
+    from app.modules.voip.models import Phone
+
+    claimed = await session.execute(
+        update(Phone)
+        .where(
+            Phone.id == phone.id,
+            Phone.deleted_at.is_(None),
+            Phone.provisioning_open_until > datetime.now(UTC),
+        )
+        .values(provisioning_open_until=None)
+        .returning(Phone.id)
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.scalar_one_or_none() is None:
+        return False
+    phone.provisioning_open_until = None
+    return True
+
+
+def provisioning_window_open(phone: Any, now: datetime | None = None) -> bool:
+    until = getattr(phone, "provisioning_open_until", None)
+    return isinstance(until, datetime) and until > (now or datetime.now(UTC))
 
 
 # MAC address validation pattern (12 hex chars, various separators)
@@ -161,42 +244,57 @@ def _ip_in_subnets(ip_str: str, subnets: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _hmac_for_mac(mac: str) -> str:
-    """Compute the HMAC-SHA256 signature for a normalized MAC.
+# How long a signed provisioning URL works. A signature used to be a
+# permanent per-MAC token: one copied from a proxy log or a phone's settings
+# fetched that phone's SIP password forever (found in review of 26.11.3).
+SIGNATURE_MAX_LIFETIME = timedelta(hours=24)
 
-    Uses ``SECRET_KEY + ENCRYPTION_SALT`` as the key so the signature
-    rotates with the same cadence as the credential-encryption key.
-    Returned as lowercase hex (no separators) for clean URL embedding.
+
+def _hmac_for_mac(mac: str, expires: int) -> str:
+    """HMAC-SHA256 over the normalized MAC and the expiry (Unix seconds).
+
+    Keyed with ``SECRET_KEY + ENCRYPTION_SALT``, so signatures rotate with the
+    credential-encryption key.
     """
     from app.core.config import settings as app_settings
 
     key = (app_settings.SECRET_KEY + app_settings.ENCRYPTION_SALT).encode("utf-8")
-    return hmac.new(key, mac.lower().encode("ascii"), hashlib.sha256).hexdigest()
+    message = f"{mac.lower()}|{expires}".encode("ascii")
+    return hmac.new(key, message, hashlib.sha256).hexdigest()
 
 
-def verify_hmac(mac: str, signature: str) -> bool:
-    """Constant-time HMAC comparison for the provisioning URL token.
+def verify_hmac(mac: str, signature: str, now: datetime | None = None) -> bool:
+    """Whether ``signature`` (``<expiry>.<hex>``) is valid for ``mac`` right now.
 
-    Used by the per-device-URL flow (when subnet trust isn't available
-    or the phone is on a transient network).
+    Refuses an expired token, one valid for longer than
+    :data:`SIGNATURE_MAX_LIFETIME`, and the old expiry-less format.
     """
-    if not mac or not signature:
+    if not mac or not signature or "." not in signature:
         return False
-    expected = _hmac_for_mac(mac)
-    return hmac.compare_digest(expected.lower(), signature.lower())
+    expires_text, _, digest = signature.partition(".")
+    if not expires_text.isdigit():
+        return False
+    expires = int(expires_text)
+    current = (now or datetime.now(UTC)).timestamp()
+    if not current < expires <= current + SIGNATURE_MAX_LIFETIME.total_seconds() + 60:
+        return False
+    return hmac.compare_digest(_hmac_for_mac(mac, expires), digest.lower())
 
 
-def generate_provisioning_signature(mac: str) -> str:
-    """Generate a signature suitable for embedding in the provisioning URL.
+def generate_provisioning_signature(
+    mac: str, valid_for: timedelta = SIGNATURE_MAX_LIFETIME, now: datetime | None = None
+) -> str:
+    """A signature for ``/voip/provisioning/cfg<MAC>.xml?sig=<token>``.
 
-    Public helper — the onboarding flow calls this to construct a
-    URL like ``/voip/provisioning/cfg<MAC>.xml?sig=<hex>``. The
-    Grandstream phone treats query params transparently.
+    The token is ``<expiry>.<hex>`` and works until ``valid_for`` from now (at
+    most :data:`SIGNATURE_MAX_LIFETIME`).
     """
     normalized = normalize_mac(mac)
     if not normalized:
         raise ValueError(f"Invalid MAC address: {mac!r}")
-    return _hmac_for_mac(normalized)
+    lifetime = min(valid_for, SIGNATURE_MAX_LIFETIME)
+    expires = int(((now or datetime.now(UTC)) + lifetime).timestamp())
+    return f"{expires}.{_hmac_for_mac(normalized, expires)}"
 
 
 async def live_phones_with_mac(
@@ -285,23 +383,15 @@ async def resolve_provisioning_request(
         )
         return None
 
-    # ── Auth check 1: source-IP in Site.subnets ──
-    # client_ip comes from request.client.host (uvicorn-resolved against the
+    # Source address for the subnet check below. client_ip comes from request.client.host (uvicorn-resolved against the
     # FORWARDED_ALLOW_IPS trusted-proxy list), NEVER from the caller-supplied
     # X-Forwarded-For header — see _client_ip. This closes a spoofed
     # XFF can no longer fake subnet membership to skip HMAC.
     client_ip = _client_ip(request)
     subnets = list(site.subnets or [])
-    if client_ip and _ip_in_subnets(client_ip, subnets):
-        return ProvisioningContext(
-            phone=phone,
-            site=site,
-            organization_id=site.organization_id,
-            mac=normalized,
-            auth_method="subnet",
-        )
+    in_subnet = bool(client_ip and _ip_in_subnets(client_ip, subnets))
 
-    # ── Auth check 2: HMAC signature in URL ──
+    # ── Auth check 1: HMAC signature in URL (any time, any address) ──
     sig = request.query_params.get("sig") or request.headers.get("X-Provisioning-Signature")
     if sig and verify_hmac(normalized, sig):
         return ProvisioningContext(
@@ -312,8 +402,56 @@ async def resolve_provisioning_request(
             auth_method="hmac",
         )
 
+    # ── Auth check 2: ONE unsigned fetch from the site subnet, while the
+    # window a Provision action opened lasts, and from the phone's own
+    # address when FreeSDN knows it. A factory phone cannot prove who it is,
+    # so this is as narrow as zero-touch allows: the first fetch closes the
+    # window, so a device that races the phone leaves the phone without its
+    # config (and the operator sees it), and a known phone is served only at
+    # its address.
+    if (
+        in_subnet
+        and zero_touch_enabled(site)
+        and provisioning_window_open(phone)
+        and _is_the_phones_address(phone, client_ip)
+        and await _claim_window(session, phone)
+    ):
+        # A config, SIP password included, released without a signature:
+        # always on record, at the default log level.
+        logger.warning(
+            "Zero-touch provisioning served phone %s (MAC %s) its configuration at %s",
+            phone.id,
+            normalized,
+            client_ip,
+        )
+        return ProvisioningContext(
+            phone=phone,
+            site=site,
+            organization_id=site.organization_id,
+            mac=normalized,
+            auth_method="subnet",
+        )
+
     # Both checks failed — log at WARNING (cardinality is per-MAC, low volume,
     # and operators NEED to see provisioning rejections to diagnose NAT issues).
+    if in_subnet and not zero_touch_enabled(site):
+        logger.warning(
+            "Provisioning request for MAC %s from %s refused: zero-touch "
+            "provisioning is off for this site (turn it on for the site, or use "
+            "a signed URL)",
+            normalized,
+            client_ip,
+        )
+        return None
+    if in_subnet:
+        logger.warning(
+            "Provisioning request for MAC %s from %s refused: no provisioning "
+            "window is open, it was used, or the phone is known at another address "
+            "(press Provision on the phone, then let it reboot)",
+            normalized,
+            client_ip,
+        )
+        return None
     logger.warning(
         "Provisioning request rejected for MAC %s from %s — "
         "no subnet match and no valid HMAC signature",
@@ -324,9 +462,14 @@ async def resolve_provisioning_request(
 
 
 __all__ = [
+    "PROVISIONING_WINDOW",
+    "SIGNATURE_MAX_LIFETIME",
     "ProvisioningContext",
     "generate_provisioning_signature",
     "normalize_mac",
+    "open_provisioning_window",
+    "provisioning_window_open",
     "resolve_provisioning_request",
     "verify_hmac",
+    "zero_touch_enabled",
 ]

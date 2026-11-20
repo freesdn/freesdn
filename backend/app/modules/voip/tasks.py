@@ -984,7 +984,9 @@ def run_discovery_scan_task(
                 await session.commit()
 
             try:
-                subnet = scan.subnet or "192.168.1.0/24"
+                subnet = scan.subnet  # the API names it (the site's network by default)
+                if not subnet:
+                    raise ValueError("discovery scan has no subnet")
                 scan_type = scan.scan_type or "full"
 
                 # Use transient credentials passed from the API (not persisted in DB)

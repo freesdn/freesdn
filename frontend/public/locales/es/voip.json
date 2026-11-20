@@ -456,13 +456,19 @@
       "provisioningInfo": "Información de aprovisionamiento",
       "configPreview": "Vista previa de configuración",
       "configPreviewDesc": "Configuración de aprovisionamiento generada",
-      "assignTemplateHint": "Asigna una plantilla para generar la configuración"
+      "assignTemplateHint": "Asigna una plantilla para generar la configuración",
+      "previewNeedsManage": "La vista previa de la configuración requiere permiso para administrar teléfonos."
     },
     "provisioning": {
       "statusTitle": "Estado de aprovisionamiento",
       "statusDesc": "Estado e historial de aprovisionamiento actual",
       "provisioning": "Aprovisionando...",
       "provisionNow": "Aprovisionar ahora",
+      "windowHint": "Escribe la configuración y pide al teléfono que se reinicie. Si el aprovisionamiento sin intervención está activado en el sitio, durante los próximos 15 minutos el teléfono puede descargarla una vez desde su dirección registrada sin una URL firmada.",
+      "zeroTouchTitle": "Aprovisionamiento sin intervención en este sitio",
+      "zeroTouchHint": "Si está activado, un teléfono en las subredes del sitio puede descargar su configuración, contraseña SIP incluida, sin una URL firmada: una vez, desde la dirección que FreeSDN tiene registrada para él, en los 15 minutos posteriores a Aprovisionar. Un teléfono de fábrica no puede demostrar quién es: actívelo solo en una red donde todos los dispositivos sean de confianza, como una VLAN de teléfonos.",
+      "zeroTouchTurnOn": "Activar",
+      "zeroTouchTurnOff": "Desactivar",
       "firmware": "Firmware",
       "firmwareDesc": "Versión de firmware actual y cumplimiento"
     },
@@ -474,6 +480,10 @@
       "description": "Prueba la conectividad y el inicio de sesión en la interfaz web del teléfono · obtiene información del dispositivo, registro SIP y verifica las credenciales",
       "username": "Usuario",
       "password": "Contraseña",
+      "address": "Dirección (opcional)",
+      "addressHint": "Déjala vacía para probar la dirección registrada ({{ip}}).",
+      "discoveredAt": "El descubrimiento vio este teléfono por última vez en {{address}}.",
+      "useDiscovered": "Probar allí",
       "saveCreds": "Guardar credenciales tras un inicio de sesión correcto",
       "testing": "Probando...",
       "testConnection": "Probar conexión",
@@ -578,6 +588,8 @@
     },
     "toasts": {
       "previewFailed": "La vista previa falló",
+      "rebootRefused": "El teléfono no aceptó el reinicio. Apáguelo y enciéndalo en los próximos 15 minutos para que descargue la nueva configuración.",
+      "zeroTouchFailed": "No se pudo cambiar el aprovisionamiento sin intervención",
       "sipConfigPushed": "Configuración SIP enviada",
       "pushFailed": "El envío falló",
       "migrationPreviewFailed": "La vista previa de la migración falló",

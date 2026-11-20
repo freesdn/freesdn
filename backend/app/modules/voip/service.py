@@ -17,7 +17,8 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import Integer, func, or_, select, update
+from sqlalchemy import Integer, bindparam, func, or_, select, text, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_credential, encrypt_credential, is_encrypted
@@ -327,6 +328,43 @@ class DiscoveryScanNotFoundError(VoIPError):
 # =============================================================================
 
 
+def _refuse_stored_ciphertext(data: dict[str, Any]) -> None:
+    """Refuse a credential supplied as FreeSDN's own ciphertext.
+
+    The encryption helper keeps a value that is already encrypted, so sending a
+    stored ciphertext back as the "new" password, with a new address, made
+    FreeSDN decrypt it and send it there (found in review of 26.11.3). A
+    credential arrives through the API as plain text, or not at all.
+    """
+    from app.core.crypto import is_encrypted
+
+    supplied = [data.get(key) for key in ("api_password", "api_key", "api_client_secret")]
+    supplied += [(data.get("settings") or {}).get(key) for key in _CREDENTIAL_FIELDS]
+    if any(isinstance(v, str) and v and is_encrypted(v) for v in supplied):
+        raise VoIPError("Enter the credential itself, not a stored value")
+
+
+def _pbx_has_saved_credentials(pbx: Any) -> bool:
+    settings = pbx.settings or {}
+    return bool(
+        any(settings.get(key) for key in _CREDENTIAL_FIELDS)
+        or getattr(pbx, "api_client_secret_enc", None)
+        or getattr(pbx, "ami_secret_enc", None)
+        or getattr(pbx, "ari_password_enc", None)
+        or getattr(pbx, "web_password_enc", None)
+    )
+
+
+def _moved_managed_phone(phone: Any, ip_address: str | None) -> bool:
+    """True when discovery reports a phone with a recorded address somewhere else.
+
+    Every lifecycle state: a phone still "discovered" can already hold saved
+    credentials and an open provisioning window, and one in maintenance keeps
+    its configuration (found in review of 26.11.3).
+    """
+    return bool(ip_address and phone.ip_address and phone.ip_address != ip_address)
+
+
 class VoIPService:
     """Service for VoIP management — GDMS-style fleet operations."""
 
@@ -619,15 +657,33 @@ class VoIPService:
             )
 
     async def _assert_phone_fks_in_org(self, data: dict[str, Any]) -> None:
-        """Validate every tenant-scoped FK present in a phone create/onboard payload."""
+        """Validate every tenant-scoped FK present in a phone create/onboard payload.
+
+        Also refuses a site the caller holds only a read-only grant on, for the
+        phone's site and for the site whose template it would use: provisioning
+        renders that template's credentials into the phone's config (found in
+        review of 26.11.3).
+        """
+        from app.core.site_access import assert_site_write_for_request
+
         if data.get("site_id") is not None:
             await self._assert_site_in_org(data["site_id"])
+            assert_site_write_for_request(data["site_id"])
         if data.get("pbx_id") is not None:
             await self._assert_pbx_in_org(data["pbx_id"])
         if data.get("extension_id") is not None:
             await self._assert_extension_in_org(data["extension_id"])
         if data.get("config_template_id") is not None:
             await self._assert_config_template_in_org(data["config_template_id"])
+            from app.modules.voip.models import ConfigTemplate
+
+            template_site = await self.db.scalar(
+                select(ConfigTemplate.site_id).where(
+                    ConfigTemplate.id == data["config_template_id"],
+                    ConfigTemplate.deleted_at.is_(None),
+                )
+            )
+            assert_site_write_for_request(template_site)
 
     # -------------------------------------------------------------------------
     # Phone Management
@@ -689,6 +745,28 @@ class VoIPService:
         result = await self.db.execute(query)
         return list(result.scalars().all()), total
 
+    async def get_phone_for_delete(self, phone_id: UUID) -> Any:
+        """The phone, for removing it: a ``write`` site grant may not delete."""
+        from app.core.site_access import assert_site_write_for_request
+
+        phone = await self.get_phone(phone_id)
+        assert_site_write_for_request(phone.site_id, "device:delete")
+        return phone
+
+    async def get_phone_for_write(self, phone_id: UUID) -> Any:
+        """The phone, for a call that changes it or the device itself.
+
+        ``get_phone`` only asks whether the caller may SEE the phone's site, so
+        a read-only site grant still let its holder reboot, factory-reset,
+        push SIP to, decommission, put in maintenance or delete a phone (found
+        in review of 26.11.3). Every phone-changing method loads it here.
+        """
+        from app.core.site_access import assert_site_write_for_request
+
+        phone = await self.get_phone(phone_id)
+        assert_site_write_for_request(phone.site_id)
+        return phone
+
     async def get_phone(self, phone_id: UUID) -> Any:
         """Get a phone by ID."""
         from app.modules.voip.models import Phone
@@ -742,6 +820,12 @@ class VoIPService:
         if data.get("mac_address"):
             data = {**data, "mac_address": await self._claim_mac(data["mac_address"])}
 
+        if isinstance(data.get("settings"), dict):
+            # Phone reads show a placeholder for each P-value credential; a
+            # phone created from one stores nothing there, never the stars.
+            from app.modules.voip.setting_secrets import restore_redacted
+
+            data = {**data, "settings": restore_redacted(data["settings"], None)}
         phone = Phone(**data)
         self.db.add(phone)
         await self.db.commit()
@@ -751,7 +835,7 @@ class VoIPService:
 
     async def update_phone(self, phone_id: UUID, data: dict[str, Any]) -> Any:
         """Update a phone."""
-        phone = await self.get_phone(phone_id)
+        phone = await self.get_phone_for_write(phone_id)
 
         if data.get("mac_address"):
             from app.modules.voip.provisioning_auth import normalize_mac
@@ -798,9 +882,15 @@ class VoIPService:
             raise DuplicatePhoneMACError(mac, existing)
         return mac
 
-    async def save_phone_credentials(self, phone_id: UUID, username: str, password: str) -> Any:
-        """Save login credentials to a phone's settings JSONB field (encrypted)."""
-        phone = await self.get_phone(phone_id)
+    async def save_phone_credentials(
+        self, phone_id: UUID, username: str, password: str, *, commit: bool = True
+    ) -> Any:
+        """Save login credentials to a phone's settings JSONB field (encrypted).
+
+        ``commit=False`` leaves the change to the caller's commit, so a login
+        and the address it belongs to are saved together or not at all.
+        """
+        phone = await self.get_phone_for_write(phone_id)
         settings = phone.settings or {}
         settings["web_username"] = username
         settings["web_password"] = encrypt_credential(password)
@@ -809,13 +899,14 @@ class VoIPService:
         from sqlalchemy.orm.attributes import flag_modified
 
         flag_modified(phone, "settings")
-        await self.db.commit()
-        await self.db.refresh(phone)
+        if commit:
+            await self.db.commit()
+            await self.db.refresh(phone)
         return phone
 
     async def delete_phone(self, phone_id: UUID) -> bool:
         """Soft delete a phone."""
-        phone = await self.get_phone(phone_id)
+        phone = await self.get_phone_for_delete(phone_id)
         await self._release_mac_pair(phone)
         phone.deleted_at = datetime.now(UTC)
         await self.db.commit()
@@ -981,7 +1072,7 @@ class VoIPService:
         """
         from app.modules.voip.models import PhoneLifecycleState, ProvisionStatus
 
-        phone = await self.get_phone(phone_id)
+        phone = await self.get_phone_for_write(phone_id)
 
         if phone.lifecycle_state not in (
             PhoneLifecycleState.DISCOVERED.value,
@@ -996,6 +1087,7 @@ class VoIPService:
         # and must also belong to the caller's org (reference injection guard).
         await self._assert_phone_fks_in_org(
             {
+                "site_id": phone.site_id,  # onboarding changes the phone: needs write
                 "pbx_id": pbx_id,
                 "extension_id": extension_id,
                 "config_template_id": config_template_id,
@@ -1077,7 +1169,7 @@ class VoIPService:
         adapter treats a mid-response disconnect as success. The phone
         record's ``last_reboot`` timestamp is updated on the way out.
         """
-        phone = await self.get_phone(phone_id)
+        phone = await self.get_phone_for_write(phone_id)
         if _voip_live_writes_blocked():
             raise VoIPError(
                 "Refusing phone reboot: ADAPTER_READ_ONLY is set — set "
@@ -1131,7 +1223,7 @@ class VoIPService:
         Auto-clears the FreeSDN-side linkage as well — after a factory
         reset the phone has no SIP creds and will need to be re-onboarded.
         """
-        phone = await self.get_phone(phone_id)
+        phone = await self.get_phone_for_write(phone_id)
         if _voip_live_writes_blocked():
             raise VoIPError(
                 "Refusing factory reset: ADAPTER_READ_ONLY is set — set "
@@ -1273,7 +1365,7 @@ class VoIPService:
         """
         from app.modules.voip.models import PBX, Extension
 
-        phone = await self.get_phone(phone_id)
+        phone = await self.get_phone_for_write(phone_id)
         if not phone.extension_id or not phone.pbx_id:
             raise VoIPError(
                 f"Phone {phone_id} is not linked to a PBX extension — "
@@ -1573,6 +1665,13 @@ class VoIPService:
             phone_q = phone_q.where(Phone.id.in_(phone_ids))
         phone_result = await self.db.execute(phone_q)
         phones = list(phone_result.scalars())
+        # Linking changes each phone: leave out phones on a site the caller
+        # may only read (26.11.3), as assert_site_write_for_request would.
+        from app.core.site_access import current_user_var
+
+        caller = current_user_var.get()
+        if caller is not None:
+            phones = [p for p in phones if caller.site_level_allows("device:write", p.site_id)]
 
         linked: list[dict[str, Any]] = []
         already_linked: list[str] = []
@@ -1688,7 +1787,7 @@ class VoIPService:
         """Decommission a phone — remove from active management."""
         from app.modules.voip.models import PhoneLifecycleState
 
-        phone = await self.get_phone(phone_id)
+        phone = await self.get_phone_for_write(phone_id)
         phone.lifecycle_state = PhoneLifecycleState.DECOMMISSIONED.value
         phone.pbx_id = None
         phone.extension_id = None
@@ -1704,7 +1803,7 @@ class VoIPService:
         """Toggle maintenance mode on a phone."""
         from app.modules.voip.models import PhoneLifecycleState
 
-        phone = await self.get_phone(phone_id)
+        phone = await self.get_phone_for_write(phone_id)
 
         if enabled:
             phone.lifecycle_state = PhoneLifecycleState.MAINTENANCE.value
@@ -1802,6 +1901,10 @@ class VoIPService:
 
         result = await self.db.execute(query)
         scan = result.scalar_one_or_none()
+        if scan is not None:
+            from app.core.site_access import assert_site_write_for_request
+
+            assert_site_write_for_request(scan.site_id)
         if not scan:
             raise DiscoveryScanNotFoundError(scan_id)
 
@@ -1837,6 +1940,10 @@ class VoIPService:
 
         result = await self.db.execute(query)
         scan = result.scalar_one_or_none()
+        if scan is not None:
+            from app.core.site_access import assert_site_write_for_request
+
+            assert_site_write_for_request(scan.site_id)
         if not scan:
             raise DiscoveryScanNotFoundError(scan_id)
         # Don't allow deletion of running scans
@@ -1965,6 +2072,19 @@ class VoIPService:
                 mac_query = mac_query.where(Phone.site_id.in_(select(self._sites_for_org().c.id)))
             result = await self.db.execute(mac_query)
             existing = result.scalar_one_or_none()
+            if existing is not None and existing.site_id != site_id:
+                # A scan of one site never changes a phone recorded on another
+                # (the scan was authorized for its own site only; 26.11.3), and
+                # returns no phone, so the worker cannot onboard it either.
+                logger.warning(
+                    "Discovery on site %s saw MAC %s, which belongs to phone %s on "
+                    "site %s; left unchanged",
+                    site_id,
+                    mac_address,
+                    existing.id,
+                    existing.site_id,
+                )
+                return None, False
 
         # Fallback: IP match within same site
         if not existing:
@@ -2023,6 +2143,30 @@ class VoIPService:
 
             phone.settings = settings
             flag_modified(phone, "settings")
+
+        if existing and _moved_managed_phone(existing, ip_address):
+            # A phone reported at another address. Discovery is not
+            # authenticated (any device can answer with the phone's MAC), and
+            # FreeSDN sends that phone its SIP password and reboots it at its
+            # recorded address, so the address is NOT changed here: it is kept
+            # as pending until an operator confirms it with a connection test
+            # (found in review of 26.11.3).
+            pending = dict(existing.settings or {})
+            pending["discovered_address"] = {"ip": ip_address, "at": now.isoformat()}
+            existing.settings = pending
+            from sqlalchemy.orm.attributes import flag_modified
+
+            flag_modified(existing, "settings")
+            logger.warning(
+                "Discovery saw phone %s at %s, not at its recorded address %s; "
+                "keeping the recorded address until a connection test confirms the new one",
+                existing.id,
+                ip_address,
+                existing.ip_address,
+            )
+            await self.db.commit()
+            await self.db.refresh(existing)
+            return existing, False
 
         if existing:
             _apply_discovery_data(existing)
@@ -2177,6 +2321,9 @@ class VoIPService:
         # create_phone). No-op for super_admin / org_admin (grant is None).
         if data.get("site_id") is not None:
             await self._assert_site_in_org(data["site_id"])
+            from app.core.site_access import assert_site_write_for_request
+
+            assert_site_write_for_request(data["site_id"])
 
         track = FirmwareTrack(**data)
         self.db.add(track)
@@ -2198,6 +2345,14 @@ class VoIPService:
         # Organization isolation
         if self.organization_id:
             conditions.append(Phone.site_id.in_(select(self._sites_for_org().c.id)))
+
+        # Every site touched must be writable for the caller, not just visible.
+        from app.core.site_access import assert_site_write_for_request
+
+        for site_id in (
+            await self.db.scalars(select(Phone.site_id).where(*conditions).distinct())
+        ).all():
+            assert_site_write_for_request(site_id)
 
         stmt = (
             update(Phone)
@@ -2247,6 +2402,21 @@ class VoIPService:
         query = base.order_by(PBX.name).limit(limit).offset(offset)
         result = await self.db.execute(query)
         return list(result.scalars().all()), total
+
+    async def get_pbx_for_write(self, pbx_id: UUID) -> Any:
+        """The PBX, for a call that changes its record or its live state.
+
+        ``get_pbx`` only asks whether the caller may SEE the PBX's site; a
+        read-only site grant could still edit or delete the PBX, re-sync it, or
+        place, hang up, transfer and queue calls on it (found in review of
+        26.11.3). Device configuration writes already go through staging,
+        which applies the same ceiling.
+        """
+        from app.core.site_access import assert_site_write_for_request
+
+        pbx = await self.get_pbx(pbx_id)
+        assert_site_write_for_request(pbx.site_id)
+        return pbx
 
     async def get_pbx(self, pbx_id: UUID) -> Any:
         """Get a PBX by ID."""
@@ -2298,6 +2468,11 @@ class VoIPService:
             # grant-aware FK guard which routes through _sites_for_org().
             await self._assert_site_in_org(data["site_id"])
 
+        from app.core.site_access import assert_site_write_for_request
+
+        assert_site_write_for_request(data["site_id"])  # 26.11.3: read-only grants
+        _refuse_stored_ciphertext(data)
+
         # Move credential fields into settings JSONB (encrypted at rest)
         settings = data.pop("settings", {}) or {}
         for cred_field in ("api_username", "api_password", "api_key"):
@@ -2324,7 +2499,35 @@ class VoIPService:
 
     async def update_pbx(self, pbx_id: UUID, data: dict[str, Any]) -> Any:
         """Update a PBX connection."""
-        pbx = await self.get_pbx(pbx_id)
+        pbx = await self.get_pbx_for_write(pbx_id)
+        _refuse_stored_ciphertext(data)
+
+        # Saved credentials belong to the PBX they were entered for. Pointing
+        # the record at another address, port or type without entering them
+        # again would send them there (found in review of 26.11.3).
+        retarget = any(
+            key in data and data[key] is not None and data[key] != getattr(pbx, key)
+            for key in ("ip_address", "api_port", "pbx_type")
+        )
+        supplied_settings = data.get("settings") or {}
+        new_secret = any(
+            data.get(key) for key in ("api_password", "api_key", "api_client_secret")
+        ) or any(supplied_settings.get(key) for key in _CREDENTIAL_FIELDS)
+        if retarget and not new_secret and _pbx_has_saved_credentials(pbx):
+            raise VoIPError(
+                "Enter the PBX credentials again when you change its address, port or type"
+            )
+        if retarget:
+            # Every saved credential is forgotten; only those entered with this
+            # change are kept. Supplying one new secret used to keep all the
+            # others, which the next connection then sent to the new address.
+            pbx.settings = {
+                k: v for k, v in (pbx.settings or {}).items() if k not in _CREDENTIAL_FIELDS
+            }
+            pbx.api_client_secret_enc = None
+            pbx.ami_secret_enc = None
+            pbx.ari_password_enc = None
+            pbx.web_password_enc = None
 
         # OAuth2: write client_id (plain) + secret (encrypted) into the
         # dedicated columns. Empty string clears; ``None`` keeps the
@@ -2371,8 +2574,11 @@ class VoIPService:
         return pbx
 
     async def delete_pbx(self, pbx_id: UUID) -> bool:
-        """Soft delete a PBX."""
+        """Soft delete a PBX (a ``write`` site grant may not delete)."""
+        from app.core.site_access import assert_site_write_for_request
+
         pbx = await self.get_pbx(pbx_id)
+        assert_site_write_for_request(pbx.site_id, "device:delete")
         pbx.deleted_at = datetime.now(UTC)
         await self.db.commit()
         logger.info("Deleted PBX %s", pbx.name)
@@ -2506,10 +2712,12 @@ class VoIPService:
                     with contextlib.suppress(Exception):
                         await adapter.disconnect()
 
-        # Fallback: TCP-only check for other PBX types
+        # Fallback: TCP-only check for other PBX types, to a checked address.
         try:
+            from app.core.http_client import open_checked_connection
+
             reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(ip_address, api_port),
+                open_checked_connection(ip_address, api_port),
                 timeout=5.0,
             )
             writer.close()
@@ -2593,9 +2801,25 @@ class VoIPService:
 
         return build_freepbx_adapter_from_pbx(pbx)
 
+    # Operations that change the PBX's live state: they need write access to
+    # its site, like the record edits (get_pbx_for_write).
+    _LIVE_WRITE_OPERATIONS = frozenset(
+        {
+            "originate_call",
+            "hangup_call",
+            "transfer_call",
+            "reload_config",
+            "queue_add_member",
+            "queue_remove_member",
+        }
+    )
+
     async def _with_adapter(self, pbx_id: UUID, operation: str, fn):
         """Connect adapter, run operation, disconnect. Returns result dict."""
-        pbx = await self.get_pbx(pbx_id)
+        if operation in self._LIVE_WRITE_OPERATIONS:
+            pbx = await self.get_pbx_for_write(pbx_id)
+        else:
+            pbx = await self.get_pbx(pbx_id)
 
         if pbx.pbx_type not in ("freepbx", "asterisk"):
             raise VoIPError(f"Adapter not available for PBX type: {pbx.pbx_type}")
@@ -2621,7 +2845,7 @@ class VoIPService:
 
     async def connect_pbx(self, pbx_id: UUID) -> dict[str, Any]:
         """Full connection test for a saved PBX using the real adapter."""
-        pbx = await self.get_pbx(pbx_id)
+        pbx = await self.get_pbx_for_write(pbx_id)  # uses its saved credentials
 
         if pbx.pbx_type not in ("freepbx", "asterisk"):
             raise VoIPError(f"Adapter not available for PBX type: {pbx.pbx_type}")
@@ -2869,7 +3093,10 @@ class VoIPService:
             except Exception:
                 logger.debug("progress_callback raised for stage=%s", stage, exc_info=True)
 
-        pbx = await self.get_pbx(pbx_id)
+        pbx = await self.get_pbx_for_write(pbx_id)
+        # Where this sync reads from; its cache is saved only if the PBX still
+        # points there when the sync ends.
+        synced_from = (pbx.ip_address, pbx.api_port, pbx.pbx_type)
 
         if pbx.pbx_type not in ("freepbx", "asterisk"):
             # For unsupported types, just update last_seen
@@ -3058,7 +3285,28 @@ class VoIPService:
                 "installed_modules": _scrub_cache_entries(modules_data),
                 "synced_at": datetime.now(UTC).isoformat(),
             }
-            pbx.settings = {**(pbx.settings or {}), "synced_cache": synced_cache}
+            from app.modules.voip.models import PBX
+
+            # Only the cache key is written, into the settings as they are now.
+            # Writing back the whole settings object read when the sync began
+            # restored a password an administrator replaced or cleared while
+            # it ran, together with a new address (found in review of 26.11.3).
+            await self.db.execute(
+                update(PBX)
+                .where(
+                    PBX.id == pbx.id,
+                    PBX.deleted_at.is_(None),
+                    PBX.ip_address == synced_from[0],
+                    PBX.api_port == synced_from[1],
+                    PBX.pbx_type == synced_from[2],
+                )
+                .values(
+                    settings=func.coalesce(PBX.settings, text("'{}'::jsonb")).op("||")(
+                        bindparam("synced_cache_patch", {"synced_cache": synced_cache}, type_=JSONB)
+                    )
+                )
+                .execution_options(synchronize_session=False)
+            )
 
             _emit("persisting", 5, 6, "Saving to database", {})
             pbx.last_seen = datetime.now(UTC)
@@ -4454,9 +4702,19 @@ class VoIPService:
 
         return vm
 
+    async def get_voicemail_for_write(self, vm_id: UUID) -> Any:
+        """The voicemail, for a call that changes it: write access to its PBX's site."""
+        from app.core.site_access import assert_site_write_for_request
+
+        vm = await self.get_voicemail(vm_id)
+        if vm.pbx_id is not None:
+            pbx = await self.get_pbx(vm.pbx_id)
+            assert_site_write_for_request(pbx.site_id)
+        return vm
+
     async def update_voicemail(self, vm_id: UUID, data: dict[str, Any]) -> Any:
         """Update a voicemail (mark read, move folder, etc.)."""
-        vm = await self.get_voicemail(vm_id)
+        vm = await self.get_voicemail_for_write(vm_id)
 
         for key, value in data.items():
             if value is not None and key in _VOICEMAIL_MUTABLE_FIELDS:
@@ -4468,7 +4726,7 @@ class VoIPService:
 
     async def delete_voicemail(self, vm_id: UUID) -> bool:
         """Soft-delete a voicemail message."""
-        vm = await self.get_voicemail(vm_id)
+        vm = await self.get_voicemail_for_write(vm_id)
         vm.deleted_at = datetime.now(UTC)
         await self.db.commit()
         return True

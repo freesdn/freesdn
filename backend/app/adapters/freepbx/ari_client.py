@@ -25,7 +25,7 @@ from typing import Any
 
 import aiohttp
 
-from app.core.http_client import build_aiohttp_session
+from app.core.http_client import build_aiohttp_session, checked_connector
 
 from .constants import (
     ARI_DEFAULT_PORT,
@@ -121,11 +121,12 @@ class ARIClient:
         ssl_ctx: bool | None = None
         if self.use_ssl:
             ssl_ctx = self.verify_ssl  # False = skip verification
-        connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+        connector = checked_connector(ssl=ssl_ctx)
         self._session = build_aiohttp_session(
             auth=auth,
             timeout=timeout,
             connector=connector,
+            same_host_redirects=True,
         )
 
         # Verify connection by hitting the asterisk info endpoint
@@ -321,9 +322,16 @@ class ARIClient:
 
             body = await resp.json()
             if resp.status >= 400:
+                from app.modules.voip.setting_secrets import secret_values, shown_provider_text
+
                 error_msg = body.get("message", "") if isinstance(body, dict) else str(body)
+                # Asterisk's text can repeat what it was sent (a channel
+                # variable, the ARI password): hidden when it may (found in
+                # review of 26.11.3).
+                sent = [self.password, *secret_values(json_body), *secret_values(params)]
                 raise ARIConnectionError(
-                    f"ARI request {method} {path} failed ({resp.status}): {error_msg}"
+                    f"ARI request {method} {path} failed ({resp.status}): "
+                    f"{shown_provider_text(error_msg, secrets=[v for v in sent if v])}"
                 )
             return body
         except aiohttp.ClientError as exc:

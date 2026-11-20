@@ -60,6 +60,16 @@ def _rpc_err(req_id: int, code: int, errname: str, message: str = "boom") -> str
     )
 
 
+def _checked_lab_address(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The WebSocket connects to the checked address of its host (26.11.3);
+    "nas.lab" resolves nowhere, so the check answers with a lab address."""
+
+    async def checked(_host: str, _port: int, **_kw: Any) -> list[str]:
+        return ["192.0.2.10"]
+
+    monkeypatch.setattr("app.adapters.truenas.ws_client.checked_addresses", checked)
+
+
 def _client_with(monkeypatch: pytest.MonkeyPatch, outbox: list[str], **kw: Any) -> tuple[TrueNASWSClient, FakeWS]:
     fake = FakeWS(outbox)
 
@@ -69,6 +79,7 @@ def _client_with(monkeypatch: pytest.MonkeyPatch, outbox: list[str], **kw: Any) 
     monkeypatch.setattr(
         "app.adapters.truenas.ws_client._NoRedirectConnect", fake_connect
     )
+    _checked_lab_address(monkeypatch)
     c = TrueNASWSClient(host="nas.lab", username="truenas_admin", api_key="4-k", **kw)
     return c, fake
 
@@ -141,6 +152,7 @@ class TestAuth:
             return fake
 
         monkeypatch.setattr("app.adapters.truenas.ws_client._NoRedirectConnect", fake_connect)
+        _checked_lab_address(monkeypatch)
         return TrueNASWSClient(host="nas.lab", username="truenas_admin", password="pw"), fake
 
     @pytest.mark.asyncio

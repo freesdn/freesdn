@@ -53,7 +53,10 @@ class _CapturingAsyncClient:
     created_verify: list[bool] = []
     calls: list[dict[str, object]] = []
 
-    def __init__(self, *, verify: ssl.SSLContext, timeout: int, trust_env: bool) -> None:
+    def __init__(
+        self, *, verify: ssl.SSLContext, timeout: int, trust_env: bool, transport: object = None
+    ) -> None:
+        # ``transport``: FreeSDN's connect-time address check (26.11.3).
         assert isinstance(verify, ssl.SSLContext)
         assert trust_env is False
         required = verify.verify_mode == ssl.CERT_REQUIRED

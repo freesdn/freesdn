@@ -169,19 +169,32 @@ async def _persist_connection_result(
     session: AsyncSession,
     *,
     commit: bool = True,
+    credentials_saved: bool = False,
 ) -> None:
     """Write connection-test results to dedicated columns + settings JSONB.
 
     Separated so the same logic works for single and bulk connect flows.
+    ``credentials_saved``: this test also saved the credentials it logged in
+    with, so the phone's stored password is the one just used at ``ip``.
     """
-    # Dedicated columns — always overwrite with latest values
-    if result.get("mac_address"):
-        phone.mac_address = result["mac_address"]
-    if result.get("vendor"):
+    # Dedicated columns. What a device reports about itself is recorded only
+    # after it accepted the operator's login, and a MAC that differs from the
+    # recorded one is noted, not applied: the MAC decides which phone's
+    # configuration (SIP password included) a fetch receives (26.11.3).
+    authenticated = bool(result.get("authenticated"))
+    reported_mac = result.get("mac_address")
+    if authenticated and reported_mac:
+        if not phone.mac_address:
+            phone.mac_address = reported_mac
+        elif reported_mac != phone.mac_address:
+            pending = dict(phone.settings or {})
+            pending["reported_mac"] = reported_mac
+            phone.settings = pending
+    if authenticated and result.get("vendor"):
         phone.vendor = result["vendor"]
-    if result.get("model"):
+    if authenticated and result.get("model"):
         phone.model = result["model"]
-    if result.get("firmware_version"):
+    if authenticated and result.get("firmware_version"):
         phone.firmware_version = result["firmware_version"]
     if result.get("sip_registered") is not None:
         phone.sip_registered = bool(result["sip_registered"])
@@ -205,6 +218,19 @@ async def _persist_connection_result(
 
     # ── Merge into settings JSONB (preserve credentials etc.) ───
     settings = phone.settings or {}
+
+    # The operator's confirmation of a new address: discovery never moves a
+    # managed phone by itself (VoIPService.upsert_discovered_phone), so a
+    # connection test that logged in at ``ip`` with the phone's credentials,
+    # run by someone with write access to the site, is what records it.
+    # Only when this test also saved the credentials it used (otherwise the
+    # stored password, entered for the old address, would go to the new one)
+    # and the device did not report a different MAC (found in review of
+    # 26.11.3).
+    same_mac = bool(reported_mac) and (not phone.mac_address or reported_mac == phone.mac_address)
+    if authenticated and credentials_saved and same_mac and ip and phone.ip_address != ip:
+        phone.ip_address = ip
+        settings.pop("discovered_address", None)
 
     if result.get("sip_accounts"):
         settings["sip_accounts"] = result["sip_accounts"]
@@ -289,7 +315,7 @@ async def list_phones(
 
     items = []
     for p in phones:
-        row = _sanitize_phone_response(p)
+        row = _sanitize_phone_response(p, current_user)
         ext = ext_map.get(p.extension_id) if p.extension_id else None
         pbx = pbx_map.get(p.pbx_id) if p.pbx_id else None
         if ext is not None:
@@ -334,7 +360,7 @@ async def get_phone(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Phone not found",
         )
-    row = _sanitize_phone_response(phone)
+    row = _sanitize_phone_response(phone, current_user)
 
     # Enrich with the same joined fields the list endpoint returns so
     # the PhoneDetailPage shows the bound extension + PBX name in the
@@ -428,7 +454,9 @@ async def create_phone(
     from app.services.device_sync import trigger_device_registry_sync
 
     trigger_device_registry_sync("voip")
-    return phone
+    # Same serializer as the reads: no encrypted columns, P-value credentials
+    # hidden (setting_secrets.py).
+    return _sanitize_phone_response(phone, current_user)
 
 
 @phones_router.patch("/{phone_id}")
@@ -445,7 +473,7 @@ async def update_phone(
         from app.services.device_sync import trigger_device_registry_sync
 
         trigger_device_registry_sync("voip")
-        return result
+        return _sanitize_phone_response(result, current_user)
     except PhoneNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -492,7 +520,7 @@ async def onboard_phone(
     """Onboard a discovered phone into managed state."""
     _set_org(service, current_user)
     try:
-        return await service.onboard_phone(
+        onboarded = await service.onboard_phone(
             phone_id=phone_id,
             name=data.name,
             pbx_id=data.pbx_id,
@@ -511,6 +539,7 @@ async def onboard_phone(
     except VoIPError as exc:
         logger.error("Phone onboarding failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=409, detail="Phone onboarding failed")
+    return _sanitize_phone_response(onboarded, current_user)
 
 
 class PhoneMigrateRequest(BaseModel):
@@ -565,10 +594,14 @@ async def migrate_phone_to_site(
         ),
     )
     try:
-        await scoped.get_phone(phone_id)
+        # Moving a phone changes both sites: write access to each (26.11.3).
+        await scoped.get_phone_for_write(phone_id)
     except PhoneNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phone not found")
     assert_can_access_site(current_user, data.target_site_id, detail="Site not found")
+    from app.core.site_access import assert_site_write_for_request
+
+    assert_site_write_for_request(data.target_site_id)
 
     svc = DeviceMigrationService(
         db=session,
@@ -760,7 +793,7 @@ async def decommission_phone(
     """Decommission a phone — remove from active management."""
     _set_org(service, current_user)
     try:
-        return await service.decommission_phone(phone_id)
+        return _sanitize_phone_response(await service.decommission_phone(phone_id), current_user)
     except PhoneNotFoundError:
         raise HTTPException(status_code=404, detail="Phone not found")
 
@@ -775,7 +808,9 @@ async def toggle_maintenance(
     """Toggle maintenance mode on a phone."""
     _set_org(service, current_user)
     try:
-        return await service.set_maintenance_mode(phone_id, enabled)
+        return _sanitize_phone_response(
+            await service.set_maintenance_mode(phone_id, enabled), current_user
+        )
     except PhoneNotFoundError:
         raise HTTPException(status_code=404, detail="Phone not found")
 
@@ -797,7 +832,14 @@ async def provision_phone(
     prov = ProvisioningService(session, organization_id=_org_id(current_user))
     outcome = "failed"
     try:
-        result = await prov.generate_phone_config(phone_id, write_file=True, force=data.force)
+        # Opens the phone's provisioning window: the reboot below makes it
+        # pull this config from the site subnet without a signed URL.
+        result = await prov.generate_phone_config(
+            phone_id, write_file=True, force=data.force, open_window=True
+        )
+        from app.modules.voip.setting_secrets import redact_config_xml
+
+        result["xml"] = redact_config_xml(result["xml"])  # passwords stay on the server
         outcome = "ok"
         # ``reboot_after`` defaults to True because a phone does not apply a
         # freshly written config until it re-provisions. Best-effort: the
@@ -808,8 +850,12 @@ async def provision_phone(
             svc = VoIPService(db=session)
             _set_org(svc, current_user)
             try:
-                await svc.reboot_phone(phone_id)
-                result["rebooted"] = True
+                reboot = await svc.reboot_phone(phone_id)
+                # reboot_phone reports a refused command as status "failed"
+                # rather than raising; that is not a reboot.
+                result["rebooted"] = reboot.get("status") == "success"
+                if not result["rebooted"]:
+                    result["reboot_error"] = "Phone did not accept the reboot"
             except (PhoneNotFoundError, VoIPError) as exc:
                 logger.warning("Provision succeeded but reboot failed for %s: %s", phone_id, exc)
                 result["rebooted"] = False
@@ -841,7 +887,9 @@ async def provision_phone(
 @phones_router.get("/{phone_id}/config-preview")
 async def preview_phone_config(
     phone_id: UUID,
-    current_user: Annotated[CurrentUser, Depends(require_permissions("voip.view"))],
+    # voip.manage_phones, not voip.view: the rendered config holds every
+    # P-value, and the redaction can only hide the credentials it knows.
+    current_user: Annotated[CurrentUser, Depends(require_permissions("voip.manage_phones"))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
     """Preview the generated provisioning config XML for a phone."""
@@ -882,7 +930,8 @@ async def test_phone_connection(
     # or write a SIBLING-site phone. _set_org binds both org and grant.
     svc = _set_org(VoIPService(db=session), current_user)
     try:
-        phone = await svc.get_phone(phone_id)
+        # Writes the result (address, model, credentials) to the phone record.
+        phone = await svc.get_phone_for_write(phone_id)
     except PhoneNotFoundError:
         raise HTTPException(status_code=404, detail="Phone not found")
 
@@ -896,23 +945,57 @@ async def test_phone_connection(
         password=data.password,
     )
 
-    # Save credentials if requested and auth succeeded
-    if data.save_credentials and result.get("authenticated"):
+    # Save the login only where it belongs to this phone: at its recorded
+    # address, or at a new one whose device reported this phone's MAC (the
+    # same rule that moves the address). It used to be saved before the MAC
+    # check, so a login tested at a new address that kept the old one was
+    # then sent to the old address (found in review of 26.11.3).
+    # At a new address the device must report the MAC FreeSDN has recorded
+    # for this phone; a phone with no recorded MAC is not moved by a test.
+    reported_mac = result.get("mac_address")
+    same_device = (
+        bool(reported_mac) and bool(phone.mac_address) and reported_mac == phone.mac_address
+    )
+    save = bool(
+        data.save_credentials
+        and result.get("authenticated")
+        and (ip == phone.ip_address or same_device)
+    )
+    if save:
+        # Not committed here: the login, the new address and what the phone
+        # reported are saved in one commit below, or none of them is (found
+        # in review of 26.11.3: a login committed before its address could go
+        # to the old address if the second commit failed).
         await svc.save_phone_credentials(
             phone_id=phone_id,
             username=data.username,
             password=data.password,
+            commit=False,
+        )
+    elif data.save_credentials and result.get("authenticated"):
+        result["auth_note"] = (
+            "Signed in, but the login was not saved: the device at this address "
+            "did not report the MAC address FreeSDN has recorded for this phone."
         )
 
     # Persist all discovered data to the phone record
     try:
-        await _persist_connection_result(phone, result, ip, session)
+        await _persist_connection_result(
+            phone,
+            result,
+            ip,
+            session,
+            credentials_saved=save,
+        )
     except Exception as persist_err:
+        await session.rollback()
         logger.warning(
             "Failed to persist connection result for phone %s: %s", phone_id, persist_err
         )
+        if save:
+            result["auth_note"] = "Signed in, but nothing was saved: try again."
 
-    return PhoneConnectionTestResult(**result)
+    return _connection_result_out(result)
 
 
 @phones_router.post("/test-connection", response_model=PhoneConnectionTestResult)
@@ -931,7 +1014,7 @@ async def test_phone_connection_adhoc(
         username=data.username,
         password=data.password,
     )
-    return PhoneConnectionTestResult(**result)
+    return _connection_result_out(result)
 
 
 @phones_router.put("/{phone_id}/credentials")
@@ -1018,6 +1101,64 @@ async def trigger_discovery_scan(
                 status_code=422,
                 detail="No site found for your organization. Create a site first.",
             )
+
+    # A scan writes the phones it finds into the site, and auto-onboarding
+    # applies the template in a worker that has no request user to check:
+    # check write access to both here (found in review of 26.11.3).
+    from app.core.site_access import assert_site_write_for_request
+
+    assert_site_write_for_request(site_id)
+    if not data.subnet:
+        # No network named: scan the site's own declared network, never a
+        # fixed default (the worker used to scan 192.168.1.0/24, whichever site
+        # that belongs to; found in review of 26.11.3).
+        from app.models.core import Site as _DeclaredSite
+
+        declared_site = await session.get(_DeclaredSite, site_id)
+        first = next(
+            (
+                e.get("cidr")
+                for e in ((declared_site.subnets if declared_site else None) or [])
+                if isinstance(e, dict) and e.get("cidr")
+            ),
+            None,
+        )
+        if first is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Name the network to scan, or add it to the site's subnets",
+            )
+        data.subnet = str(first)
+    if data.subnet and current_user.is_site_limited:
+        # A site-limited caller scans only networks declared on that site, not
+        # whatever range they name (found in review of 26.11.3).
+        import ipaddress as _ipaddress
+
+        from app.models.core import Site as _Site
+
+        site_row = await session.get(_Site, site_id)
+        declared = []
+        for entry in (site_row.subnets if site_row else None) or []:
+            cidr = entry.get("cidr") if isinstance(entry, dict) else None
+            with contextlib.suppress(ValueError, TypeError):
+                declared.append(_ipaddress.ip_network(str(cidr), strict=False))
+        try:
+            wanted = _ipaddress.ip_network(data.subnet, strict=False)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid subnet") from None
+        if not any(
+            wanted.version == net.version and wanted.subnet_of(net)  # type: ignore[arg-type]
+            for net in declared
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Scan a network declared on the site (add it to the site's subnets)",
+            )
+    if data.config_template_id is not None:
+        try:
+            await service._assert_phone_fks_in_org({"config_template_id": data.config_template_id})
+        except CrossTenantError:
+            raise HTTPException(status_code=404, detail="Template not found") from None
 
     scan = await service.create_discovery_scan(
         {
@@ -1193,7 +1334,6 @@ async def list_templates(
 ):
     """List configuration templates."""
     from app.modules.voip.provisioning import ProvisioningService
-    from app.modules.voip.schemas import ConfigTemplateResponse
 
     prov = ProvisioningService(session, organization_id=_org_id(current_user))
     templates, total = await prov.list_templates(
@@ -1205,7 +1345,7 @@ async def list_templates(
     counts = await prov.get_template_phone_counts([t.id for t in templates])
     items = []
     for tpl in templates:
-        row = ConfigTemplateResponse.model_validate(tpl).model_dump(mode="json")
+        row = _template_out(tpl, current_user)
         # The FE reads ``phones_count`` (the schema's ``phone_count`` stays
         # for back-compat); surface both so neither contract drifts.
         n = counts.get(tpl.id, 0)
@@ -1213,6 +1353,47 @@ async def list_templates(
         row["phones_count"] = n
         items.append(row)
     return {"items": items, "total": total}
+
+
+def _may_see_site_credentials(current_user: CurrentUser | None, site_id: Any) -> bool:
+    """Whether the caller may see the known credentials of a site's phones.
+
+    Needs the phone-manager permission AND write access to that site: a
+    manager with a read-only grant on a site gets what a Viewer gets there
+    (found in review of 26.11.3).
+    """
+    if current_user is None or not current_user.has_permission("voip.manage_phones"):
+        return False
+    allows = getattr(current_user, "site_level_allows", None)
+    return allows is None or site_id is None or bool(allows("device:write", site_id))
+
+
+_TEMPLATE_SETTINGS = (
+    "sip_settings",
+    "network_settings",
+    "provisioning_settings",
+    "feature_settings",
+    "raw_overrides",
+    "line_key_settings",
+)
+
+
+def _template_out(template: Any, current_user: CurrentUser) -> dict[str, Any]:
+    """A template as the API returns it, credentials replaced by a placeholder.
+
+    The schema hides the known credentials for everyone; a caller who may not
+    manage phones (the Viewer role) also gets no P-value's value at all,
+    since Grandstream has more password P-values than any list names
+    (setting_secrets.py).
+    """
+    from app.modules.voip.schemas import ConfigTemplateResponse
+    from app.modules.voip.setting_secrets import redact_settings
+
+    row = ConfigTemplateResponse.model_validate(template).model_dump(mode="json")
+    if not _may_see_site_credentials(current_user, getattr(template, "site_id", None)):
+        for field in _TEMPLATE_SETTINGS:
+            row[field] = redact_settings(row.get(field), every_pvalue=True)
+    return row
 
 
 @templates_router.get("/{template_id}")
@@ -1226,7 +1407,7 @@ async def get_template(
 
     prov = ProvisioningService(session, organization_id=_org_id(current_user))
     try:
-        return await prov.get_template(template_id)
+        return _template_out(await prov.get_template(template_id), current_user)
     except ProvisioningError:
         raise HTTPException(status_code=404, detail="Template not found")
 
@@ -1288,7 +1469,7 @@ async def create_template(
 
     prov = ProvisioningService(session, organization_id=_org_id(current_user))
     try:
-        return await prov.create_template(payload)
+        return _template_out(await prov.create_template(payload), current_user)
     except ProvisioningError:
         # Service-level site validation rejected the resolved site (outside the
         # caller's org or per-user grant). 404 — no existence oracle.
@@ -1307,7 +1488,10 @@ async def update_template(
 
     prov = ProvisioningService(session, organization_id=_org_id(current_user))
     try:
-        return await prov.update_template(template_id, data.model_dump(exclude_unset=True))
+        return _template_out(
+            await prov.update_template(template_id, data.model_dump(exclude_unset=True)),
+            current_user,
+        )
     except ProvisioningError:
         raise HTTPException(status_code=404, detail="Template not found")
 
@@ -1351,9 +1535,10 @@ async def serve_phone_config(
       1. The MAC must resolve to a known Phone row — the tenant is
          derived from that row's site, NEVER from request input.
       2. The source IP must be inside one of the site's configured
-         subnets, OR the URL must carry a valid HMAC signature
-         (``?sig=<hex>``) generated from the same MAC + the server's
-         encryption key.
+         subnets while the phone's provisioning window is open (the
+         Provision actions open it for a few minutes), OR the URL must
+         carry a valid HMAC signature (``?sig=<hex>``) generated from the
+         same MAC + the server's encryption key.
 
     Returns 404 on any failure so an attacker can't distinguish
     "MAC doesn't exist" from "MAC exists but you're not authorised".
@@ -1438,13 +1623,20 @@ async def bulk_reboot_phones(
     # returned by the query — so if the count mismatches we know the
     # caller is probing other tenants' IDs.
     result = await session.execute(
-        select(Phone.id).where(
+        select(Phone.id, Phone.site_id).where(
             Phone.id.in_(data.phone_ids),
             Phone.site_id.in_(select(service._sites_for_org().c.id)),
             Phone.deleted_at.is_(None),
         )
     )
-    valid_ids = {row.id for row in result.all()}
+    rows = result.all()
+    valid_ids = {row.id for row in rows}
+    # The reboots run in a worker, which has no request user to check the site
+    # grant against: a read-only site grant is refused here (26.11.3).
+    from app.core.site_access import assert_site_write_for_request
+
+    for site_id in {row.site_id for row in rows}:
+        assert_site_write_for_request(site_id)
 
     if len(valid_ids) != len(data.phone_ids):
         # Refuse the whole batch — no partial success when org boundary
@@ -1500,6 +1692,85 @@ async def bulk_reboot_phones(
     }
 
 
+class ZeroTouchSetting(BaseModel):
+    """Whether phones on a site's subnets may fetch their config without a signed URL."""
+
+    enabled: bool
+
+
+async def _zero_touch_site(service: VoIPService, site_id: UUID) -> Any:
+    from sqlalchemy import select
+
+    from app.models.core import Site
+
+    site = await service.db.scalar(
+        select(Site).where(
+            Site.id == site_id,
+            Site.deleted_at.is_(None),
+            Site.id.in_(select(service._sites_for_org().c.id)),
+        )
+    )
+    if site is None:
+        raise HTTPException(status_code=404, detail="Site not found")
+    return site
+
+
+@fleet_router.get("/sites/{site_id}/zero-touch", response_model=ZeroTouchSetting)
+async def get_zero_touch(
+    site_id: UUID,
+    current_user: Annotated[CurrentUser, Depends(require_permissions("voip.view"))],
+    service: Annotated[VoIPService, Depends(get_voip_service)],
+) -> ZeroTouchSetting:
+    """Whether zero-touch provisioning is on for a site."""
+    from app.modules.voip.provisioning_auth import zero_touch_enabled
+
+    _set_org(service, current_user)
+    return ZeroTouchSetting(enabled=zero_touch_enabled(await _zero_touch_site(service, site_id)))
+
+
+@fleet_router.put("/sites/{site_id}/zero-touch", response_model=ZeroTouchSetting)
+async def set_zero_touch(
+    site_id: UUID,
+    data: ZeroTouchSetting,
+    current_user: Annotated[CurrentUser, Depends(require_permissions("voip.manage_phones"))],
+    service: Annotated[VoIPService, Depends(get_voip_service)],
+) -> ZeroTouchSetting:
+    """Turn zero-touch provisioning on or off for a site.
+
+    On: a phone on one of the site's subnets may fetch its configuration,
+    SIP password included, without a signed URL, once in the 15 minutes after
+    Provision. A factory phone cannot prove who it is, so turn it on only for
+    a network where every device is trusted, such as a phone VLAN.
+    """
+    from app.core.site_access import assert_site_write_for_request
+    from app.services.audit import AuditAction, AuditService, ResourceType
+
+    _set_org(service, current_user)
+    site = await _zero_touch_site(service, site_id)
+    assert_site_write_for_request(site.id)
+    previous = bool(site.voip_zero_touch_provisioning)
+    site.voip_zero_touch_provisioning = data.enabled
+    # strict: the audit row is written in this transaction, so the change and
+    # its record commit together or not at all.
+    await AuditService(service.db).log(
+        action=AuditAction.UPDATE,
+        resource_type=ResourceType.SITE,
+        resource_id=site.id,
+        resource_name=f"site {site.name}: zero-touch phone provisioning "
+        + ("on" if data.enabled else "off"),
+        organization_id=site.organization_id,
+        site_id=site.id,
+        actor_id=current_user.id,
+        actor_email=getattr(current_user, "email", None),
+        previous_state={"voip_zero_touch_provisioning": previous},
+        new_state={"voip_zero_touch_provisioning": data.enabled},
+        tags=["voip", "zero-touch"],
+        strict=True,
+    )
+    await service.db.commit()
+    return ZeroTouchSetting(enabled=data.enabled)
+
+
 @fleet_router.post("/bulk/provision")
 async def bulk_provision_phones(
     data: BulkProvisionRequest,
@@ -1510,7 +1781,7 @@ async def bulk_provision_phones(
     from app.modules.voip.provisioning import ProvisioningService
 
     prov = ProvisioningService(session, organization_id=_org_id(current_user))
-    result = await prov.bulk_generate_configs(phone_ids=data.phone_ids)
+    result = await prov.bulk_generate_configs(phone_ids=data.phone_ids, open_window=True)
 
     return {
         "operation": "bulk_provision",
@@ -1583,10 +1854,14 @@ async def bulk_connect_phones(
 
     for phone_id in data.phone_ids:
         try:
-            phone = await svc.get_phone(phone_id)
+            phone = await svc.get_phone_for_write(phone_id)
         except PhoneNotFoundError:
             skipped += 1
             errors.append({"phone_id": str(phone_id), "error": "Phone not found"})
+            continue
+        except HTTPException:
+            skipped += 1
+            errors.append({"phone_id": str(phone_id), "error": "Read-only access to its site"})
             continue
 
         ip = getattr(phone, "ip_address", None)
@@ -1620,7 +1895,9 @@ async def bulk_connect_phones(
                 )
 
             # Persist all discovered data
-            await _persist_connection_result(phone, result, ip, session)
+            await _persist_connection_result(
+                phone, result, ip, session, credentials_saved=bool(result.get("authenticated"))
+            )
             succeeded += 1
             results.append(
                 {
@@ -1679,16 +1956,29 @@ async def list_firmware_tracks(
     offset: int = Query(0, ge=0),
 ):
     """List registered firmware versions."""
+    from app.core.url_secrets import may_hold_credential
+    from app.modules.voip.schemas import FirmwareTrackResponse
+    from app.modules.voip.setting_secrets import SECRET_PLACEHOLDER, is_secret_setting
+
     _set_org(service, current_user)
-    return {
-        "items": await service.list_firmware_tracks(
-            site_id=site_id,
-            vendor=vendor,
-            model=model,
-            limit=limit,
-            offset=offset,
-        )
-    }
+    tracks = await service.list_firmware_tracks(
+        site_id=site_id,
+        vendor=vendor,
+        model=model,
+        limit=limit,
+        offset=offset,
+    )
+    items = [FirmwareTrackResponse.model_validate(t).model_dump(mode="json") for t in tracks]
+    # A private firmware feed's URL may carry a login or a token.
+    for item in items:
+        url = item.get("download_url")
+        if (
+            isinstance(url, str)
+            and may_hold_credential(url, is_secret_setting)
+            and not _may_see_site_credentials(current_user, item.get("site_id"))
+        ):
+            item["download_url"] = SECRET_PLACEHOLDER
+    return {"items": items}
 
 
 @firmware_router.post("/", status_code=status.HTTP_201_CREATED)
@@ -1756,8 +2046,30 @@ def _sanitize_pbx_response(pbx: Any) -> dict:
     return redact_secrets(data)
 
 
-def _sanitize_phone_response(phone: Any) -> Any:
-    """Strip encrypted columns + apply shared redaction to a Phone object."""
+def _connection_result_out(result: dict) -> PhoneConnectionTestResult:
+    """A connection test's answer with the credentials a phone reported hidden.
+
+    ``raw_data`` carries every configuration value the phone returned (its SIP
+    password among them on many models) and the registrar can carry a login;
+    the caller manages phones, so known credentials are hidden as in every
+    other phone response (found in review of 26.11.3).
+    """
+    from app.modules.voip.setting_secrets import redact_settings
+
+    shown = dict(result)
+    for key in ("raw_data", "sip_accounts", "sip_registrar", "network_info"):
+        if key in shown:
+            shown[key] = redact_settings({key: shown[key]})[key]
+    return PhoneConnectionTestResult(**shown)
+
+
+def _sanitize_phone_response(phone: Any, current_user: CurrentUser | None = None) -> Any:
+    """Strip encrypted columns + apply shared redaction to a Phone object.
+
+    ``settings.p_values`` override any Grandstream P-value, passwords
+    included: a caller who may not manage phones gets none of their values,
+    and one who may gets the known credentials hidden (setting_secrets.py).
+    """
     from sqlalchemy.inspection import inspect as sa_inspect
 
     try:
@@ -1768,6 +2080,27 @@ def _sanitize_phone_response(phone: Any) -> Any:
         data.pop("_sa_instance_state", None)
     for col in ("sip_password_enc", "admin_password_enc", "xml_password_enc"):
         data.pop(col, None)
+    from app.modules.voip.setting_secrets import redact_settings
+
+    can_manage = _may_see_site_credentials(current_user, data.get("site_id"))
+    if isinstance(data.get("settings"), dict):
+        data["settings"] = redact_settings(data["settings"], every_pvalue=not can_manage)
+    # The address columns can carry a login as well: the registrar a phone
+    # reports is copied to ``sip_server`` (found in review of 26.11.3).
+    from app.core.url_secrets import may_hold_credential
+    from app.modules.voip.setting_secrets import SECRET_PLACEHOLDER, is_secret_setting
+
+    for key in ("sip_server", "provisioning_url"):
+        item = data.get(key)
+        if isinstance(item, str) and may_hold_credential(item, is_secret_setting):
+            data[key] = SECRET_PLACEHOLDER
+    if not can_manage:
+        # When a provisioning window is open tells a device on the subnet
+        # when to fetch; the checksum is an unkeyed hash of the config,
+        # passwords included, so it confirms guesses offline.
+        data.pop("provisioning_open_until", None)
+        data.pop("last_provisioned_at", None)  # the window opens at that moment
+        data.pop("config_checksum", None)
     return redact_secrets(data)
 
 
@@ -1821,7 +2154,7 @@ async def create_pbx(
     """Create a new PBX connection."""
     _set_org(service, current_user)
     try:
-        return await service.create_pbx(pbx_data.model_dump())
+        return _sanitize_pbx_response(await service.create_pbx(pbx_data.model_dump()))
     except CrossTenantError:
         # supplied site_id is outside the caller's org or per-user
         # site grant. 404 (not 403) avoids leaking the existence of a foreign
@@ -1830,6 +2163,9 @@ async def create_pbx(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Site not found",
         )
+    except VoIPError as exc:
+        # Our own message (a stored ciphertext offered as a credential).
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
 
 
 @pbx_router.patch("/{pbx_id}")
@@ -1842,12 +2178,19 @@ async def update_pbx(
     """Update a PBX connection."""
     _set_org(service, current_user)
     try:
-        return await service.update_pbx(pbx_id, pbx_data.model_dump(exclude_unset=True))
+        # The sanitized view, as the reads return: the raw row carried the
+        # encrypted credentials, which a caller could send back (26.11.3).
+        return _sanitize_pbx_response(
+            await service.update_pbx(pbx_id, pbx_data.model_dump(exclude_unset=True))
+        )
     except PBXNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="PBX not found",
         )
+    except VoIPError as exc:
+        # Our own message (credentials must be re-entered on a new target).
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
 
 
 @pbx_router.delete("/{pbx_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1920,7 +2263,9 @@ async def sync_pbx(
         # Verify the PBX exists + is in the caller's org before
         # dispatching the task — fail-fast 404 here is better than
         # a Celery task that does nothing.
-        pbx = await service.get_pbx(pbx_id)
+        # The sync runs in a worker with no request user: check write access
+        # to the PBX's site here (26.11.3).
+        pbx = await service.get_pbx_for_write(pbx_id)
     except PBXNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

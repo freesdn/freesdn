@@ -139,7 +139,7 @@ RUN poetry check --lock \
 FROM python-base AS development
 
 RUN apk add --no-cache libpq curl git iptables ip6tables iproute2 iputils \
-    openvpn wireguard-tools bash ca-certificates tzdata openresolv \
+    openvpn wireguard-tools bash ca-certificates tzdata openresolv font-dejavu \
     && addgroup -S -g 1001 appgroup \
     && adduser -S -D -H -u 1001 -G appgroup appuser \
     && mkdir -p /var/lib/tailscale /var/run/tailscale \
@@ -185,7 +185,7 @@ FROM python-base AS production
 # Preserve the existing app UID and VPN CLI/socket contract. VPN daemons run
 # only in the explicitly privileged sidecar; no binary receives file capabilities.
 RUN apk add --no-cache libpq curl iproute2 iptables ip6tables iputils \
-    openvpn wireguard-tools bash ca-certificates tzdata openresolv \
+    openvpn wireguard-tools bash ca-certificates tzdata openresolv font-dejavu \
     && addgroup -S -g 1001 appgroup \
     && adduser -S -D -H -u 1001 -G appgroup appuser
 COPY --from=tailscale-builder /out/tailscale /out/tailscaled /usr/local/bin/

@@ -362,3 +362,37 @@ def test_dev_installation_creates_no_backup_key_placeholder(installation):
     (installation / "secrets").mkdir()
     assert run(installation, "--dev").returncode == 0
     assert not (installation / "secrets/backup-public.asc").exists()
+
+
+@pytest.mark.parametrize("tier", ["lite", "pro", "max"])
+def test_a_new_installation_serves_https(installation, tier):
+    """26.11.3: Lite used to start on plain HTTP (port 8080), where a login
+    password can be read on the network. Every tier now starts on HTTPS."""
+    result = run(installation, "--tier", tier)
+    assert result.returncode == 0, result.stderr
+    env = values(installation / (".env." + tier))
+    assert env["CADDY_SITE_ADDRESS"] == "localhost"
+    assert (env["EDGE_HTTP_PORT"], env["EDGE_HTTPS_PORT"]) == ("80", "443")
+    assert env["PUBLIC_BASE_URL"] == "https://localhost"
+    assert "Local HTTPS selected" in result.stdout
+
+
+def test_an_existing_plain_http_lite_installation_keeps_its_ports(installation):
+    """Rerunning the installer never moves a running install to other ports."""
+    path = installation / ".env.lite"
+    old = {"CADDY_SITE_ADDRESS": ":80", "EDGE_HTTP_PORT": "8080", "EDGE_HTTPS_PORT": "8443"}
+    lines = []
+    for line in (installation / ".env.lite.example").read_text().splitlines():
+        key = line.split("=", 1)[0]
+        lines.append(key + "=" + old[key] if key in old else line)
+    path.write_text("\n".join(lines).replace("__CHANGE_ME__", "x" * 40) + "\n")
+    path.chmod(0o600)
+    result = run(installation, "--tier", "lite")
+    assert result.returncode == 0, result.stderr
+    env = values(path)
+    assert (env["CADDY_SITE_ADDRESS"], env["EDGE_HTTP_PORT"], env["EDGE_HTTPS_PORT"]) == (
+        ":80",
+        "8080",
+        "8443",
+    )
+    assert "PUBLIC_BASE_URL" not in env

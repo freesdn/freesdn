@@ -85,6 +85,8 @@ export default function PhoneDetailPage() {
   // Connection test state
   const [connUsername, setConnUsername] = useState('admin');
   const [connPassword, setConnPassword] = useState('');
+  // A different address to test (a phone that moved); empty = the recorded one.
+  const [connAddress, setConnAddress] = useState('');
   const [showConnPassword, setShowConnPassword] = useState(false);
   const [saveCredsOnSuccess, setSaveCredsOnSuccess] = useState(true);
   const [connTestResult, setConnTestResult] = useState<PhoneConnectionTestResult | null>(null);
@@ -99,13 +101,26 @@ export default function PhoneDetailPage() {
   });
 
   const phone: VoIPPhone | undefined = phoneRes?.data;
+  // Where discovery last saw this phone when that differs from its recorded
+  // address (it never moves a known phone by itself).
+  // Discovery records it as { ip, at }.
+  const discoveredRaw = (phone?.settings as Record<string, unknown> | undefined)?.discovered_address;
+  const discoveredIp =
+    discoveredRaw && typeof discoveredRaw === 'object'
+      ? (discoveredRaw as { ip?: unknown }).ip
+      : discoveredRaw;
+  const discoveredAddress = typeof discoveredIp === 'string' ? discoveredIp : '';
 
-  const { data: configPreviewRes, isLoading: configPreviewLoading, isError: configPreviewError, refetch: refetchPreview } = useQuery({
+  const { data: configPreviewRes, isLoading: configPreviewLoading, isError: configPreviewError, error: configPreviewErr, refetch: refetchPreview } = useQuery({
     queryKey: ['voip-phone-config-preview', id],
     queryFn: () => voipApi.previewPhoneConfig(id!),
     enabled: !!id && activeTab === 'config',
     staleTime: 30_000,
   });
+
+  // The preview needs permission to manage phones (it holds every P-value);
+  // for anyone else the API answers 403, which is expected, not a fault.
+  const previewForbidden = (configPreviewErr as any)?.response?.status === 403;
 
   const configPreview = typeof configPreviewRes?.data === 'string'
     ? configPreviewRes.data
@@ -143,15 +158,38 @@ export default function PhoneDetailPage() {
     onError: (err: any) => console.error('Maintenance toggle failed:', getApiErrorMessage(err)),
   });
 
+  const { data: zeroTouchRes } = useQuery({
+    queryKey: ['voip-site-zero-touch', phone?.site_id],
+    queryFn: () => voipApi.getZeroTouch(phone!.site_id!),
+    enabled: !!phone?.site_id,
+  });
+  const zeroTouchOn = zeroTouchRes?.data?.enabled === true;
+  const zeroTouchMutation = useMutation({
+    mutationFn: (enabled: boolean) => voipApi.setZeroTouch(phone!.site_id!, enabled),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voip-site-zero-touch', phone?.site_id] }),
+    onError: (err: any) => toast({ title: t('PhoneDetailPage.toasts.zeroTouchFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
+  });
+
   const provisionMutation = useMutation({
     mutationFn: () => voipApi.provisionPhone(id!, { force: true }),
-    onSuccess: invalidatePhone,
+    onSuccess: (res: any) => {
+      invalidatePhone();
+      // The config is written, but a phone that refused the reboot only
+      // fetches it if it restarts inside the 15-minute provisioning window.
+      if (res?.data?.rebooted === false) {
+        toast({ title: t('PhoneDetailPage.toasts.rebootRefused'), variant: 'destructive' });
+      }
+    },
     onError: (err: any) => console.error('Provision failed:', getApiErrorMessage(err)),
   });
 
   const connTestMutation = useMutation({
-    mutationFn: (data: { username: string; password: string; save_credentials: boolean }) =>
-      voipApi.testPhoneConnection(id!, data),
+    mutationFn: (data: {
+      username: string;
+      password: string;
+      save_credentials: boolean;
+      ip_address?: string;
+    }) => voipApi.testPhoneConnection(id!, data),
     onSuccess: (res) => {
       setConnTestResult(res.data);
       if (res.data?.authenticated) {
@@ -162,7 +200,7 @@ export default function PhoneDetailPage() {
       setConnTestResult({
         success: false,
         status: 'error',
-        ip_address: phone?.ip_address || '',
+        ip_address: connAddress.trim() || phone?.ip_address || '',
         authenticated: false,
         sip_registered: false,
         error: getApiErrorMessage(err, t('PhoneDetailPage.connTest.testFailed')),
@@ -335,7 +373,7 @@ export default function PhoneDetailPage() {
     );
   }
 
-  const hasQueryError = phoneError || configPreviewError || templatesError;
+  const hasQueryError = phoneError || (configPreviewError && !previewForbidden) || templatesError;
 
   return (
     <div className="space-y-6">
@@ -597,6 +635,11 @@ export default function PhoneDetailPage() {
                     <div className="flex items-center justify-center h-48">
                       <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
                     </div>
+                  ) : previewForbidden ? (
+                    <div className="text-center text-muted-foreground py-12">
+                      <Code className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>{t('PhoneDetailPage.config.previewNeedsManage')}</p>
+                    </div>
                   ) : configPreview ? (
                     <pre className="p-4 bg-muted rounded-lg text-xs font-mono overflow-auto max-h-[500px] whitespace-pre-wrap">
                       {configPreview}
@@ -628,13 +671,29 @@ export default function PhoneDetailPage() {
                   <ProvisionBadge status={phone.provision_status} />
                 </div>
                 <Separator />
-                <InfoRow label={t('PhoneDetailPage.fields.autoProvisionUrl')} value={phone.mac_address ? `/provisioning/cfg${phone.mac_address?.replace(/:/g, '')}.xml` : null} mono />
+                <InfoRow label={t('PhoneDetailPage.fields.autoProvisionUrl')} value={phone.mac_address ? `/api/v1/voip/provisioning/cfg${phone.mac_address?.replace(/:/g, '')}.xml` : null} mono />
                 <InfoRow label={t('PhoneDetailPage.fields.template')} value={phone.config_template_id || t('PhoneDetailPage.values.none')} />
                 <Separator />
                 <Button className="w-full" onClick={() => provisionMutation.mutate()} disabled={provisionMutation.isPending}>
                   <Settings className="h-4 w-4 mr-2" />
                   {provisionMutation.isPending ? t('PhoneDetailPage.provisioning.provisioning') : t('PhoneDetailPage.provisioning.provisionNow')}
                 </Button>
+                <p className="text-xs text-muted-foreground">{t('PhoneDetailPage.provisioning.windowHint')}</p>
+                <Separator />
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">{t('PhoneDetailPage.provisioning.zeroTouchTitle')}</p>
+                    <p className="text-xs text-muted-foreground">{t('PhoneDetailPage.provisioning.zeroTouchHint')}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={zeroTouchOn ? 'outline' : 'default'}
+                    disabled={!zeroTouchRes || zeroTouchMutation.isPending}
+                    onClick={() => zeroTouchMutation.mutate(!zeroTouchOn)}
+                  >
+                    {zeroTouchOn ? t('PhoneDetailPage.provisioning.zeroTouchTurnOff') : t('PhoneDetailPage.provisioning.zeroTouchTurnOn')}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -725,6 +784,34 @@ export default function PhoneDetailPage() {
                   </div>
                 </div>
               </div>
+              <div className="grid gap-2">
+                <Label className="text-sm" htmlFor="conn-address">
+                  {t('PhoneDetailPage.connTest.address')}
+                </Label>
+                <Input
+                  id="conn-address"
+                  value={connAddress}
+                  onChange={(e) => setConnAddress(e.target.value)}
+                  placeholder={phone.ip_address || ''}
+                  autoComplete="off"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('PhoneDetailPage.connTest.addressHint', { ip: phone.ip_address || '-' })}
+                  {discoveredAddress && discoveredAddress !== phone.ip_address && (
+                    <>
+                      {' '}
+                      {t('PhoneDetailPage.connTest.discoveredAt', { address: discoveredAddress })}{' '}
+                      <button
+                        type="button"
+                        className="underline text-primary"
+                        onClick={() => setConnAddress(discoveredAddress)}
+                      >
+                        {t('PhoneDetailPage.connTest.useDiscovered')}
+                      </button>
+                    </>
+                  )}
+                </p>
+              </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Switch
@@ -741,8 +828,9 @@ export default function PhoneDetailPage() {
                     username: connUsername,
                     password: connPassword,
                     save_credentials: saveCredsOnSuccess,
+                    ...(connAddress.trim() ? { ip_address: connAddress.trim() } : {}),
                   })}
-                  disabled={connTestMutation.isPending || !phone.ip_address}
+                  disabled={connTestMutation.isPending || !(phone.ip_address || connAddress.trim())}
                 >
                   {connTestMutation.isPending ? (
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />

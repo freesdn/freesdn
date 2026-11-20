@@ -26,6 +26,7 @@ regardless of which transport is active.
 from __future__ import annotations
 
 import asyncio
+import collections
 import json as _json
 import logging
 import re
@@ -34,7 +35,7 @@ from typing import Any
 import aiohttp
 
 from app.adapters import io_policy
-from app.core.http_client import build_aiohttp_session
+from app.core.http_client import build_aiohttp_session, checked_connector
 
 from .constants import (
     FREEPBX_AJAX_ENDPOINTS,
@@ -71,6 +72,20 @@ class FreePBXRestClient:
         extensions = await client.list_extensions()
         await client.disconnect()
     """
+
+    def _shown(self, text: object) -> str:
+        """Provider text for an error message, or a note that it was hidden.
+
+        The PBX's own messages are kept (they explain most failures), but not
+        one that contains a credential this client sent or looks like it
+        holds one: these messages reach logs (found in review of 26.11.3).
+        """
+        from app.modules.voip.setting_secrets import shown_provider_text
+
+        sent = [v for v in (self.password, self.api_client_secret) if v and len(str(v)) >= 4]
+        # Plus every secret-named value sent recently (an extension password,
+        # a voicemail PIN): a message may repeat one without its field name.
+        return shown_provider_text(text, secrets=[*sent, *getattr(self, "_sent_secrets", ())])
 
     def __init__(
         self,
@@ -109,6 +124,9 @@ class FreePBXRestClient:
         self.verify_ssl = verify_ssl
         self.api_client_id = api_client_id
         self.api_client_secret = api_client_secret
+        # Secret-named values sent recently, so _shown can hide a provider
+        # message that repeats one (bounded; more only hides more).
+        self._sent_secrets: collections.deque[str] = collections.deque(maxlen=256)
 
         self._scheme = "https" if use_ssl else "http"
         self._base_url = f"{self._scheme}://{self.host}:{self.port}"
@@ -162,7 +180,7 @@ class FreePBXRestClient:
         if self.use_ssl:
             ssl_ctx = self.verify_ssl  # False = skip verification
 
-        connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+        connector = checked_connector(ssl=ssl_ctx)
         # sock_connect caps the TCP-connect phase so an unreachable PBX fails
         # fast (~8s) instead of hanging up to the (long) total request timeout.
         timeout = aiohttp.ClientTimeout(total=REST_REQUEST_TIMEOUT, sock_connect=8.0)
@@ -172,6 +190,9 @@ class FreePBXRestClient:
             connector=connector,
             timeout=timeout,
             cookie_jar=jar,
+            # Credentials ride on these requests: never follow a redirect to
+            # another host (26.11.3).
+            same_host_redirects=True,
         )
 
         # OAuth2 preferred when configured.
@@ -322,21 +343,23 @@ class FreePBXRestClient:
                         "FreePBX OAuth2 token request rejected: invalid client_id or client_secret"
                     )
                 if resp.status != 200:
+                    # Not the body: a token endpoint's error page can echo the
+                    # submitted client secret, and this message reaches logs.
                     raise FreePBXApiError(
-                        f"FreePBX OAuth2 token endpoint returned HTTP {resp.status}: {body[:200]}",
+                        f"FreePBX OAuth2 token endpoint returned HTTP {resp.status}",
                         status_code=resp.status,
                     )
                 try:
                     data = _json.loads(body)
                 except _json.JSONDecodeError as exc:
                     raise FreePBXApiError(
-                        f"FreePBX OAuth2 returned non-JSON: {body[:200]}"
+                        f"FreePBX OAuth2 returned non-JSON ({len(body)} bytes; body not shown, it can hold credentials)"
                     ) from exc
 
                 token = data.get("access_token")
                 if not token:
                     raise FreePBXAuthError(
-                        f"FreePBX OAuth2 response missing access_token: {body[:200]}"
+                        f"FreePBX OAuth2 response missing access_token ({len(body)} bytes; body not shown, it can hold credentials)"
                     )
                 # Refresh ~60s before expiry to avoid mid-call expiry races.
                 import time as _time
@@ -401,6 +424,10 @@ class FreePBXRestClient:
         body: dict[str, Any] = {"query": query}
         if variables:
             body["variables"] = variables
+            from app.modules.voip.setting_secrets import secret_values
+
+            if hasattr(self, "_sent_secrets"):
+                self._sent_secrets.extend(secret_values(variables))
         if operation_name:
             body["operationName"] = operation_name
 
@@ -437,14 +464,14 @@ class FreePBXRestClient:
                     status, text = await _do_request(token)
                 if status != 200:
                     raise FreePBXApiError(
-                        f"FreePBX GraphQL returned HTTP {status}: {text[:200]}",
+                        f"FreePBX GraphQL returned HTTP {status} ({len(text)} bytes; body not shown, it can hold credentials)",
                         status_code=status,
                     )
                 try:
                     payload = _json.loads(text)
                 except _json.JSONDecodeError as exc:
                     raise FreePBXApiError(
-                        f"FreePBX GraphQL returned non-JSON: {text[:200]}"
+                        f"FreePBX GraphQL returned non-JSON ({len(text)} bytes; body not shown, it can hold credentials)"
                     ) from exc
 
                 # GraphQL transports errors in a top-level ``errors`` array
@@ -453,7 +480,7 @@ class FreePBXRestClient:
                 # boilerplate.
                 if payload.get("errors"):
                     first = payload["errors"][0]
-                    msg = first.get("message", str(first))
+                    msg = self._shown(first.get("message", first))
                     raise FreePBXApiError(
                         f"FreePBX GraphQL error: {msg}",
                         status_code=200,
@@ -516,14 +543,14 @@ class FreePBXRestClient:
                 )
             if status != 200:
                 raise FreePBXApiError(
-                    f"FreePBX REST {path!r} returned HTTP {status}: {body[:200]}",
+                    f"FreePBX REST {path!r} returned HTTP {status} ({len(body)} bytes; body not shown, it can hold credentials)",
                     status_code=status,
                 )
             try:
                 return _json.loads(body)
             except _json.JSONDecodeError as exc:
                 raise FreePBXApiError(
-                    f"FreePBX REST {path!r} returned non-JSON: {body[:200]}"
+                    f"FreePBX REST {path!r} returned non-JSON ({len(body)} bytes; body not shown, it can hold credentials)"
                 ) from exc
         except (TimeoutError, aiohttp.ClientError, OSError) as exc:
             raise FreePBXConnectionError(f"FreePBX REST {path!r} request failed: {exc}") from exc
@@ -592,7 +619,7 @@ class FreePBXRestClient:
 
                     if resp.status != 200:
                         raise FreePBXApiError(
-                            f"FreePBX AJAX returned HTTP {resp.status}: {body_text[:200]}",
+                            f"FreePBX AJAX returned HTTP {resp.status} ({len(body_text)} bytes; body not shown, it can hold credentials)",
                             status_code=resp.status,
                         )
 
@@ -600,7 +627,9 @@ class FreePBXRestClient:
                     try:
                         data = _json.loads(body_text)
                     except _json.JSONDecodeError:
-                        raise FreePBXApiError(f"FreePBX AJAX returned non-JSON: {body_text[:200]}")
+                        raise FreePBXApiError(
+                            f"FreePBX AJAX returned non-JSON ({len(body_text)} bytes; body not shown, it can hold credentials)"
+                        )
 
                     # FreePBX returns {"message": null} for empty results
                     if isinstance(data, dict) and data == {"message": None}:
@@ -613,9 +642,9 @@ class FreePBXRestClient:
                             if _retry:
                                 await self._web_login()
                                 return await self._ajax_get(params, _retry=False)
-                            raise FreePBXAuthError(f"FreePBX AJAX: {err}")
+                            raise FreePBXAuthError(f"FreePBX AJAX: {self._shown(err)}")
                         raise FreePBXApiError(
-                            f"FreePBX AJAX error: {err}",
+                            f"FreePBX AJAX error: {self._shown(err)}",
                             status_code=resp.status,
                         )
 
@@ -790,12 +819,12 @@ class FreePBXRestClient:
                 inp[field] = val
         return inp
 
-    @staticmethod
-    def _gql_write_result(data_block: dict[str, Any] | None, field: str) -> dict[str, Any]:
+    def _gql_write_result(self, data_block: dict[str, Any] | None, field: str) -> dict[str, Any]:
         """Unwrap a mutation payload, raising on ``status: false``."""
         payload = (data_block or {}).get(field) or {}
         if payload.get("status") is False:
-            raise FreePBXApiError(payload.get("message") or f"{field} failed")
+            message = payload.get("message")
+            raise FreePBXApiError(self._shown(message) if message else f"{field} failed")
         return payload
 
     async def create_extension(
@@ -1803,7 +1832,8 @@ class FreePBXRestClient:
         )
         wrapper = data.get("fetchAllCdrs") or {}
         if wrapper.get("status") is False:
-            raise FreePBXApiError(str(wrapper.get("message") or "fetchAllCdrs failed"))
+            message = wrapper.get("message")
+            raise FreePBXApiError(self._shown(message) if message else "fetchAllCdrs failed")
         rows = [r for r in (wrapper.get("cdrs") or []) if isinstance(r, dict)]
         if src:
             rows = [r for r in rows if src in str(r.get("src") or "")]

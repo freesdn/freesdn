@@ -641,6 +641,7 @@ def create_application() -> FastAPI:
             "X-Request-ID",
             "X-API-Key",
             "X-CSRF-Token",
+            "X-FreeSDN-Setup-Code",
             "X-FreeSDN-Release-Actor",
             "X-FreeSDN-Release-Organization",
             "X-FreeSDN-Vault-Proof",

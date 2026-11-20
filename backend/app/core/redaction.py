@@ -55,6 +55,7 @@ _SENSITIVE_KEYS: frozenset[str] = frozenset(
         "encryption_key",
         "passphrase",
         "passwd",
+        "pin",
         # Cryptographic material — VPN / certificates / SSH.
         "private_key",
         "privkey",
@@ -222,6 +223,18 @@ _SENSITIVE_SUFFIXES: tuple[str, ...] = (
     "preshared_key",
     "radius_secret",
     "shared_secret",
+    # Any key that ENDS in a password word holds one, whatever the vendor's
+    # prefix: FreePBX ``extPassword`` / ``vmPassword`` (ext_password,
+    # vm_password) and ``sippasswd`` passed the exact list, so a Viewer read
+    # SIP and voicemail passwords from extension details and staged changes
+    # (found in review of 26.11.3). A boolean under such a key (``has_password``)
+    # holds no secret and is left alone (see redact_secrets).
+    "password",
+    "passwd",
+    "secret",
+    # PIN codes: the FreePBX extension API's voicemail_pin was copied into the
+    # staged-change payload and survived its redaction (26.11.3).
+    "_pin",
 )
 
 
@@ -311,7 +324,7 @@ def redact_secrets(payload: Any, *, depth: int = 0) -> Any:
         return {
             k: (
                 _REDACTED
-                if isinstance(k, str) and _key_is_sensitive(k)
+                if isinstance(k, str) and not isinstance(v, bool) and _key_is_sensitive(k)
                 else redact_secrets(v, depth=depth + 1)
             )
             for k, v in payload.items()

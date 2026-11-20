@@ -11,6 +11,7 @@
 (firmware:upgrade gating and alert.resolve org-scope are covered by
 the route-level real-PG suite + the existing bulk-op-authz / alert-API tests.)
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -33,9 +34,7 @@ def _scoped_user(permissions: list[str]):
         hashed_password="x",
         is_active=True,
     )
-    return CurrentUser(
-        user=user, permissions=permissions, accessible_site_ids=set(), scoped=True
-    )
+    return CurrentUser(user=user, permissions=permissions, accessible_site_ids=set(), scoped=True)
 
 
 def _unscoped_user(role: str = "super_admin"):
@@ -68,8 +67,11 @@ class TestR2022EmptyScopeChildKey:
         user.token_claims = {"tv": 0, "exp": 4102444800}
         locked_res = MagicMock()
         locked_res.one_or_none.return_value = SimpleNamespace(
-            token_version=0, role=user.role, organization_id=user.organization_id,
-            is_active=True, deleted_at=None,
+            token_version=0,
+            role=user.role,
+            organization_id=user.organization_id,
+            is_active=True,
+            deleted_at=None,
         )
         count_res = MagicMock()
         count_res.scalar_one.return_value = 0  # under the per-user key ceiling
@@ -245,15 +247,21 @@ class TestR5054RtspCredentialGate:
     not plain cameras.view — a viewer must not be able to extract the camera's
     decrypted device credentials (it still gets the proxied HLS/WebRTC stream)."""
 
+    @pytest.fixture(autouse=True)
+    def _camera_grant_checked_elsewhere(self, monkeypatch):
+        # get_stream_url now runs the per-camera live check (26.11.3), tested in
+        # test_camera_access_permission_and_rtsp_audit; these use a stand-in service.
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr("app.modules.cameras.api._enforce_camera_access", AsyncMock())
+
     @pytest.mark.asyncio
     async def test_view_only_viewer_denied_rtsp(self):
         from app.modules.cameras.api import get_stream_url
 
         viewer = _camera_user("viewer", ["cameras.view", "cameras.playback"])
         with pytest.raises(HTTPException) as exc:
-            await get_stream_url(
-                uuid4(), viewer, MagicMock(), stream_type="main", protocol="rtsp"
-            )
+            await get_stream_url(uuid4(), viewer, MagicMock(), stream_type="main", protocol="rtsp")
         assert exc.value.status_code == 403
 
     @pytest.mark.asyncio
@@ -263,9 +271,7 @@ class TestR5054RtspCredentialGate:
         viewer = _camera_user("viewer", ["cameras.view", "cameras.playback"])
         service = MagicMock()
         service.get_stream_url = AsyncMock(return_value="/api/v1/cameras/x/stream/hls")
-        result = await get_stream_url(
-            uuid4(), viewer, service, stream_type="main", protocol="hls"
-        )
+        result = await get_stream_url(uuid4(), viewer, service, stream_type="main", protocol="hls")
         assert result["protocol"] == "hls"  # no 403 — proxied path stays open to viewers
 
     @pytest.mark.asyncio

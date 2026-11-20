@@ -7,7 +7,7 @@
 # up. TLS is handled automatically by the Caddy edge (no cert scripts needed).
 #
 # Usage:
-#   ./install.sh                                  # lite tier (homelab), HTTP on :8080
+#   ./install.sh                                  # lite tier (homelab), HTTPS on :443 (local CA)
 #   ./install.sh --tier pro --domain example.com  # SMB, auto-HTTPS via Let's Encrypt
 #   ./install.sh --tier max --domain example.com --email you@ex.com --ha
 #   ./install.sh --dev                            # local dev (Vite HMR + reload)
@@ -16,7 +16,8 @@
 #   --tier lite|pro|max  Deployment tier (default: lite). See https://docs.freesdn.org/deploy/deployment-tiers/
 #   --dev                Developer mode (dev overlay: source mounts + hot reload)
 #   --domain DOMAIN      Public hostname → Caddy auto-HTTPS (Let's Encrypt).
-#                        Omit for HTTP on a high port (homelab / behind an LB).
+#                        Omit for HTTPS with Caddy's internal CA (browser warns
+#                        until you trust it).
 #   --email EMAIL        ACME contact email for Let's Encrypt expiry notices.
 #   --ha                 (max only) also start the HA overlay (replica + Sentinel + LB).
 #   --no-start           Stop after building images (don't run up).
@@ -127,7 +128,12 @@ if ! $START; then
 fi
 
 hdr "Starting stack ($([[ $DEV == true ]] && echo dev || echo "$TIER" tier))"
-docker compose "${COMPOSE_ARGS[@]}" up -d
+if ! docker compose "${COMPOSE_ARGS[@]}" up -d; then
+    err "The stack did not start. If Docker reports a port already in use, another"
+    err "service holds it: set EDGE_HTTP_PORT and EDGE_HTTPS_PORT in $ENV_NAME to free"
+    err "ports and run this again (then open https://<host>:<EDGE_HTTPS_PORT>)."
+    exit 1
+fi
 ok "Stack started"
 
 # ── Health wait ──────────────────────────────────────────────────────────────
@@ -219,18 +225,37 @@ else
     # which those tiers' env files already set.
     echo "  URL:  $APP_URL"
     if [[ -z "$SITE_ADDR" || "$SITE_ADDR" == :* ]]; then
-        echo "  (HTTP only. For HTTPS set CADDY_SITE_ADDRESS to localhost or your"
-        echo "   domain in $ENV_NAME and re-up.)"
+        warn "Plain HTTP: login passwords can be read on the network."
+        echo "  For HTTPS set CADDY_SITE_ADDRESS=localhost (or your domain), EDGE_HTTP_PORT=80"
+        echo "  and EDGE_HTTPS_PORT=443 in $ENV_NAME, then run this installer again."
     elif [[ "$SITE_ADDR" == "localhost" ]]; then
         echo "  (HTTPS via Caddy's internal CA, so your browser will warn until you"
-        echo "   trust it. Set your domain in $ENV_NAME for a public certificate.)"
+        echo "   trust it. A localhost site answers only on this machine: to use"
+        echo "   FreeSDN from others, run this installer again with"
+        echo "   --domain <this host's DNS name or IP address>, which also moves it"
+        echo "   to ports 80/443.)"
+    elif [[ "$SITE_ADDR" =~ ^[0-9.]+$ || "$SITE_ADDR" == *:* ]]; then
+        echo "  (HTTPS for this IP address via Caddy's internal CA, so your browser"
+        echo "   will warn until you trust it. No DNS or internet access is needed.)"
     else
         echo "  (Caddy is obtaining the certificate now. This needs port 80 and 443"
         echo "   reachable from the internet and DNS pointing here.)"
     fi
 fi
 echo
-echo "  First-run wizard: open the URL above to create the admin user."
+# First-run setup needs the one-time code (backend/app/setup/setup_code.py).
+SHOW_CODE="docker compose --env-file $ENV_NAME exec api python -m app.setup.setup_code"
+SETUP_CODE="$(docker compose "${COMPOSE_ARGS[@]}" exec -T api python -m app.setup.setup_code 2>/dev/null | tail -1 || true)"
+if [[ "$SETUP_CODE" == "Setup is complete"* ]]; then
+    echo "  Setup is already complete: log in at the URL above."
+elif [[ -n "$SETUP_CODE" ]]; then
+    echo "  First-run wizard: open the URL above to create the admin user."
+    echo "  Setup code:       $SETUP_CODE"
+    echo "  (show it again with: $SHOW_CODE)"
+else
+    echo "  First-run wizard: open the URL above to create the admin user."
+    echo "  Show the setup code it asks for with: $SHOW_CODE"
+fi
 echo
 # pg-backup refuses plaintext, so without a key a fresh install has NO database
 # backups. Say so at the end, where it is read. (-s is also true for the directory

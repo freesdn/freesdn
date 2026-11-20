@@ -451,6 +451,10 @@
       "frontend": "前端",
       "dockerServices": "Docker 服务",
       "unreachable": "无法访问"
+    },
+    "setupCode": {
+      "label": "设置代码",
+      "help": "安装程序完成时显示了此代码。要再次查看，请运行：docker compose --env-file .env.<tier> exec api python -m app.setup.setup_code。"
     }
   }
 }

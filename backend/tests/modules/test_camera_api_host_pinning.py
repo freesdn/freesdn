@@ -129,7 +129,7 @@ def _certificate(name: str) -> tuple[bytes, bytes]:
 
 
 @pytest.fixture
-async def protect_server(tmp_path, monkeypatch):
+async def protect_server(tmp_path, monkeypatch, loopback_devices_allowed):
     """A TLS server on 127.0.0.1 whose certificate names ``nvr.rebind.test``."""
     cert_pem, key_pem = _certificate("nvr.rebind.test")
     (tmp_path / "cert.pem").write_bytes(cert_pem)

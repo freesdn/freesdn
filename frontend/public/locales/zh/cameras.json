@@ -107,7 +107,7 @@
       },
       "encryption": {
         "title": "视频流加密",
-        "description": "如果此 Hikvision 摄像头/NVR 已启用视频流加密，请输入加密密钥以解密 RTSP 视频流。",
+        "description": "FreeSDN 无法播放开启了 Hikvision 码流加密的视频流。要在此查看该摄像机，请在摄像机或 NVR 上关闭码流加密。下方保存的密钥会被存储，但目前尚未使用。",
         "keyLabel": "加密密钥",
         "keyPlaceholder": "输入加密密钥（十六进制）",
         "saveKey": "保存密钥",

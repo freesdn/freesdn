@@ -10,6 +10,9 @@ import { renderWithProviders } from '@/test-utils';
 
 vi.mock('@/lib/setup-api', () => ({
   setupApi: { getWelcome: vi.fn(), restoreFromVault: vi.fn() },
+  // The operator has entered the first-run setup code.
+  getSetupCode: () => 'TEST1-TEST2-TEST3-TEST4',
+  setSetupCode: vi.fn(),
 }));
 
 const passphrase = 'Owned UI recovery passphrase';

@@ -33,7 +33,7 @@ from typing import Any
 
 import aiohttp
 
-from app.core.http_client import build_aiohttp_session
+from app.core.http_client import build_aiohttp_session, checked_connector
 from app.core.security_utils import is_ssrf_blocked_ip
 
 logger = logging.getLogger(__name__)
@@ -334,7 +334,7 @@ async def http_probe_host(
     sem = semaphore or asyncio.Semaphore(_MAX_CONCURRENT_PROBES)
     creds = credentials or (dict(FACTORY_DEFAULT_LOGIN) if try_default_credentials else None)
     async with sem:
-        conn = aiohttp.TCPConnector(ssl=False)
+        conn = checked_connector(ssl=False)
         client_timeout = aiohttp.ClientTimeout(total=timeout, connect=2.0)
         # CookieJar(unsafe=True) required for Grandstream phones — they set
         # session-role / session-identity cookies over plain HTTP and the
@@ -345,6 +345,7 @@ async def http_probe_host(
             connector=conn,
             timeout=client_timeout,
             cookie_jar=jar,
+            same_host_redirects=True,
         ) as session:
             # Try Grandstream API first (most reliable detection)
             result = await _probe_grandstream(session, ip, creds, try_default_credentials)
@@ -532,6 +533,14 @@ async def _probe_grandstream(
                 return None
             body = await resp.text()
             _apply_pvalues(body)
+
+        # Any web server answers 200 to some URL. Only a device that returned a
+        # Grandstream MAC or firmware value is a Grandstream phone; nothing
+        # credentialed (the challenge login, which hands a hash of the password
+        # to the device, or Basic auth) goes anywhere else (found in review of
+        # 26.11.3).
+        if not (phone.mac_address or phone.firmware_version):
+            return None
 
         if phone.mac_address:
             logger.debug(
@@ -810,9 +819,23 @@ async def _probe_yealink(
         params = {"m": "mod_data", "p": "status-dev", "q": "load"}
 
         # Try unauthenticated first, then with basic auth if we were given any
+        # -- but only to a device whose unauthenticated answer names Yealink:
+        # the scan's credentials used to go to every host on the network that
+        # did not answer with a Yealink page (found in review of 26.11.3).
+        looks_like_yealink = False
         for auth in attempts:
+            if auth is not None and not looks_like_yealink:
+                break
             try:
                 async with session.get(url, params=params, auth=auth) as resp:
+                    if auth is None and resp.status == 401:
+                        hint = " ".join(
+                            (
+                                resp.headers.get("WWW-Authenticate", ""),
+                                resp.headers.get("Server", ""),
+                            )
+                        ).lower()
+                        looks_like_yealink = "yealink" in hint
                     if resp.status == 200:
                         body = await resp.text()
                         if "Yealink" in body or "yealink" in body:
@@ -862,7 +885,9 @@ async def _probe_yealink(
 async def _probe_generic_http(session: aiohttp.ClientSession, ip: str) -> DiscoveredPhone | None:
     """Generic HTTP probe — check page title for VoIP keywords."""
     try:
-        async with session.get(f"http://{ip}/", allow_redirects=True) as resp:
+        # No redirects: a device answering the scan could point the probe at
+        # any internal address the scan's own address check excluded.
+        async with session.get(f"http://{ip}/", allow_redirects=False) as resp:
             if resp.status == 200:
                 body = await resp.text(encoding="utf-8", errors="replace")
                 body_lower = body.lower()
@@ -1503,6 +1528,14 @@ async def test_phone_connection(
     # metadata / multicast / reserved targets before the host is interpolated
     # into any request URL. RFC1918 LAN phones (the real targets) pass through.
     # Mirrors the subnet-sweep guard above (arp_scan_subnet / run_discovery_scan).
+    # An IP literal only: a host NAME passes is_ssrf_blocked_ip (which judges
+    # addresses) and could resolve anywhere (found in review of 26.11.3).
+    try:
+        ipaddress.ip_address(ip.strip().strip("[]"))
+    except ValueError:
+        result["status"] = "blocked"
+        result["error"] = "Target must be an IP address"
+        return result
     if is_ssrf_blocked_ip(ip):
         result["status"] = "blocked"
         result["error"] = "Target IP is not permitted (SSRF guard)"
@@ -1557,7 +1590,7 @@ async def test_phone_connection(
             acct["account"] = str(acct_num)
         return acct if acct else None
 
-    conn = aiohttp.TCPConnector(ssl=False)
+    conn = checked_connector(ssl=False)
     client_timeout = aiohttp.ClientTimeout(total=timeout, connect=3.0)
     jar = aiohttp.CookieJar(unsafe=True)
 
@@ -1566,6 +1599,7 @@ async def test_phone_connection(
             connector=conn,
             timeout=client_timeout,
             cookie_jar=jar,
+            same_host_redirects=True,
         ) as session:
             # Step 1: HTTP reachability
             try:

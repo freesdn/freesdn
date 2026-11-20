@@ -89,7 +89,7 @@ from app.adapters.truenas.constants import (
     WS_METHOD_SYSTEM_INFO,
     WS_PATH,
 )
-from app.core.http_client import build_async_client
+from app.core.http_client import build_async_client, checked_addresses
 
 logger = logging.getLogger(__name__)
 
@@ -177,13 +177,35 @@ class TrueNASWSClient:
             rejected — do NOT fall back, surface the auth failure.
         """
         try:
-            self._ws = await _NoRedirectConnect(
-                self._uri,
-                ssl=self._ssl_context(),
-                max_size=MAX_RESPONSE_BYTES,
-                open_timeout=DEFAULT_CONNECT_TIMEOUT,
-                ping_interval=None,  # we drive traffic; no idle pings needed
+            # Connect to the checked address of the host (the name stays in TLS
+            # and the Host header), so a second lookup cannot send the login
+            # frame elsewhere (found in review of 26.11.3).
+            target = urlsplit(self._uri)
+            port = target.port or 443
+            addresses = await asyncio.wait_for(
+                checked_addresses(target.hostname or self.host, port), DEFAULT_CONNECT_TIMEOUT
             )
+            failure: OSError | None = None
+            for address in addresses:
+                try:
+                    self._ws = await _NoRedirectConnect(
+                        self._uri,
+                        host=address,
+                        port=port,
+                        ssl=self._ssl_context(),
+                        max_size=MAX_RESPONSE_BYTES,
+                        open_timeout=DEFAULT_CONNECT_TIMEOUT,
+                        ping_interval=None,  # we drive traffic; no idle pings needed
+                    )
+                    break
+                except ssl.SSLError:
+                    raise
+                except OSError as exc:
+                    # Refused or unreachable: the next checked address, if any.
+                    failure = exc
+            else:
+                assert failure is not None
+                raise failure
         except ssl.SSLCertVerificationError as exc:
             # Certificate failure is terminal; do not try the legacy transport.
             raise AdapterAuthenticationError("TrueNAS TLS certificate verification failed") from exc

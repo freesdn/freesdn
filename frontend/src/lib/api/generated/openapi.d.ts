@@ -30968,6 +30968,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/voip/fleet/sites/{site_id}/zero-touch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Zero Touch
+         * @description Whether zero-touch provisioning is on for a site.
+         */
+        get: operations["get_zero_touch_api_v1_voip_fleet_sites__site_id__zero_touch_get"];
+        /**
+         * Set Zero Touch
+         * @description Turn zero-touch provisioning on or off for a site.
+         *
+         *     On: a phone on one of the site's subnets may fetch its configuration,
+         *     SIP password included, without a signed URL, once in the 15 minutes after
+         *     Provision. A factory phone cannot prove who it is, so turn it on only for
+         *     a network where every device is trusted, such as a phone VLAN.
+         */
+        put: operations["set_zero_touch_api_v1_voip_fleet_sites__site_id__zero_touch_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/voip/pbx/": {
         parameters: {
             query?: never;
@@ -32096,9 +32125,10 @@ export interface paths {
          *       1. The MAC must resolve to a known Phone row — the tenant is
          *          derived from that row's site, NEVER from request input.
          *       2. The source IP must be inside one of the site's configured
-         *          subnets, OR the URL must carry a valid HMAC signature
-         *          (``?sig=<hex>``) generated from the same MAC + the server's
-         *          encryption key.
+         *          subnets while the phone's provisioning window is open (the
+         *          Provision actions open it for a few minutes), OR the URL must
+         *          carry a valid HMAC signature (``?sig=<hex>``) generated from the
+         *          same MAC + the server's encryption key.
          *
          *     Returns 404 on any failure so an attacker can't distinguish
          *     "MAC doesn't exist" from "MAC exists but you're not authorised".
@@ -33596,6 +33626,9 @@ export interface paths {
         /**
          * Get Tunnel Health History
          * @description Return time-series health data for a site-to-site tunnel.
+         *
+         *     The health checks are in the LogDB, a separate server on every installed
+         *     tier; the main database has no ``vpn.vpn_health_checks``.
          */
         get: operations["get_tunnel_health_history_api_v1_vpn_tunnels__tunnel_id__health_history_get"];
         put?: never;
@@ -62568,6 +62601,14 @@ export interface components {
             software?: string | null;
             /** Status */
             status: string;
+        };
+        /**
+         * ZeroTouchSetting
+         * @description Whether phones on a site's subnets may fetch their config without a signed URL.
+         */
+        ZeroTouchSetting: {
+            /** Enabled */
+            enabled: boolean;
         };
         /**
          * _BrainVPNImportRequest
@@ -125549,6 +125590,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_zero_touch_api_v1_voip_fleet_sites__site_id__zero_touch_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZeroTouchSetting"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_zero_touch_api_v1_voip_fleet_sites__site_id__zero_touch_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZeroTouchSetting"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZeroTouchSetting"];
                 };
             };
             /** @description Validation Error */

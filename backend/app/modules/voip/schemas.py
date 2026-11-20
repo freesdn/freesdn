@@ -14,7 +14,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 # A MAC is 12 hex digits with optional :/- separators (or bare). Validated on
 # Phone create/update because the value becomes a provisioning-config FILENAME
@@ -912,6 +912,28 @@ class ConfigTemplateResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_serializer(
+        "sip_settings",
+        "network_settings",
+        "provisioning_settings",
+        "feature_settings",
+        "raw_overrides",
+    )
+    def _hide_credentials(self, value: dict[str, Any]) -> dict[str, Any]:
+        # Readable with voip.view (the Viewer role): never return the phone
+        # admin password or a credential P-value (setting_secrets.py).
+        from app.modules.voip.setting_secrets import redact_settings
+
+        redacted: dict[str, Any] = redact_settings(value)
+        return redacted
+
+    @field_serializer("line_key_settings")
+    def _hide_line_key_credentials(self, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        from app.modules.voip.setting_secrets import redact_settings
+
+        redacted: list[dict[str, Any]] = redact_settings(value)
+        return redacted
 
 
 # =============================================================================

@@ -9,6 +9,258 @@ FreeSDN is a Community Edition project maintained by its sole owner and
 developer. Releases may contain breaking changes between versions -
 **back up your data before upgrading.**
 
+## [26.11.3] - 2026-11-20 - Security release
+
+A security release. It fixes the four known issues 26.11.2 listed (first-run
+setup, Lite on plain HTTP, phone provisioning trusted to the site network,
+watermarked export) and the problems a code review of the areas around them
+found. Every installation should upgrade.
+
+### Upgrading
+
+Two database migrations run when the API starts. Rebuild and recreate every
+image the way 26.11.2 describes: `install.sh` with your tier and topology
+flags (never `--domain`, `--email` or `--no-start`), or `docker compose build`
+and `up -d` with every `-f` file, env file and profile you use (keep
+`--scale edge=0` with nginx).
+
+- **Lite installed before 26.11.3** keeps plain HTTP on its old ports;
+  `install.sh` names the three settings that switch it to HTTPS.
+- **VoIP zero-touch provisioning** is now a per-site switch. A site that has
+  subnets and phones keeps it on after the upgrade; a new site starts with it
+  off. Turn it on or off on any phone's **Provisioning** tab (it applies to the
+  phone's site). Where it is on, a phone fetches its configuration from the
+  site network without a signed URL only once in the 15 minutes after
+  **Provision**, and only from the address FreeSDN has recorded for it. A
+  phone that used to pick up changes on its own periodic check now needs a
+  Provision after each change. For a new phone, power it on, run a discovery
+  scan so FreeSDN records its address, press Provision, and let it reboot.
+- **Signed provisioning URLs** now carry an expiry and work for at most 24
+  hours. A signed URL made before 26.11.3 no longer works.
+- **People with a read-only grant on a site** can no longer change anything
+  there in the VoIP module (see Security), and see what a Viewer sees.
+- **Changing a PBX's address, port or type** now needs its credentials entered
+  again; every other saved credential of that PBX is forgotten.
+- **A discovery scan without a network** now scans the site's first declared
+  subnet instead of 192.168.1.0/24, and is refused on a site with none.
+- **A device, sign-in provider or backup target entered as `localhost`**, or
+  as a name that resolves to a loopback, link-local or cloud-metadata
+  address, is refused: enter its network address. With the userspace
+  Tailscale proxy, use an address, a MagicDNS name, or a name FreeSDN's
+  server can resolve. A local AI model server (Ollama) on loopback keeps
+  working.
+- **Site grants:** deleting a phone or a PBX needs an admin grant on its
+  site, and a read-only grant can no longer place footage on hold or move a
+  camera.
+
+### Security
+
+- **First-run setup needs a one-time setup code.** Until the first
+  administrator existed, the first client to complete the setup form on a
+  fresh installation became that administrator. Until the first administrator
+  exists, every setup step that changes the installation now needs a code:
+  `install.sh` prints it with the URL, and `docker compose --env-file
+  .env.<tier> exec api python -m app.setup.setup_code` shows it (the API log
+  names that command, never the code). The wizard asks for it on its first
+  screen. The code stops working once the first administrator exists; the
+  remaining setup steps then need that administrator's login. Installations
+  that are already set up are not affected.
+- **Lite starts on HTTPS.** A new Lite installation served the web interface
+  over plain HTTP on port 8080, where a login password can be read on the
+  network. It now serves HTTPS on port 443 with Caddy's internal CA (the
+  browser warns until you trust it), like a new Pro or Max installation
+  without `--domain`. That `localhost` site answers only requests addressed to
+  `localhost`, which in practice means a browser on the host itself: to use
+  FreeSDN from other machines, install with `--domain` and the name or IP
+  address they will use (for example `./install.sh --domain 192.168.1.50`). An
+  existing Lite installation keeps its ports and its plain HTTP; `install.sh`
+  now warns about it and names the three settings that switch it:
+  `CADDY_SITE_ADDRESS=localhost` (or your domain), `EDGE_HTTP_PORT=80` and
+  `EDGE_HTTPS_PORT=443`. If those ports are taken on the host, keep other
+  ports and open `https://<host>:<EDGE_HTTPS_PORT>` directly; plain HTTP
+  redirects to port 443.
+- **A phone's configuration is served to the site network only where you
+  allow it, once, to the phone's recorded address, after you press
+  Provision.** Any device on a site subnet that knew a phone's MAC address
+  could fetch that phone's configuration, SIP password included, because a
+  factory phone has no way to prove who it is. Zero-touch provisioning is now
+  a per-site switch, off for new sites (see Upgrading), changed only by
+  someone who may manage phones with write access to the site, and recorded in
+  the audit log in the same transaction. Where it is on, an unsigned fetch is
+  served only in the 15 minutes after **Provision** (on the phone's page, or
+  the fleet bulk action), only once (the first fetch closes the window), only
+  from the site subnet, and only from the address FreeSDN has recorded for the
+  phone: a phone with no recorded address is not served. Every configuration
+  served without a signature is logged at warning level with the address it
+  went to. The single-phone action also asks the phone to reboot, so it
+  fetches the new config within that time; when the phone does not accept the
+  reboot, Provision says so, and you power-cycle it. After a bulk provision,
+  reboot the phones within 15 minutes. At any other time an unsigned fetch
+  gets the same "no config" answer as an unknown MAC, and the phone keeps the
+  config it has. A signed URL is checked first and works at any time until it
+  expires (at most 24 hours).
+- **Only those who may change a site's phones see their passwords.** The
+  config preview, the configuration templates, each phone's own settings, and
+  FreePBX extension details and staged extension changes showed the phone
+  admin password, SIP and voicemail passwords and any password set as a
+  P-value to the Viewer role and to read-only site grants. The config preview
+  now needs permission to manage phones and write access to the phone's site
+  and its template's site. In templates and phone settings, anyone without
+  both (permission to manage phones, and write access to that site) sees
+  `********` for every P-value, every password field and every server address
+  with a login in it; someone with both sees `********` for the known
+  passwords. They also no longer see a phone's config checksum, its window's
+  closing time or its last-provisioned time, nor a firmware download address
+  with a login in it. FreeSDN's shared redaction of device, controller and
+  staged-change data now also hides any field whose name ends in `password`,
+  `passwd` or `secret`, shown there as `***` (yes/no flags stay visible).
+  Saving a template that still shows a placeholder keeps the stored value, and
+  a template or phone created from one stores nothing in its place. API keys,
+  passphrases, tokens and PINs are treated as passwords too (a voicemail PIN
+  no longer stays readable in a staged extension change). Error messages from
+  FreePBX no longer include the PBX's response body, and a message from the
+  PBX itself is hidden when it contains a credential FreeSDN sent or looks
+  like it holds one. With the optional nginx edge, phone provisioning
+  requests are not written to its access log, where a signed URL would be
+  readable.
+- **A read-only site grant can no longer change anything in the VoIP
+  module.** Someone whose access to a site is read-only could still create,
+  onboard, change, move, reboot, factory-reset, decommission or delete a phone
+  there, push SIP settings to it, save its web credentials, link it to
+  extensions, put it in maintenance, run a connection test that saves to it,
+  edit or delete the site's templates, start a discovery scan that adds
+  phones, give a phone a template from a site they may only read, open a
+  provisioning window, add, edit, delete, connect or re-sync the site's PBX,
+  place, hang up, transfer and queue calls on it, change its voicemail,
+  register firmware for the site, and cancel or delete its discovery scans.
+  Each of these now needs write access to the site (and to the template's
+  site), checked before anything is written or handed to a background worker.
+  Deleting a phone or a PBX needs an admin grant on its site; a write grant no
+  longer can.
+- **A PBX's saved credentials stay with the address they were entered for.**
+  Changing a PBX's address, port or type kept its saved credentials, so the
+  next connection sent them to the new address. It now needs the credentials
+  entered again, and every saved credential not entered with the change is
+  forgotten. Creating or editing a PBX no longer returns its stored, encrypted
+  credentials, and a stored encrypted value is refused where a credential is
+  entered (sending one back used to make FreeSDN decrypt it for the new
+  address). A PBX sync that was running while its address or credentials
+  changed no longer writes the old credentials back when it finishes, and a
+  phone login tested at a new address is saved only when the device there
+  reported the MAC address FreeSDN has recorded for the phone, and the login
+  and the new address are saved together or not at all.
+- **Passwords stay out of messages and logs.** A FreePBX, Asterisk or
+  Grandstream message that repeats a password FreeSDN sent under a
+  recognized name (an extension password, a voicemail PIN) is hidden from
+  errors and logs. A failed sign-in with an OIDC provider reports only a
+  standard OAuth error code, never the provider's reply (which could repeat
+  the client secret). A connection test hides the
+  credentials in the configuration a phone reports, and a SIP registrar
+  address with a login in it is hidden in phone responses. nginx no longer
+  writes a phone's signed provisioning link to its access log when the phone
+  starts on plain HTTP, nor in the HA load balancer.
+- **FreeSDN checks the address it actually connects to.** Every adapter
+  refuses a host that is, or resolves to, a loopback, link-local or
+  cloud-metadata address, in any form (`localhost`, `[::ffff:127.0.0.1]`).
+  A host entered as anything but a name or an address (`x@127.0.0.1`) is
+  refused. FreeSDN's outbound connections (devices, sign-in providers, backup
+  targets, downloads, the FreePBX AMI and TrueNAS connections) check that
+  again for the address each direct connection, redirects included,
+  really goes to, so a name that resolves somewhere else by then (DNS
+  rebinding) is refused;
+  the name is still used for TLS, cookies and the Host header. Through the
+  userspace Tailscale proxy, FreeSDN asks for the checked address (a MagicDNS
+  name goes by name), and HTTP(S)_PROXY settings are honored. A local AI
+  provider (Ollama on the same host) may use loopback, never a link-local or
+  cloud-metadata address; private, Docker and Tailscale addresses are
+  unaffected. Redirects from FreePBX (REST and ARI), Grandstream and discovery
+  must stay on the same scheme, host and port (HTTP to HTTPS on the same host
+  is allowed).
+- **Discovery no longer changes a phone it was not asked about.** A scan took
+  whatever device answered with a phone's MAC address as that phone's new
+  address, where FreeSDN then sends its SIP settings and reboots it, and it
+  matched phones on other sites. A scan now changes only phones on its own
+  site (a phone found on another site is left alone and not onboarded), and a
+  phone's recorded address is kept whatever its state: a new address is noted
+  as pending until a connection test at that address, run by someone with
+  write access to the site, logs in to the phone, saves the credentials it
+  used, and finds the same MAC. A connection test records what a device says
+  about itself (model, firmware, MAC) only after it accepted the login, and a
+  MAC that differs from the recorded one is noted, not applied. A connection
+  test needs an IP address, not a host name; someone limited to some sites
+  may scan only networks declared on their site; the discovery probes refuse
+  a redirect to another host, which a device could use to point them at an
+  internal address; and the Yealink and Grandstream probes send the scan's
+  login (for Grandstream also its challenge login, which carries a hash of the
+  password) only to a device that identified itself as that brand, not to
+  every host that answers.
+- **Camera exports and stream links follow the per-camera checks.** A raw
+  clip export could name another camera's track on the same recorder,
+  evidence downloads and bundles skipped the per-camera export check (bundles
+  also skipped the site check), and the stream-link route skipped the
+  per-camera live check. Each now applies the same checks as the camera's own
+  live view and export (a site administrator keeps access to a camera that has
+  no explicit grants, as before). An RTSP stream link never carries a
+  recorder's shared login, which would open every camera on that recorder.
+  A login stored inside a camera's stream URL is never handed out either; the
+  only login an RTSP link carries is the camera's own, and a channel imported
+  from a recorder never carries one (its stored login is the recorder's). A
+  credential in a stream address's query (`?password=`, `?accessToken=`) is
+  dropped from the link and hides the address in camera responses. Evidence
+  whose camera was deleted stays downloadable by an organization
+  administrator. A read-only site grant can watch and play back
+  but no longer put footage on hold, move a camera or start and stop its
+  patrol; deleting held evidence needs delete-level access to the site and
+  the camera's export grant. A user limited to some sites can no longer
+  create, change or revoke camera grants that reach cameras on other sites
+  (a group grant only when every camera in the group is in their sites).
+
+### Fixed
+
+- **A moved phone can be tested at its new address from the phone page.** The
+  connection test has an optional address field and offers the address
+  discovery last saw the phone at; it used to test only the recorded address.
+- **Provision works for a phone linked to an extension.** It failed with an
+  error for every such phone, so it could not write the phone's config.
+- **A phone is never sent another phone's old configuration.** A config file
+  left on disk by a deleted phone was served to a new phone with the same MAC
+  address until its config was regenerated. FreeSDN now serves a file only
+  when it matches the phone's current configuration.
+- **Watermarked clip export works.** It started FFmpeg with two timeout
+  options FFmpeg 9 refuses (`-stimeout`, renamed `-timeout` in FFmpeg 5, and
+  `-rw_timeout`, which the RTSP reader does not have) and drew the watermark
+  with a font the image did not have, so every watermarked export came back
+  empty. It now uses `-timeout`, and the image installs the font. A
+  watermarked download now ends with an error, not an apparently complete
+  file, when FFmpeg fails.
+- **A legal hold is sealed only when its clip covers the window.** FFmpeg ends
+  an export with success when the recorder simply stops sending, for example
+  on a dropped connection, so a partial clip could have been hashed and sealed
+  as the whole requested window. A hold now measures the video it received,
+  leaving out each stretch of more than 3 seconds without a frame, and fails
+  with a clear message when that falls short of the window by more than 10%
+  (at least 2 seconds, at most 10, never more than half the window). Shorter
+  pauses count as video. A hold without a watermark is measured the same way;
+  an MPEG-PS export from older recorders, which FreeSDN's FFmpeg does not
+  read, is measured from the recorder's clock in the stream, counting the
+  time between packets that carry valid, timestamped video. A clip that
+  cannot be measured (a truncated or damaged file, for example), a
+  measurement that fails or times out, or a clip with no video fails the
+  hold. The check
+  measures how much video the clip holds; the times it shows come from the
+  recorder.
+- **An original clip export that goes over the 10 GiB limit ends with an
+  error.** It used to stop quietly, so the incomplete file looked complete,
+  and a legal hold sealed it.
+- **Configuration backups.** A vault backup keeps templates exactly as stored,
+  so a restore loses none of their passwords. A configuration backup without
+  secrets leaves out the recognized credentials, server addresses with a login
+  in them, FreePBX `sippasswd`, and every raw P-value override in templates,
+  since a Grandstream password can sit under a P-value FreeSDN does not know.
+- **The camera page no longer promises to decrypt Hikvision streams.** It
+  asked for a stream encryption key "to decrypt the RTSP stream", but nothing
+  uses that key. It now says to turn stream encryption off to view the camera.
+
 ## [26.11.2] - 2026-11-18 - nginx and FFmpeg security hotfix
 
 A security hotfix for two components. nginx published fixes on 2026-11-18 for

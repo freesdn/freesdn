@@ -27,6 +27,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.adapters.grandstream.constants import (
     P_ACCOUNT_ACTIVE,
@@ -66,6 +67,19 @@ class ProvisioningStorageError(ProvisioningError):
     broken appliance and must NOT be dressed up as an unknown device — see
     ``get_config_for_mac``.
     """
+
+
+# Template fields whose credentials reads replace with a placeholder.
+_SECRET_BEARING_TEMPLATE_FIELDS = frozenset(
+    {
+        "sip_settings",
+        "network_settings",
+        "provisioning_settings",
+        "feature_settings",
+        "raw_overrides",
+        "line_key_settings",
+    }
+)
 
 
 class ProvisioningService:
@@ -176,7 +190,18 @@ class ProvisioningService:
             ).scalar()
             if allowed is None:
                 raise ProvisioningError(f"Site not accessible: {site_id}")
+        from app.core.site_access import assert_site_write_for_request
 
+        assert_site_write_for_request(site_id)
+
+        # A template duplicated from a read response carries the placeholder
+        # where each credential was; store nothing there, never the stars.
+        from app.modules.voip.setting_secrets import restore_redacted
+
+        data = {
+            key: restore_redacted(value, None) if key in _SECRET_BEARING_TEMPLATE_FIELDS else value
+            for key, value in data.items()
+        }
         template = ConfigTemplate(**data)
         self.db.add(template)
         await self.db.commit()
@@ -186,10 +211,20 @@ class ProvisioningService:
 
     async def update_template(self, template_id: UUID, data: dict[str, Any]) -> Any:
         """Update a config template."""
+        from app.core.site_access import assert_site_write_for_request
+
         template = await self.get_template(template_id)
+        # A template's settings reach every phone that uses it: a read-only
+        # grant on its site may not change them (found in review of 26.11.3).
+        assert_site_write_for_request(template.site_id)
+        from app.modules.voip.setting_secrets import restore_redacted
 
         for key, value in data.items():
             if value is not None and hasattr(template, key):
+                if key in _SECRET_BEARING_TEMPLATE_FIELDS and isinstance(value, (dict, list)):
+                    # Reads show a placeholder for each credential; sending
+                    # it back must keep the stored value, not save the stars.
+                    value = restore_redacted(value, getattr(template, key))
                 setattr(template, key, value)
 
         await self.db.commit()
@@ -199,7 +234,10 @@ class ProvisioningService:
 
     async def delete_template(self, template_id: UUID) -> bool:
         """Soft-delete a config template."""
+        from app.core.site_access import assert_site_write_for_request
+
         template = await self.get_template(template_id)
+        assert_site_write_for_request(template.site_id)
         template.deleted_at = datetime.now(UTC)
         await self.db.commit()
         return True
@@ -246,9 +284,14 @@ class ProvisioningService:
         phone_id: UUID,
         write_file: bool = True,
         force: bool = False,
+        open_window: bool = False,
     ) -> dict[str, Any]:
         """
         Generate provisioning config for a single phone.
+
+        ``open_window`` lets an unsigned fetch from the site subnet pull the
+        config for a few minutes (see ``provisioning_auth``). Only the
+        operator's Provision actions pass it; the phone's own fetch never does.
 
         Merges template settings with phone-specific overrides to produce
         a vendor-appropriate XML config file.
@@ -274,7 +317,15 @@ class ProvisioningService:
         # unauthenticated MAC-pull path (``get_config_for_mac``) runs with no
         # request user, so the grant no-ops and only the resolved-tenant org
         # filter applies (correct).
-        phone_q = select(Phone).where(Phone.id == phone_id, Phone.deleted_at.is_(None))
+        #
+        # The renderers read ``phone.extension``; a lazy load there raises in
+        # an async session, so every phone linked to an extension failed to
+        # provision (found in review of the 26.11.3 candidate).
+        phone_q = (
+            select(Phone)
+            .options(selectinload(Phone.extension))
+            .where(Phone.id == phone_id, Phone.deleted_at.is_(None))
+        )
         if self.organization_id:
             phone_q = phone_q.where(Phone.site_id.in_(select(self._sites_for_org().c.id)))
         result = await self.db.execute(phone_q)
@@ -296,6 +347,17 @@ class ProvisioningService:
                 )
             )
             template = t_result.scalar_one_or_none()
+
+        if open_window:
+            # An operator's Provision: it writes the config and hands it,
+            # credentials included, to the site network. Refuse a read-only
+            # grant on the phone's site or on the template's site BEFORE
+            # anything is written (found in review of 26.11.3).
+            from app.core.site_access import assert_site_write_for_request
+
+            assert_site_write_for_request(phone.site_id)
+            if template is not None:
+                assert_site_write_for_request(template.site_id)
 
         # Generate vendor-specific XML
         vendor = (phone.vendor or "grandstream").lower()
@@ -322,6 +384,11 @@ class ProvisioningService:
         phone.last_provisioned_at = datetime.now(UTC)
         if file_path:
             phone.provisioning_url = f"/provisioning/voip/{Path(file_path).name}"
+        window_until = None
+        if open_window:
+            from app.modules.voip.provisioning_auth import open_provisioning_window
+
+            window_until = open_provisioning_window(phone)  # write access checked above
 
         await self.db.commit()
 
@@ -333,6 +400,7 @@ class ProvisioningService:
             "forced": bool(force and not config_changed),
             "phone_id": str(phone_id),
             "mac_address": phone.mac_address,
+            "provisioning_open_until": window_until.isoformat() if window_until else None,
         }
 
     async def generate_config_preview(
@@ -346,7 +414,11 @@ class ProvisioningService:
         # _sites_for_org, which intersects site_ids_for_request). The preview
         # endpoint (GET /phones/{id}/config-preview) previously returned the
         # rendered config XML for a sibling-site phone to a site-limited viewer.
-        phone_q = select(Phone).where(Phone.id == phone_id, Phone.deleted_at.is_(None))
+        phone_q = (
+            select(Phone)
+            .options(selectinload(Phone.extension))
+            .where(Phone.id == phone_id, Phone.deleted_at.is_(None))
+        )
         if self.organization_id:
             phone_q = phone_q.where(Phone.site_id.in_(select(self._sites_for_org().c.id)))
         result = await self.db.execute(phone_q)
@@ -361,17 +433,32 @@ class ProvisioningService:
             )
             template = t_result.scalar_one_or_none()
 
+        # The preview renders the template's credentials into the phone's
+        # config: write access to both sites, like Provision (26.11.3).
+        from app.core.site_access import assert_site_write_for_request
+
+        assert_site_write_for_request(phone.site_id)
+        if template is not None:
+            assert_site_write_for_request(template.site_id)
+
         vendor = (phone.vendor or "grandstream").lower()
         if vendor == "grandstream":
-            return self._generate_grandstream_xml(phone, template)
+            xml = self._generate_grandstream_xml(phone, template)
         elif vendor == "yealink":
-            return self._generate_yealink_xml(phone, template)
-        return self._generate_generic_xml(phone, template)
+            xml = self._generate_yealink_xml(phone, template)
+        else:
+            xml = self._generate_generic_xml(phone, template)
+        # The preview is readable with voip.view: show where the passwords
+        # go, never what they are (setting_secrets.py).
+        from app.modules.voip.setting_secrets import redact_config_xml
+
+        return redact_config_xml(xml)
 
     async def bulk_generate_configs(
         self,
         phone_ids: list[UUID] | None = None,
         site_id: UUID | None = None,
+        open_window: bool = False,
     ) -> dict[str, Any]:
         """
         Generate configs for multiple phones.
@@ -417,7 +504,9 @@ class ProvisioningService:
 
         for phone in phones:
             try:
-                result_data = await self.generate_phone_config(phone.id, write_file=True)
+                result_data = await self.generate_phone_config(
+                    phone.id, write_file=True, open_window=open_window
+                )
                 generated += 1
                 if result_data.get("config_changed"):
                     changed += 1
@@ -487,9 +576,16 @@ class ProvisioningService:
         file_path = self._config_file_path(colon_mac, vendor)
         if file_path.exists():
             content = file_path.read_text(encoding="utf-8")
-            phone.provision_status = ProvisionStatus.APPLIED.value
-            await self.db.commit()
-            return content, "application/xml"
+            # Serve the file only if it is THIS phone's current config: a file
+            # left by a deleted phone with the same MAC holds that phone's SIP
+            # password (found in review of 26.11.3). Otherwise regenerate.
+            if (
+                phone.config_checksum
+                and hashlib.sha256(content.encode("utf-8")).hexdigest() == phone.config_checksum
+            ):
+                phone.provision_status = ProvisionStatus.APPLIED.value
+                await self.db.commit()
+                return content, "application/xml"
 
         # Generate on-the-fly
         try:

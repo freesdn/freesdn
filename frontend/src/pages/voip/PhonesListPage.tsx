@@ -141,7 +141,14 @@ export default function PhonesListPage() {
 
   const provisionMutation = useMutation({
     mutationFn: (id: string) => voipApi.provisionPhone(id, { force: true }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['voip-phones'] }),
+    onSuccess: (res: any) => {
+      queryClient.invalidateQueries({ queryKey: ['voip-phones'] });
+      // A phone that refused the reboot only fetches its new config if it
+      // restarts inside the 15-minute provisioning window.
+      if (res?.data?.rebooted === false) {
+        toast({ title: t('PhoneDetailPage.toasts.rebootRefused'), variant: 'destructive' });
+      }
+    },
     onError: (err: any) => toast({ title: t('PhonesListPage.toasts.provisionFailed'), description: getApiErrorMessage(err), variant: 'destructive' }),
   });
 

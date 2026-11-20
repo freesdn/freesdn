@@ -494,6 +494,202 @@ async def cleanup_camera_events(self: Any) -> dict[str, Any]:
 # Evidence Archive (legal hold) — copy a clip off the NVR to durable storage
 # =========================================================================
 
+# A clip may start at the recorder's keyframe after the window opens and lose a
+# frame or two at the end, so it may fall short of the window by a little: 10%
+# of the window, at least 2 s (a keyframe interval) and at most 10 s. The
+# larger of 10 s and 5% (the first 26.11.3 candidate) let a 15 s hold seal 6 s.
+_COVERAGE_SHORTFALL_MIN_SECONDS = 2.0
+_COVERAGE_SHORTFALL_MAX_SECONDS = 10.0
+_COVERAGE_SHORTFALL_FRACTION = 0.10
+# Consecutive frames further apart than this are a gap in the recording, not
+# video: even a 1 fps stream has a frame every second.
+_COVERAGE_MAX_FRAME_GAP_SECONDS = 3.0
+
+
+async def _clip_frame_times(path: str) -> list[float] | None:
+    """The timestamp of every video packet in a clip, in order.
+
+    None when the clip could not be measured: ffprobe failed, timed out, or
+    found fewer than two video packets. An original MPEG-PS export, which this
+    FFmpeg does not read, is measured by :func:`_mpeg_ps_covered_seconds`.
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "packet=pts_time",
+            "-of",
+            "csv=p=0",
+            path,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
+    except (OSError, TimeoutError):
+        return None
+    times = []
+    for line in out.decode("ascii", "replace").splitlines():
+        with contextlib.suppress(ValueError):
+            times.append(float(line.strip().rstrip(",")))
+    if proc.returncode != 0 or len(times) < 2:
+        return None
+    return sorted(times)
+
+
+def _scr_seconds(header: bytes) -> float | None:
+    """The system clock reference of an MPEG-2 pack header (the 10 bytes after
+    its start code), in seconds; None when the bytes are not one."""
+    if len(header) < 6:
+        return None
+    b0, b1, b2, b3, b4, b5 = header[:6]
+    if b0 & 0xC0 != 0x40 or not (b0 & 0x04 and b2 & 0x04 and b4 & 0x04 and b5 & 0x01):
+        return None
+    base = (
+        ((b0 >> 3) & 0x07) << 30
+        | (b0 & 0x03) << 28
+        | b1 << 20
+        | ((b2 >> 3) & 0x1F) << 15
+        | (b2 & 0x03) << 13
+        | b3 << 5
+        | (b4 >> 3) & 0x1F
+    )
+    return base / 90000.0
+
+
+def _mpeg_ps_covered_seconds(path: str) -> float | None:
+    """Seconds of video in an MPEG-2 program stream (older Hikvision exports).
+
+    This FFmpeg does not read the format, so the clip is measured here. Every
+    pack header carries the recorder's clock. A pack counts as video when a
+    valid video packet (a well-formed MPEG-2 PES header, its timestamp checked
+    when it has one) starts inside it; seconds between consecutive video packs
+    count when they are no further apart than a frame gap, so interleaved
+    audio packs neither add nor break coverage. None when the file holds no
+    timestamped video, so a truncated, zero-filled or corrupt export fails the
+    hold like any other (found in review of 26.11.3).
+    """
+    covered = 0.0
+    previous_video: float | None = None
+    current: float | None = None  # clock of the pack being read
+    current_has_video = False
+    timestamped_video = False
+
+    def close_pack() -> None:
+        nonlocal covered, previous_video
+        if current is None or not current_has_video:
+            return
+        if (
+            previous_video is not None
+            and 0 <= current - previous_video <= _COVERAGE_MAX_FRAME_GAP_SECONDS
+        ):
+            covered += current - previous_video
+        previous_video = current
+
+    # Bytes needed after a start code to read a pack header (14) or a PES
+    # header with its timestamp (14).
+    needed = 14
+    tail = b""
+    try:
+        with open(path, "rb") as clip:
+            while True:
+                chunk = clip.read(1 << 20)
+                data = tail + chunk
+                last = not chunk
+                limit = len(data) if last else max(0, len(data) - needed)
+                position = 0
+                while position < limit:
+                    found = data.find(b"\x00\x00\x01", position, limit + 3)
+                    if found == -1 or found >= limit:
+                        break
+                    kind = data[found + 3] if found + 3 < len(data) else -1
+                    if kind == 0xBA:
+                        clock = _scr_seconds(data[found + 4 : found + 14])
+                        if clock is not None:
+                            close_pack()
+                            current, current_has_video = clock, False
+                    elif 0xE0 <= kind <= 0xEF and current is not None:
+                        pes = _video_pes_header(data[found : found + 14])
+                        if pes is not None:
+                            current_has_video = True
+                            timestamped_video = timestamped_video or pes
+                    position = found + 3
+                if last:
+                    break
+                tail = data[max(position, limit) :]
+    except OSError:
+        return None
+    close_pack()
+    if not timestamped_video or previous_video is None:
+        return None
+    return covered
+
+
+def _video_pes_header(header: bytes) -> bool | None:
+    """Check the MPEG-2 PES header at the start of ``header`` (from its start
+    code): None when it is not one, else whether it carries a valid PTS."""
+    if len(header) < 9 or header[6] & 0xC0 != 0x80:
+        return None
+    flags, header_length = header[7], header[8]
+    if not flags & 0x80:
+        return False
+    if header_length < 5 or len(header) < 14:
+        return None
+    pts = header[9:14]
+    if pts[0] & 0xE1 not in (0x21, 0x31) or not (pts[2] & 0x01 and pts[4] & 0x01):
+        return None
+    return True
+
+
+def _covered_seconds(times: list[float]) -> float:
+    """Seconds of video, not counting gaps between frames longer than a gap."""
+    return sum(
+        later - earlier
+        for earlier, later in zip(times, times[1:], strict=False)
+        if later - earlier <= _COVERAGE_MAX_FRAME_GAP_SECONDS
+    )
+
+
+def _allowed_shortfall(requested: float) -> float:
+    # Never more than half the window: at 2 s minimum a 2 s hold would
+    # otherwise have needed no video at all.
+    return min(
+        _COVERAGE_SHORTFALL_MAX_SECONDS,
+        max(_COVERAGE_SHORTFALL_MIN_SECONDS, requested * _COVERAGE_SHORTFALL_FRACTION),
+        requested / 2,
+    )
+
+
+async def _require_window_coverage(
+    path: str, start: datetime, end: datetime, *, readable_required: bool = True
+) -> bool:
+    """Refuse to seal a watermarked clip that does not cover the requested window.
+
+    FFmpeg ends a watermarked export with status 0 when the recorder simply
+    stops sending, for example on a dropped connection, so the size of the file
+    proves nothing: measure the video it holds. This checks how much video the
+    clip holds, not the wall-clock times it shows: those come from the recorder.
+    """
+    requested = (end - start).total_seconds()
+    times = await _clip_frame_times(path)
+    covered = None if times is None else _covered_seconds(times)
+    if covered is None and not readable_required:
+        # An original export in MPEG-PS (older recorders), which this FFmpeg
+        # does not read: measured from its pack clocks instead.
+        covered = await asyncio.to_thread(_mpeg_ps_covered_seconds, path)
+    if covered is None or covered < requested - _allowed_shortfall(requested):
+        got = "an unreadable clip" if covered is None else f"{covered:.0f} s of video"
+        raise RuntimeError(
+            f"the export holds {got} for the requested {requested:.0f} s window "
+            "(the recorder ended the stream early, or the window has gaps in its "
+            "recording); nothing was sealed"
+        )
+    return True
+
 
 async def _archive_evidence(archive_id: UUID) -> dict[str, Any]:
     """Export the held time-window off the NVR to EVIDENCE_DIR, hashing as we go,
@@ -567,6 +763,12 @@ async def _archive_evidence(archive_id: UUID) -> dict[str, Any]:
                     size += len(chunk)
             if size < 1024:
                 raise RuntimeError("export produced no decodable footage for this window")
+            # Every hold is measured, an original MPEG-PS export from its pack
+            # clocks (found in review of 26.11.3: original holds were never
+            # checked, then sealed unchecked on four header bytes).
+            await _require_window_coverage(
+                path, arch.start_time, arch.end_time, readable_required=arch.watermarked
+            )
             arch.status = "ready"
             arch.file_path = path
             arch.file_size = size

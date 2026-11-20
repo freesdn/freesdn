@@ -25,8 +25,11 @@ pytestmark = pytest.mark.asyncio
 
 async def test_setup_admin_creates_super_admin(integration_client: Any) -> None:
     """A fresh DB allows POST /setup/admin to create exactly one super_admin."""
+    from app.setup.setup_code import SETUP_CODE_HEADER, ensure_setup_code
+
     resp = await integration_client.post(
         "/api/v1/setup/admin",
+        headers={SETUP_CODE_HEADER: await ensure_setup_code()},
         json={
             "email": "first.admin@example.com",
             "username": "first_admin",

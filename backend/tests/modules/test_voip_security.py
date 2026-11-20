@@ -273,7 +273,7 @@ class TestVoIPServicePhoneWritesReadOnly:
 
         svc = self._service()
         svc.get_phone = AsyncMock(  # type: ignore[method-assign]
-            return_value=SimpleNamespace(id=uuid4(), ip_address="192.0.2.1")
+            return_value=SimpleNamespace(id=uuid4(), ip_address="192.0.2.1", site_id=None)
         )
         svc._grandstream_client_for_phone = AsyncMock(  # type: ignore[method-assign]
             side_effect=AssertionError("must not build client under read-only")
@@ -289,7 +289,7 @@ class TestVoIPServicePhoneWritesReadOnly:
 
         svc = self._service()
         svc.get_phone = AsyncMock(  # type: ignore[method-assign]
-            return_value=SimpleNamespace(id=uuid4(), ip_address="192.0.2.1")
+            return_value=SimpleNamespace(id=uuid4(), ip_address="192.0.2.1", site_id=None)
         )
         svc._grandstream_client_for_phone = AsyncMock(  # type: ignore[method-assign]
             side_effect=AssertionError("must not build client under read-only")
@@ -310,6 +310,7 @@ class TestVoIPServicePhoneWritesReadOnly:
                 ip_address="192.0.2.1",
                 extension_id=uuid4(),
                 pbx_id=uuid4(),
+                site_id=None,
             )
         )
         with pytest.raises(VoIPError):

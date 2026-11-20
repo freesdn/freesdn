@@ -44,15 +44,18 @@ def test_build_async_client_injects_proxy_only_when_userspace(monkeypatch):
     # With httpx's SOCKS support installed (see the fallback tests below).
     monkeypatch.setattr(http_client, "_socks_support", lambda *_a: True)
 
-    # off -> no proxy injected
+    # off -> no proxy: a direct transport that checks every address
     _clear_vpn_env(monkeypatch)
     http_client.build_async_client(base_url="http://device")
     assert "proxy" not in captured
+    assert isinstance(captured["transport"], http_client._CheckedHostTransport)
 
-    # userspace -> proxy injected
+    # userspace -> through the overlay proxy, asked for checked addresses (26.11.3)
     monkeypatch.setenv("FREESDN_VPN_AUTOSTART", "true")
     http_client.build_async_client(base_url="http://device")
-    assert captured.get("proxy") == "socks5://127.0.0.1:1055"
+    transport = captured["transport"]
+    assert isinstance(transport, http_client._CheckedProxyTransport)
+    assert transport._proxy == "socks5://127.0.0.1:1055" and transport._pin is True
 
     # an explicit caller proxy is always respected (never overridden)
     http_client.build_async_client(base_url="http://device", proxy="socks5://explicit")

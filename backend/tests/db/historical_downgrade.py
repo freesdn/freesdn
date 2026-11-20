@@ -56,6 +56,31 @@ def _snapshot(engine):
     return data, columns, constraints, indexes
 
 
+# Columns later revisions add to tables that hold historical rows. Each row
+# gains the column with its default; every other value must be unchanged.
+_ADDED_COLUMNS = {
+    "core.sites": ("voip_zero_touch_provisioning",),  # 036
+    "voip.phones": ("provisioning_open_until",),  # 035
+}
+
+
+def _without_added_columns(name, rows):
+    added = _ADDED_COLUMNS.get(name)
+    if not added:
+        return rows
+    import json
+
+    kept = []
+    for row in rows:
+        item = json.loads(row)
+        for column in added:
+            item.pop(column, None)
+        kept.append(json.dumps(item, sort_keys=True))
+    # Both sides go through this, so the comparison is of values, not of
+    # PostgreSQL's text formatting.
+    return sorted(kept)
+
+
 def require_current_audit_protection(url, engine, target, record_property):
     """After legacy assertions, qualify the real CLI head upgrade/refusal too."""
     run_alembic(url, "upgrade", HISTORICAL_HEAD)
@@ -63,12 +88,14 @@ def require_current_audit_protection(url, engine, target, record_property):
     config = Config(str(BACKEND_ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
     head = ScriptDirectory.from_config(config).get_current_head()
-    assert head == "034_change_groups"
+    assert head == "036_site_zero_touch_provisioning"
     run_alembic(url, "upgrade", "head")
     before = _snapshot(engine)
     for name, rows in historical.items():
         if name != "public.alembic_version":
-            assert before[0][name] == rows, name
+            assert _without_added_columns(name, before[0][name]) == _without_added_columns(
+                name, rows
+            ), name
     assert set(before[0]) - set(historical) == {
         "audit.audit_chain_state",
         # 031: network device configuration backup (targets + encrypted snapshots).

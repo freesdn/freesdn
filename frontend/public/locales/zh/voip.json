@@ -456,13 +456,19 @@
       "provisioningInfo": "配置下发信息",
       "configPreview": "配置预览",
       "configPreviewDesc": "生成的配置下发内容",
-      "assignTemplateHint": "分配模板以生成配置"
+      "assignTemplateHint": "分配模板以生成配置",
+      "previewNeedsManage": "查看配置预览需要管理话机的权限。"
     },
     "provisioning": {
       "statusTitle": "配置下发状态",
       "statusDesc": "当前配置下发状态与历史",
       "provisioning": "下发中...",
       "provisionNow": "立即下发",
+      "windowHint": "写入配置并请求话机重启。如果本站点开启了零接触配置，之后 15 分钟内话机可从其已记录的地址无需签名 URL 获取一次配置。",
+      "zeroTouchTitle": "本站点的零接触配置",
+      "zeroTouchHint": "开启后，站点子网中的话机无需签名 URL 即可获取配置（含 SIP 密码）：在点击“下发”后的 15 分钟内，只能从 FreeSDN 为其记录的地址获取一次。出厂话机无法证明自己的身份：请仅在所有设备都可信的网络（例如话机 VLAN）中开启。",
+      "zeroTouchTurnOn": "开启",
+      "zeroTouchTurnOff": "关闭",
       "firmware": "固件",
       "firmwareDesc": "当前固件版本与合规情况"
     },
@@ -474,6 +480,10 @@
       "description": "测试与话机 Web 界面的连接和登录 · 获取设备信息、SIP 注册状态并验证凭据",
       "username": "用户名",
       "password": "密码",
+      "address": "地址（可选）",
+      "addressHint": "留空则测试已记录的地址（{{ip}}）。",
+      "discoveredAt": "发现扫描最近在 {{address}} 看到此话机。",
+      "useDiscovered": "在该地址测试",
       "saveCreds": "登录成功后保存凭据",
       "testing": "测试中...",
       "testConnection": "测试连接",
@@ -578,6 +588,8 @@
     },
     "toasts": {
       "previewFailed": "预览失败",
+      "rebootRefused": "话机未接受重启。请在 15 分钟内给它断电重启，以便获取新配置。",
+      "zeroTouchFailed": "无法更改零接触配置",
       "sipConfigPushed": "SIP 配置已下发",
       "pushFailed": "下发失败",
       "migrationPreviewFailed": "迁移预览失败",

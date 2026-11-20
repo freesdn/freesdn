@@ -66,7 +66,9 @@ def service(monkeypatch: pytest.MonkeyPatch) -> VoIPService:
     db.commit = AsyncMock()
     db.rollback = AsyncMock()
     svc = VoIPService(db=db, organization_id=ORG_ID)
-    pbx = SimpleNamespace(id=PBX_ID, name="main-pbx", pbx_type="freepbx", last_seen=None)
+    pbx = SimpleNamespace(
+        id=PBX_ID, name="main-pbx", pbx_type="freepbx", last_seen=None, site_id=None
+    )
     monkeypatch.setattr(svc, "get_pbx", AsyncMock(return_value=pbx))
     monkeypatch.setattr(svc, "_adapter_from_pbx", lambda _pbx: _Adapter())
     return svc

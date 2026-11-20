@@ -41,6 +41,16 @@ def _previous_revision() -> str:
 
 
 def _seed(engine: sa.Engine) -> dict[str, object]:
+    # The database is at the revision before 032, but sites are written through
+    # today's model, which maps the column migration 036 adds. These tests
+    # never upgrade past 032.
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                "ALTER TABLE core.sites ADD COLUMN IF NOT EXISTS "
+                "voip_zero_touch_provisioning boolean NOT NULL DEFAULT false"
+            )
+        )
     with Session(engine) as db:
         org = Organization(name="MAC migration", slug=f"mac-mig-{uuid4().hex[:8]}")
         db.add(org)

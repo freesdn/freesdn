@@ -79,6 +79,11 @@ class FakeAMIServer:
             return
 
 
+# The fake AMI server listens on 127.0.0.1, which FreeSDN refuses for a real
+# PBX since 26.11.3.
+pytestmark = pytest.mark.usefixtures("loopback_devices_allowed")
+
+
 def _client(port: int) -> AMIClient:
     return AMIClient(host="127.0.0.1", port=port, username="admin", secret="secret")
 

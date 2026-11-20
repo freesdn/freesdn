@@ -116,7 +116,7 @@ async def _serve(kind: str) -> tuple[web.AppRunner, FakePhone]:
 
 
 @pytest_asyncio.fixture
-async def grandstream() -> AsyncIterator[FakePhone]:
+async def grandstream(loopback_devices_allowed: None) -> AsyncIterator[FakePhone]:
     runner, phone = await _serve("grandstream")
     try:
         yield phone
@@ -125,7 +125,7 @@ async def grandstream() -> AsyncIterator[FakePhone]:
 
 
 @pytest_asyncio.fixture
-async def yealink() -> AsyncIterator[FakePhone]:
+async def yealink(loopback_devices_allowed: None) -> AsyncIterator[FakePhone]:
     runner, phone = await _serve("yealink")
     try:
         yield phone

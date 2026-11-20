@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freesdn-backend"
-version = "26.11.2"
+version = "26.11.3"
 description = "FreeSDN - Unified Network Management Platform"
 license = "AGPL-3.0-only"
 authors = ["PyPV - Python Platform Ventures <contact@freesdn.org>"]
@@ -218,4 +218,5 @@ testpaths = ["tests"]
 filterwarnings = ["ignore::DeprecationWarning"]
 markers = [
     "integration: real-infrastructure tests that spin up Postgres + Redis via testcontainers (require Docker)",
+    "real_setup_code: run the real first-run setup code check instead of treating it as supplied",
 ]

@@ -185,6 +185,10 @@ export const voipApi = {
     api.post(`/voip/phones/${id}/provision`, data ?? {}),
   previewPhoneConfig: (id: string) =>
     api.get(`/voip/phones/${id}/config-preview`, { responseType: 'text' }),
+  getZeroTouch: (siteId: string) =>
+    api.get<{ enabled: boolean }>(`/voip/fleet/sites/${siteId}/zero-touch`),
+  setZeroTouch: (siteId: string, enabled: boolean) =>
+    api.put<{ enabled: boolean }>(`/voip/fleet/sites/${siteId}/zero-touch`, { enabled }),
 
   // Discovery
   triggerDiscoveryScan: (data: {

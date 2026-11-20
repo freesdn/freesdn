@@ -196,6 +196,12 @@ class Phone(Base, UUIDMixin, AuditMixin, SoftDeleteMixin):
         DateTime(timezone=True), nullable=True
     )
     provisioning_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Until when an UNSIGNED fetch from the site's subnet may pull this phone's
+    # config (SIP password included). Opened by the Provision actions; NULL or
+    # past means only a signed URL works. See provisioning_auth.py.
+    provisioning_open_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     config_checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Firmware Management

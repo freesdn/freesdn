@@ -451,6 +451,10 @@
       "frontend": "Frontend",
       "dockerServices": "Docker Services",
       "unreachable": "unreachable"
+    },
+    "setupCode": {
+      "label": "Setup code",
+      "help": "The installer printed this code when it finished. To show it again, run: docker compose --env-file .env.<tier> exec api python -m app.setup.setup_code."
     }
   }
 }
