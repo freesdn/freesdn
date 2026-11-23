@@ -19,7 +19,7 @@ COPY gosu-build/go.mod gosu-build/go.sum ./
 RUN go mod download all && go mod verify
 RUN go build -mod=readonly -trimpath -ldflags="-s -w" -o /out/gosu github.com/tianon/gosu
 
-FROM postgres:18.6-trixie AS timescale-builder
+FROM postgres:19.0-trixie AS timescale-builder
 # The official Debian image carries pg_config but NOT the server headers, so
 # postgresql-server-dev-18 is required here and must not be dropped.
 RUN apt-get update \
@@ -59,7 +59,7 @@ RUN ./bootstrap -DCMAKE_BUILD_TYPE=Release -DREGRESS_CHECKS=OFF -DTAP_CHECKS=OFF
     && cp LICENSE LICENSE-APACHE NOTICE /out/usr/share/licenses/timescaledb/ \
     && cp tsl/LICENSE-TIMESCALE /out/usr/share/licenses/timescaledb/TSL-LICENSE
 
-FROM postgres:18.6-trixie
+FROM postgres:19.0-trixie
 LABEL maintainer="FreeSDN Team"
 LABEL description="TimescaleDB 2.30.2 (2.30.1 restore compatibility) on PostgreSQL 18 / Debian trixie"
 COPY --from=gosu-builder /out/gosu /usr/local/bin/gosu
